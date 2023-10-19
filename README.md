@@ -4,3 +4,29 @@ Quantum Error Correction Project for GT Quantum Computing Association Fall 2023
 This will be the repository where we store all code examples and code for the implementation, simulation, and final hardware ready code for our QECCs.
 
 The end goal of this project is to run the $\[\[7,1,3\]\]$ code on Quantinuum's H1-1 QC and observe a logical fidelity increase in the encoded qubit.
+
+
+
+## Recources
+
+### General theory
+- [Realization of Real-Time Fault-Tolerant Quantum Error Correction -- Quantinuum PRX21](https://journals.aps.org/prx/abstract/10.1103/PhysRevX.11.041058)
+- [A Tutorial on Quantum Error Correction -- Andrew M. Steane](https://www2.physics.ox.ac.uk/sites/default/files/ErrorCorrectionSteane06.pdf)
+- [Fault-tolerant quantum error correction for Steane’s seven-qubit color code with few or no extra qubits](https://arxiv.org/pdf/1804.06995.pdf)
+- [A bird's-eye view of quantum error correction and fault tolerance](https://arthurpesah.me/blog/2022-01-25-intro-qec-1/)
+- [Error correction slide from UCR](https://intra.ece.ucr.edu/~korotkov/courses/EE214-QC/QC-7-error-correction.pdf)
+- 
+
+
+### Encoding 
+- [How to implement the Circuit of Steane's code for Quantum Error Correction?](https://quantumcomputing.stackexchange.com/questions/28807/how-to-implement-the-circuit-of-steanes-code-for-quantum-error-correction)
+- 
+
+### Syndrome
+
+- 
+
+### Decoding
+
+- [Decoders for Topological Quantum Error Correction](https://arthurpesah.me/assets/pdf/case-study-surface-code.pdf)
+
