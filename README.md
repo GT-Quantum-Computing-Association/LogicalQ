@@ -19,7 +19,7 @@ These are the papers, tutorials and other resources we have used in the making o
 
 ### Hardware Evaluation and Benchmarking
 - [IBM Paper on Fidelity and Quantum State Tomography](https://arxiv.org/pdf/1106.5458.pdf)
-
+- [Quantum Computations on a Topologically encoded qubit](https://www.science.org/doi/10.1126/science.1253742 ):star:
 ### Encoding 
 - [How to implement the Circuit of Steane's code for Quantum Error Correction?](https://quantumcomputing.stackexchange.com/questions/28807/how-to-implement-the-circuit-of-steanes-code-for-quantum-error-correction)
 - 
