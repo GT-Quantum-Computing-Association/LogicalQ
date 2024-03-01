@@ -3,6 +3,7 @@ from qiskit import QuantumRegister, ClassicalRegister, QuantumCircuit
 from qiskit.circuit import IfElseOp
 
 __all__ = [
+    "encoding_circuit",
     "prep_zero",
     "qec_cycle",
     "decoder_2d",
@@ -10,10 +11,31 @@ __all__ = [
 ]
 
 
+def encoding_circuit():
+    """
+    Prepare the logical |0> state
+    """
+    qreg = QuantumRegister(10, "q")
+    circuit = QuantumCircuit(qreg)
+    circuit.h(qreg[0])
+    circuit.h(qreg[4])
+    circuit.h(qreg[6])
+    circuit.cx(qreg[0], qreg[1])
+    circuit.cx(qreg[4], qreg[5])
+    circuit.cx(qreg[6], qreg[3])
+    circuit.cx(qreg[4], qreg[2])
+    circuit.cx(qreg[6], qreg[5])
+    circuit.cx(qreg[0], qreg[3])
+    circuit.cx(qreg[4], qreg[1])
+    circuit.cx(qreg[3], qreg[2])
+    
+    return circuit
+    
+
 
 def prep_zero():
     """
-    Prepare the logical |0> state
+    Prepare the logical |0> state using FT circuit
     """
     qreg = QuantumRegister(8, "q")
     creg = ClassicalRegister(1, "c")
