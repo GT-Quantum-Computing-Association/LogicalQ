@@ -80,7 +80,7 @@ def prep_zero():
     with FTquantinuum_circuit.if_test((creg, 1)):
         FTquantinuum_circuit.reset(qreg[:])
         FTquantinuum_circuit.append(encode0LGate, qreg, creg)
-        FTquantinuum_circuit.measure(7,0) 
+        FTquantinuum_circuit.measure(7,0)
         
     return  FTquantinuum_circuit
     
