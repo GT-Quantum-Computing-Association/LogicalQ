@@ -88,7 +88,7 @@ class LogicalCircuit(QuantumCircuit):
         """
 
         for t in targets:
-            super().x(self.logical_qregs[t])
+            super().x(self.logical_qregs[t][4:7])
     
     def cx(self, control, *targets):
         """
@@ -96,7 +96,7 @@ class LogicalCircuit(QuantumCircuit):
         """
 
         for t in targets:
-            super().cx(self.logical_qregs[control], self.logical_qregs[t])
+            super().cx(self.logical_qregs[control], self.logical_qregs[t][4:7])
 
     def measure_syndrome():
         # @TODO - Measure syndromes
