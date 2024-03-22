@@ -84,6 +84,14 @@ class LogicalCircuit(QuantumCircuit):
         
         return True
     
+    def h(self, *targets):
+        """
+        Logical PauliX operation
+        """
+
+        for t in targets:
+            super().x(self.logical_qregs[t][4:7])
+    
     def x(self, *targets):
         """
         Logical PauliX operation
@@ -91,6 +99,32 @@ class LogicalCircuit(QuantumCircuit):
 
         for t in targets:
             super().x(self.logical_qregs[t][4:7])
+    
+    def y(self, *targets):
+        """
+        Logical PauliY operation
+        """
+
+        for t in targets:
+            super().y(self.logical_qregs[t][4:7])
+    
+    def z(self, *targets):
+        """
+        Logical PauliZ operation
+        """
+
+        for t in targets:
+            super().z(self.logical_qregs[t][4:7])
+    
+    def s(self, *targets):
+        """
+        Logical phase gate operation
+        """
+
+        for t in targets:
+            super().s(self.logical_qregs[t][4:7])
+            super().s(self.logical_qregs[t][4:7])
+            super().s(self.logical_qregs[t][4:7])
     
     def cx(self, control, *targets):
         """
