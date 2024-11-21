@@ -173,8 +173,6 @@ class LogicalCircuit(QuantumCircuit):
         if len(qubits) == 0:
             qubits = [q for q in range(len(self.logical_qregs))]
 
-        print(qubits)
-        print(self.ancilla_qregs)
         for q in qubits:
             super().reset(self.ancilla_qregs[q])
 
