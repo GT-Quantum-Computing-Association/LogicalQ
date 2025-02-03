@@ -8,12 +8,17 @@ class LogicalCircuit(QuantumCircuit):
     def __init__(
             self,
             n_logical_qubits,
+            stabilizer_tableau = None,
             name: str | None = None,
         ):
 
         # @TODO - Allow for code generation from stabilizer tableau
-
-        self.n = 7
+        if stabilizer_tableau:
+            self.n = len(stabilizer_tableau[0])
+            n_ancilla_qubits = len(stabilizer_tableau)
+        else:
+            # Default: Steane Code
+            self.n = 7
 
         # Each logical quantum register stores a single logical qubit
         self.logical_qregs = [QuantumRegister(self.n, name=f"qlog{i}") for i in range(n_logical_qubits)]
