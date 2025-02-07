@@ -91,7 +91,7 @@ class LogicalCircuit(QuantumCircuit):
     
     def h(self, *targets):
         """
-        Logical PauliX operation
+        Logical Hadamard operation
         """
 
         for t in targets:
@@ -171,7 +171,7 @@ class LogicalCircuit(QuantumCircuit):
         return qcirc.to_gate(label="{$S_1^f, \\ S_5^f, \\ S_6^f$}")
 
     def configure_qec_cycle(self, sample_rate):
-        # @TODO - Allow configuraiton of QEC cycling
+        # @TODO - Allow configuration of QEC cycling
         pass
 
     def perform_qec_cycle(self, qubits=[]):
@@ -182,4 +182,3 @@ class LogicalCircuit(QuantumCircuit):
             super().reset(self.ancilla_qregs[q])
 
             # @TODO - apply first unflagged circuit
-
