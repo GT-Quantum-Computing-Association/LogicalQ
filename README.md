@@ -1,8 +1,8 @@
-# GaTech-qec-Spring24
-Quantum Error Correction Project for GT Quantum Computing Association Fall 2023
-This will be the repository where we store all code examples and code for the implementation, simulation, and final hardware ready code for our QECCs.
-The end goal of this project is to run the $\[\[7,1,3\]\]$ code on Quantinuum's H1-1 QC and observe a logical fidelity increase in the encoded qubit.
+# Georgia Tech Quantum Error Correction Project
+Quantum Error Correction Project for GT Quantum Computing Association
 
+This is the repository where we store all code examples and code for the implementation, simulation, and final hardware ready code for our QECCs.
+The end goal of this project is to provide researchers with an easy-to-learn tool for working with LogicalCircuits, an extension of Qiskit's QuantumCircuits, with optimized QEC methodology.
 
 ## Resources
 These are the papers, tutorials and other resources we have used in the making of this project. These resources are also very useful for those looking to learn about both the theory and practical implementation of quantum error correction. 
@@ -18,6 +18,7 @@ These are the papers, tutorials and other resources we have used in the making o
 - [Reliable quantum computers --  Preskill](http://theory.caltech.edu/~preskill/pubs/preskill-1998-reliable.pdf)
 - https://courses.cs.washington.edu/courses/cse599d/06wi/lecturenotes18.pdf
 - http://theory.caltech.edu/~preskill/ph229/notes/chap7.pdf
+- https://abdullahkhalid.com/qecft/introduction/book/ :star::star::star::star::star:
 
 ### Hardware Evaluation and Benchmarking
 - [IBM Paper on Fidelity and Quantum State Tomography](https://arxiv.org/pdf/1106.5458.pdf)
@@ -40,5 +41,4 @@ These are the papers, tutorials and other resources we have used in the making o
 
 - https://github.com/KnightShuffler/Steane-Code-in-Qiskit/blob/main/task2.ipynb
 - https://github.com/goldsmdn/Pipecleaning_test/blob/main/Steane_code_old.ipynb
-- https://abdullahkhalid.com/qecft/introduction/book/
 
