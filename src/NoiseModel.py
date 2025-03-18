@@ -1,3 +1,5 @@
+from qiskit_aer.noise import NoiseModel, depolarizing_error, thermal_relaxation_error, ReadoutError
+
 # General function for constructing a Qiskit NoiseModel
 def construct_noise_model(n_qubits=None, qubits=None, basis_gates, **noise_params):
     if qubits is None and n_qubits is None:
@@ -5,7 +7,7 @@ def construct_noise_model(n_qubits=None, qubits=None, basis_gates, **noise_param
         n_qubits = 1
     if qubits is None and n_qubits is not None:
         qubits = range(n_qubits)
-    
+
     noise_model = NoiseModel(basis_gates=basis_gates)
     noise_params = []
 
@@ -103,7 +105,7 @@ def construct_noise_model(n_qubits=None, qubits=None, basis_gates, **noise_param
 
 # Quantinuum H1-1:
 def construct_noise_model_QuantinuumH1_1(n_qubits=1, qubits=None):
-    basis_gates = ["u", "rz", "zz", "rzz"] # missing U_1q and RXXYYZZ, also need to verify that angle conventions are correct
+    basis_gates = ["u", "rz", "zz", "rzz"] # @TODO - missing RXXYYZZ, not sure if ZZ is valid, and need to verify that angle conventions are correct
     noise_params = {
         "depolarizing_error_1q": 2.1E-5, # single-qubit fault probability
         "depolarizing_error_2q": 1E-3, # single-qubit fault probability

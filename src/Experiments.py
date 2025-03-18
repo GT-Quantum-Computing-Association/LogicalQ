@@ -1,4 +1,5 @@
 from Logical import LogicalCircuit
+from NoiseModel import construct_noise_model
 
 from qiskit import QuantumCircuit, transpile
 from qiskit_aer import AerSimulator
