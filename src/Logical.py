@@ -1,4 +1,5 @@
 import sys
+import numpy as np
 
 from qiskit import QuantumRegister, AncillaRegister, ClassicalRegister, QuantumCircuit
 from qiskit.quantum_info import Pauli, Clifford
@@ -17,9 +18,9 @@ class LogicalCircuit(QuantumCircuit):
         # Quantum error correcting code preparation
         self.n_logical_qubits = n_logical_qubits
 
-        self.stabilizers = stabilizer_tableau
-        self.n_stabilizers = len(self.stabilizers)
-        self.n_physical_qubits = len(self.stabilizers[0])
+        self.stabilizer_tableau = stabilizer_tableau
+        self.n_stabilizers = len(self.stabilizer_tableau)
+        self.n_physical_qubits = len(self.stabilizer_tableau[0])
 
         self.n, self.k, self.d = label
         assert self.n == self.n_physical_qubits, f"Code label n ({self.n}) does not match individual stabilizer length ({self.n_physical_qubits})."
@@ -145,9 +146,9 @@ class LogicalCircuit(QuantumCircuit):
         self.flagged_stabilizers_2 = [s for s in range(self.n_stabilizers) if s < k - k//2 - 1 or s > k + k//2 - 1]
 
         for i in range(self.n_stabilizers):
-            if 'X' in self.stabilizers[i]:
+            if 'X' in self.stabilizer_tableau[i]:
                 self.x_stabilizers.append(i)
-            if 'Z' in self.stabilizers[i]:
+            if 'Z' in self.stabilizer_tableau[i]:
                 self.z_stabilizers.append(i)
 
     # Function which generates encoding circuit and logical operators for a given tableau
@@ -196,24 +197,24 @@ class LogicalCircuit(QuantumCircuit):
         # Step 3: Construct logical operators using Pauli vector representations due to Gottesmann (1997)
         r = np.linalg.matrix_rank(self.G[0])
         A_2 = self.G[0, 0:r, m:self.n] # r x k
-        C_1 = self.G[1, 0:r, r:self.n] # r x m-r
+        C_1 = self.G[1, 0:r, r:m] # r x m-r
         C_2 = self.G[1, 0:r, m:self.n] # r x k
         E_2 = self.G[1, r:m, m:self.n] # m-r x k
     
         self.LogicalXVector = np.block([
-            [[np.zeros((self.self.k, r)), E_2.T,                        np.eye(self.k, self.k)    ]],
-            [[E_2.T @ C_1.T + C_2.T,      np.zeros((self.self.k, m-r)), np.zeros((self.k, self.k))]]
+            [[np.zeros((self.k, r)), E_2.T,                        np.eye(self.k, self.k)    ]],
+            [[E_2.T @ C_1.T + C_2.T,      np.zeros((self.k, m-r)), np.zeros((self.k, self.k))]]
         ])
 
         # Create Logical X circuit corresponding to X's and Z's at 1's in Pauli vector
         LogicalXCircuit = QuantumCircuit(self.n)
         for i in range(self.k):
             # X part
-            for q, bit in enumerate(self.LogicalXVec[0][i]):
+            for q, bit in enumerate(self.LogicalXVector[0][i]):
                 if bit == 1:
                     LogicalXCircuit.x(q)
             # Z part
-            for q, bit in enumerate(self.LogicalXVec[1][i]):
+            for q, bit in enumerate(self.LogicalXVector[1][i]):
                 if bit == 1:
                     LogicalXCircuit.z(q)
         self.LogicalXGate = LogicalXCircuit.to_gate(label="$X_L$")
@@ -227,29 +228,29 @@ class LogicalCircuit(QuantumCircuit):
         LogicalZCircuit = QuantumCircuit(self.n)
         for i in range(self.k):
             # X part
-            for q, bit in enumerate(self.LogicalZVec[0][i]):
+            for q, bit in enumerate(self.LogicalZVector[0][i]):
                 if bit == 1:
-                    super().x(self.logical_qregs[t][q])
+                    LogicalZCircuit.x(q)
             # Z part
-            for q, bit in enumerate(self.LogicalZVec[1][i]):
+            for q, bit in enumerate(self.LogicalZVector[1][i]):
                 if bit == 1:
-                    super().z(self.logical_qregs[t][q])
+                    LogicalZCircuit.z(q)
         self.LogicalZGate = LogicalZCircuit.to_gate(label="$Z_L$")
 
-        LogicalYCircuit = LogicalXCircuit @ LogicalZCircuit
+        LogicalYCircuit = LogicalXCircuit.compose(LogicalZCircuit)
         self.LogicalYGate = LogicalYCircuit.to_gate(label="$Y_L$")
 
         # Create Logical H circuit using Low and Chuang's linear combination of unitaries method
-        self.LogicalHCircuit_LCU = QuantumCircuit(self.n + 1)
-        super().h(self.logical_op_qregs[t][0])
-
-        super().append(self.LogicalXGate.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:])
-
-        super().x(self.logical_op_qregs[t][0])
-        super().append(self.LogicalZGate.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:])
-        super().x(self.logical_op_qregs[t][0])
+        LogicalHCircuit_LCU = QuantumCircuit(self.n + 1)
+        LogicalHCircuit_LCU.h(self.n)
         
-        super().h(self.logical_op_qregs[t][0])
+        LogicalHCircuit_LCU.append(self.LogicalXGate.control(1), [self.n, *list(range(self.n))])
+
+        LogicalHCircuit_LCU.x(self.n)
+        LogicalHCircuit_LCU.append(self.LogicalZGate.control(1), [self.n, *list(range(self.n))])
+        LogicalHCircuit_LCU.x(self.n)
+        
+        LogicalHCircuit_LCU.h(self.n)
         self.LogicalHGate_LCU = LogicalHCircuit_LCU.to_gate(label="$H_L$")
 
         # @TODO - Logical S
@@ -286,7 +287,7 @@ class LogicalCircuit(QuantumCircuit):
         if initial_states is None or len(qubits) != len(initial_states):
             raise ValueError("Number of qubits should equal number of initial states if initial states are provided")
         
-        for q in qubits:
+        for q, init_state in zip(qubits, initial_states):
             # Preliminary physical qubit reset
             super().reset(self.logical_qregs[q])
             
@@ -320,11 +321,10 @@ class LogicalCircuit(QuantumCircuit):
             # Reset ancilla qubit
             super().reset(self.ancilla_qregs[q][0])
 
-        # Flip qubits if necessary
-        for initial_state in initial_states:
-            if initial_state == 1:
-                self.x(self.logical_qregs[q])
-            elif initial_state != 0:
+            # Flip qubits if necessary
+            if init_state == 1:
+                self.x(q)
+            elif init_state != 0:
                 raise ValueError("Initial state should be either 0 or 1 (arbitrary statevectors not yet supported)!")
         
         return True
@@ -351,7 +351,7 @@ class LogicalCircuit(QuantumCircuit):
                     super().cz(self.ancilla_qregs[q][0], self.ancilla_qregs[q][1])
                 
                 for s, stabilizer_index in enumerate(stabilizer_indices):
-                    stabilizer = self.stabilizers[stabilizer_index]
+                    stabilizer = self.stabilizer_tableau[stabilizer_index]
                     stabilizer_pauli = Pauli(stabilizer[p])
                     measurement_pauli = stabilizer_pauli.evolve(Clifford(HGate()))
                     
@@ -415,20 +415,20 @@ class LogicalCircuit(QuantumCircuit):
                 self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, with_flagged=True)
         
                 # Update previous syndrome
-                for n in range(len(self.stabilizers)):
+                for n in range(self.n_stabilizers):
                     with self.if_test(expr.lift(self.unflagged_syndrome_diff_cregs[q][n])):
                         self.cbit_not(self.prev_syndrome_cregs[q][n])
 
     # @TODO - determine appropriate syndrome decoding mappings dynamically
-    def apply_decoding(self, logical_qubit_indices, stabilizers, with_flagged):
+    def apply_decoding(self, logical_qubit_indices, stabilizer_indices, with_flagged):
         for q in logical_qubit_indices:
-            syn_diff = [self.unflagged_syndrome_diff_cregs[q][x] for x in stabilizers]
+            syn_diff = [self.unflagged_syndrome_diff_cregs[q][x] for x in stabilizer_indices]
             # Determines index of pauli frame to be modified
-            pf_ind = 0 if 'X' in self.stabilizers[stabilizers[0]] else 1
+            pf_ind = 0 if 'X' in self.stabilizer_tableau[stabilizer_indices[0]] else 1
 
             # Decoding sequence with flagged syndrome
             if with_flagged:
-                flag_diff = [self.flagged_syndrome_diff_cregs[q][x] for x in stabilizers]
+                flag_diff = [self.flagged_syndrome_diff_cregs[q][x] for x in stabilizer_indices]
                 with super().if_test(expr.bit_and(self.cbit_and(flag_diff, [1, 0, 0]), self.cbit_and(syn_diff, [0, 1, 0]))):
                     self.cbit_not(self.pauli_frame_cregs[q][pf_ind])
                 with super().if_test(expr.bit_and(self.cbit_and(flag_diff, [1, 0, 0]), self.cbit_and(syn_diff, [0, 0, 1]))):
@@ -459,7 +459,7 @@ class LogicalCircuit(QuantumCircuit):
 
             # Final syndrome
             for n in range(self.n_ancilla_qubits):
-                stabilizer = self.stabilizers[self.x_stabilizers[n]]
+                stabilizer = self.stabilizer_tableau[self.x_stabilizers[n]]
                 s_indices = []
                 for i in range(len(stabilizer)):
                     if stabilizer[i] == 'X':
@@ -556,7 +556,7 @@ class LogicalCircuit(QuantumCircuit):
         for t in targets:
             super().append(self.LogicalXGate.control(1), self.logical_qregs[control][:] + self.logical_qregs[t][:])
 
-    def mcmt(self, *controls, *targets):
+    def mcmt(self, controls, targets):
         """
         Logical Multi-Controll Multi-Target gate
         """
