@@ -240,7 +240,7 @@ class LogicalCircuit(QuantumCircuit):
         LogicalYCircuit = LogicalXCircuit.compose(LogicalZCircuit)
         self.LogicalYGate = LogicalYCircuit.to_gate(label="$Y_L$")
 
-        # Create Logical H circuit using Low and Chuang's linear combination of unitaries method
+        # Create Logical H circuit using Childs and Wiebe's linear combination of unitaries method
         LogicalHCircuit_LCU = QuantumCircuit(self.n + 1)
         LogicalHCircuit_LCU.h(self.n)
         
