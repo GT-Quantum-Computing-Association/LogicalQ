@@ -11,33 +11,14 @@ def construct_noise_model(n_qubits=None, qubits=None, basis_gates, **noise_param
     noise_model = NoiseModel(basis_gates=basis_gates)
 
     # Depolarizing errors: Simulates decay into random mixed state
-    if "depolarizing_error_x" in noise_params or "depolarizing_error_1q" in noise_params:
-        depolarizing_error_x = depolarizing_error(noise_params["depolarizing_error_x"], 1)
-        noise_model.add_quantum_error(depolarizing_error_x, ['x'], qubits)
+    for gate in ["x", "y", "z", "h"]:
+        if f"depolarizing_error_{gate}" in noise_params or "depolarizing_error_1q" in noise_params:
+            depolarizing_error_gate = depolarizing_error(noise_params[f"depolarizing_error_{gate}"], 1)
+            noise_model.add_quantum_error(depolarizing_error_gate, [gate], qubits)
 
-    if "depolarizing_error_y" in noise_params or "depolarizing_error_1q" in noise_params:
-        depolarizing_error_y = depolarizing_error(noise_params["depolarizing_error_y"], 1)
-        noise_model.add_quantum_error(depolarizing_error_y, ['y'], qubits)
-
-    if "depolarizing_error_z" in noise_params or "depolarizing_error_1q" in noise_params:
-        depolarizing_error_z = depolarizing_error(noise_params["depolarizing_error_z"], 1)
-        noise_model.add_quantum_error(depolarizing_error_z, ['z'], qubits)
-
-    if "depolarizing_error_h" in noise_params or "depolarizing_error_1q" in noise_params:
-        depolarizing_error_h = depolarizing_error(noise_params["depolarizing_error_h"], 1)
-        noise_model.add_quantum_error(depolarizing_error_h, ['h'], qubits)
-
-    if "depolarizing_error_cx" in noise_params or "depolarizing_error_2q" in noise_params:
-        depolarizing_error_cx = depolarizing_error(noise_params["depolarizing_error_cx"], 2)
-        noise_model.add_quantum_error(depolarizing_error_cx, ['cx'], qubits)
-
-    if "depolarizing_error_cy" in noise_params or "depolarizing_error_2q" in noise_params:
-        depolarizing_error_cy = depolarizing_error(noise_params["depolarizing_error_cy"], 2)
-        noise_model.add_quantum_error(depolarizing_error_cy, ['cy'], qubits)
-
-    if "depolarizing_error_cz" in noise_params or "depolarizing_error_2q" in noise_params:
-        depolarizing_error_cz = depolarizing_error(noise_params["depolarizing_error_cz"], 2)
-        noise_model.add_quantum_error(depolarizing_error_cz, ['cz'], qubits)
+        if f"depolarizing_error_c{gate}" in noise_params or "depolarizing_error_2q" in noise_params:
+            depolarizing_error_cgate = depolarizing_error(noise_params[f"depolarizing_error_c{gate}"], 2)
+            noise_model.add_quantum_error(depolarizing_error_cgate, [f'c{gate}'], qubits)
 
     # Readout errors: models errors in qubit measurement.
     if "readout_error_01" in noise_params:
