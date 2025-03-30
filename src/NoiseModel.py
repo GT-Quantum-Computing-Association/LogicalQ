@@ -9,7 +9,6 @@ def construct_noise_model(n_qubits=None, qubits=None, basis_gates, **noise_param
         qubits = range(n_qubits)
 
     noise_model = NoiseModel(basis_gates=basis_gates)
-    noise_params = []
 
     # Depolarizing errors: Simulates decay into random mixed state
     if "depolarizing_error_x" in noise_params or "depolarizing_error_1q" in noise_params:
