@@ -283,7 +283,8 @@ class LogicalCircuit(QuantumCircuit):
         """
         Prepare logical qubit(s) in the specified initial state
         """
-        
+        if initial_states is None:
+            initial_states = [0] * len(qubits)
         if initial_states is None or len(qubits) != len(initial_states):
             raise ValueError("Number of qubits should equal number of initial states if initial states are provided")
         
@@ -445,7 +446,7 @@ class LogicalCircuit(QuantumCircuit):
                 with super().if_test(self.cbit_and(syn_diff, [0, 0, 1])):
                     self.cbit_not(self.pauli_frame_cregs[q][pf_ind])
 
-    def measure(self, logical_qubit_indices, cbit_indices):
+    def measure(self, logical_qubit_indices, cbit_indices, with_error_correction=True):
         if len(logical_qubit_indices) != len(cbit_indices):
             raise ValueError("Number of qubits should equal number of classical bits")
         
@@ -457,28 +458,46 @@ class LogicalCircuit(QuantumCircuit):
             with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][x] for x in [4,5,6]])):
                 self.set_cbit(self.output_creg[c], 1)
 
-            # Final syndrome
-            for n in range(self.n_ancilla_qubits):
-                stabilizer = self.stabilizer_tableau[self.z_stabilizers[n]]
-                s_indices = []
-                for i in range(len(stabilizer)):
-                    if stabilizer[i] == 'Z':
-                        s_indices.append(i)
+            if with_error_correction:
+                # Final syndrome
+                for n in range(self.n_ancilla_qubits):
+                    stabilizer = self.stabilizer_tableau[self.z_stabilizers[n]]
+                    s_indices = []
+                    for i in range(len(stabilizer)):
+                        if stabilizer[i] == 'Z':
+                            s_indices.append(i)
 
-                with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][z] for z in s_indices])):
-                    self.set_cbit(self.curr_syndrome_cregs[q][n], 1)
+                    with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][z] for z in s_indices])):
+                        self.set_cbit(self.curr_syndrome_cregs[q][n], 1)
 
-            # Final syndrome diff
-            for n in range(self.n_ancilla_qubits):
-                with super().if_test(self.cbit_xor([self.curr_syndrome_cregs[q][n], self.prev_syndrome_cregs[q][self.z_stabilizers[n]]])) as _else:
-                    self.set_cbit(self.unflagged_syndrome_diff_cregs[q][self.z_stabilizers[n]], 1)
-                with _else:
-                    self.set_cbit(self.unflagged_syndrome_diff_cregs[q][self.z_stabilizers[n]], 0)
+                # Final syndrome diff
+                for n in range(self.n_ancilla_qubits):
+                    with super().if_test(self.cbit_xor([self.curr_syndrome_cregs[q][n], self.prev_syndrome_cregs[q][self.z_stabilizers[n]]])) as _else:
+                        self.set_cbit(self.unflagged_syndrome_diff_cregs[q][self.z_stabilizers[n]], 1)
+                    with _else:
+                        self.set_cbit(self.unflagged_syndrome_diff_cregs[q][self.z_stabilizers[n]], 0)
 
-            # Final correction
-            self.apply_decoding([q], self.z_stabilizers, with_flagged=False)
-            with super().if_test(expr.lift(self.pauli_frame_cregs[q][1])):
-                self.cbit_not(self.output_creg[c])
+                # Final correction
+                self.apply_decoding([q], self.z_stabilizers, with_flagged=False)
+                with super().if_test(expr.lift(self.pauli_frame_cregs[q][1])):
+                    self.cbit_not(self.output_creg[c])
+
+    def get_logical_output_counts(self, outputs, logical_qubit_indices=None):
+        if logical_qubit_indices == None:
+            logical_qubit_indices = range(self.n_logical_qubits)
+
+        counts = {}
+        for n in range(len(outputs)):
+            output = ''
+            for l in logical_qubit_indices:
+                output += outputs[n][self.n_logical_qubits-1-l]
+
+            if output not in counts:
+                counts[output] = 1
+            else:
+                counts[output] += 1
+
+        return counts  
 
     ######################################
     ##### Logical quantum operations #####
