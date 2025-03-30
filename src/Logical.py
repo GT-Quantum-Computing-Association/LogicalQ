@@ -459,25 +459,25 @@ class LogicalCircuit(QuantumCircuit):
 
             # Final syndrome
             for n in range(self.n_ancilla_qubits):
-                stabilizer = self.stabilizer_tableau[self.x_stabilizers[n]]
+                stabilizer = self.stabilizer_tableau[self.z_stabilizers[n]]
                 s_indices = []
                 for i in range(len(stabilizer)):
-                    if stabilizer[i] == 'X':
+                    if stabilizer[i] == 'Z':
                         s_indices.append(i)
 
-                with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][x] for x in s_indices])):
+                with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][z] for z in s_indices])):
                     self.set_cbit(self.curr_syndrome_cregs[q][n], 1)
 
             # Final syndrome diff
             for n in range(self.n_ancilla_qubits):
-                with super().if_test(self.cbit_xor([self.curr_syndrome_cregs[q][n], self.prev_syndrome_cregs[q][self.x_stabilizers[n]]])) as _else:
-                    self.set_cbit(self.unflagged_syndrome_diff_cregs[q][self.x_stabilizers[n]], 1)
+                with super().if_test(self.cbit_xor([self.curr_syndrome_cregs[q][n], self.prev_syndrome_cregs[q][self.z_stabilizers[n]]])) as _else:
+                    self.set_cbit(self.unflagged_syndrome_diff_cregs[q][self.z_stabilizers[n]], 1)
                 with _else:
-                    self.set_cbit(self.unflagged_syndrome_diff_cregs[q][self.x_stabilizers[n]], 0)
+                    self.set_cbit(self.unflagged_syndrome_diff_cregs[q][self.z_stabilizers[n]], 0)
 
             # Final correction
-            self.apply_decoding([q], self.x_stabilizers, with_flagged=False)
-            with super().if_test(expr.lift(self.pauli_frame_cregs[q][0])):
+            self.apply_decoding([q], self.z_stabilizers, with_flagged=False)
+            with super().if_test(expr.lift(self.pauli_frame_cregs[q][1])):
                 self.cbit_not(self.output_creg[c])
 
     ######################################
