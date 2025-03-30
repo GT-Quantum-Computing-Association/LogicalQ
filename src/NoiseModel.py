@@ -1,5 +1,8 @@
 from qiskit_aer.noise import NoiseModel, depolarizing_error, thermal_relaxation_error, ReadoutError
 
+gates_1q = ["x", "y", "z", "h", "s", "t", "rx", "ry", "rz"]
+gates_2q = ["cx", "cy", "cz", "ch"]
+
 # General function for constructing a Qiskit NoiseModel
 def construct_noise_model(n_qubits=None, qubits=None, basis_gates, **noise_params):
     if qubits is None and n_qubits is None:
@@ -8,17 +11,25 @@ def construct_noise_model(n_qubits=None, qubits=None, basis_gates, **noise_param
     if qubits is None and n_qubits is not None:
         qubits = range(n_qubits)
 
-    noise_model = NoiseModel(basis_gates=basis_gates)
+    noise_model = NoiseModel(basis_gates=basis_gates) # check if basis gates are really being used
 
     # Depolarizing errors: Simulates decay into random mixed state
     for gate in ["x", "y", "z", "h"]:
-        if f"depolarizing_error_{gate}" in noise_params or "depolarizing_error_1q" in noise_params:
+        if f"depolarizing_error_{gate}" in noise_params and if "depolarizing_error_1q" in noise_params:
             depolarizing_error_gate = depolarizing_error(noise_params[f"depolarizing_error_{gate}"], 1)
             noise_model.add_quantum_error(depolarizing_error_gate, [gate], qubits)
 
-        if f"depolarizing_error_c{gate}" in noise_params or "depolarizing_error_2q" in noise_params:
+        if f"depolarizing_error_c{gate}" in noise_params:
             depolarizing_error_cgate = depolarizing_error(noise_params[f"depolarizing_error_c{gate}"], 2)
-            noise_model.add_quantum_error(depolarizing_error_cgate, [f'c{gate}'], qubits)
+            noise_model.add_quantum_error(depolarizing_error_cgate, [f"c{gate}"], qubits)
+
+    if "depolarizing_error_1q" in noise_params:
+        depolarizing_error_1q = depolarizing_error(noise_params[f"depolarizing_error_1q"], 1)
+        noise_model.add_quantum_error(depolarizing_error_1q, gates_1q, qubits)
+
+    if "depolarizing_error_2q" in noise_params:
+        depolarizing_error_2q = depolarizing_error(noise_params[f"depolarizing_error_2q"], 2)
+        noise_model.add_quantum_error(depolarizing_error_2q, gates_2q, qubits)
 
     # Readout errors: models errors in qubit measurement.
     if "readout_error_01" in noise_params:
@@ -43,10 +54,10 @@ def construct_noise_model(n_qubits=None, qubits=None, basis_gates, **noise_param
 
             noise_model.add_quantum_error(thermal_relaxation_error_id, ["id"], qubits)
 
-            for gate in ['x', 'y', 'z', 'h', 's', 't', 'rx', 'ry', 'rz']:
+            for gate in gates_1q:
                 noise_model.add_quantum_error(thermal_relaxation_error, [gate], qubits)
 
-            for gate in ['cx', 'cy', 'cz']:
+            for gate in gates_2q:
                 noise_model.add_quantum_error(thermal_relaxation_error.tensor(thermal_relaxation_error), [gate], qubits)
 
     # @TODO - implement gate-specific thermal relaxation erorrs
@@ -58,7 +69,7 @@ def construct_noise_model(n_qubits=None, qubits=None, basis_gates, **noise_param
     # Amplituded damping error: Simulates error due to energy dissipation (e.g. spontaneous emission, thermal equilibrium)
     if "amplitude_damping_error_1q" in noise_params:
         amplitude_damping_error_1q = depolarizing_error(noise_params["amplitude_damping_error_1q"])
-        noise_model.add_quantum_error(amplitude_damping_error_1q, ['x', 'y', 'z', 'h', 's', 't', 'rx', 'ry', 'rz'], qubits)
+        noise_model.add_quantum_error(amplitude_damping_error_1q, ["x", "y", "z", "h", "s", "t", "rx", "ry", "rz"], qubits)
 
     if "amplitude_damping_error_2q" in noise_params:
         # @TODO - not sure if Qiskit supports these
