@@ -4,7 +4,7 @@ gates_1q = ["x", "y", "z", "h", "s", "t", "rx", "ry", "rz"]
 gates_2q = ["cx", "cy", "cz", "ch"]
 
 # General function for constructing a Qiskit NoiseModel
-def construct_noise_model(n_qubits=None, qubits=None, basis_gates, **noise_params):
+def construct_noise_model(basis_gates, n_qubits=None, qubits=None, **noise_params):
     if qubits is None and n_qubits is None:
         qubits = [0]
         n_qubits = 1
@@ -110,4 +110,4 @@ def construct_noise_model_QuantinuumH1_1(n_qubits=1, qubits=None):
         "amplitude_damping_error_2q": 0.43 * 1E-3, # calculated as a fraction of two-qubit fault probability
     }
 
-    return construct_noise_model(n_qubits, basis_gates, **noise_params)
+    return construct_noise_model(n_qubits=n_qubits, basis_gates=basis_gates, **noise_params)
