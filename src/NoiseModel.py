@@ -17,7 +17,7 @@ def construct_noise_model(basis_gates, n_qubits=None, qubits=None, **noise_param
 
     # Depolarizing errors: Simulates decay into random mixed state
     for gate in ["x", "y", "z", "h"]:
-        if f"depolarizing_error_{gate}" in noise_params and if "depolarizing_error_1q" in noise_params:
+        if f"depolarizing_error_{gate}" in noise_params and "depolarizing_error_1q" in noise_params:
             depolarizing_error_gate = depolarizing_error(noise_params[f"depolarizing_error_{gate}"], 1)
             noise_model.add_all_qubit_quantum_error(depolarizing_error_gate, [gate])
 
@@ -70,7 +70,7 @@ def construct_noise_model(basis_gates, n_qubits=None, qubits=None, **noise_param
 
     # Amplituded damping error: Simulates error due to energy dissipation (e.g. spontaneous emission, thermal equilibrium)
     if "amplitude_damping_error_1q" in noise_params:
-        amplitude_damping_error_1q = depolarizing_error(noise_params["amplitude_damping_error_1q"])
+        amplitude_damping_error_1q = depolarizing_error(noise_params["amplitude_damping_error_1q"], 1)
         noise_model.add_all_qubit_quantum_error(amplitude_damping_error_1q, ["x", "y", "z", "h", "s", "t", "rx", "ry", "rz"])
 
     if "amplitude_damping_error_2q" in noise_params:
