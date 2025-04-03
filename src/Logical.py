@@ -338,6 +338,50 @@ class LogicalCircuit(QuantumCircuit):
         for q in logical_qubit_indices:
             self.reset(self.ancilla_qregs[q])
 
+    def steane_flagged_circuit1(self, logical_qubit_indices):
+        for q in logical_qubit_indices:
+            super().barrier()
+            super().h(self.ancillas[0])
+            super().cx(self.ancilla_qregs[q][0], self.logical_qregs[q][3])
+            super().cx(self.logical_qregs[q][2], self.ancilla_qregs[q][2])
+            super().cx(self.logical_qregs[q][5], self.ancilla_qregs[q][1])
+            super().cx(self.ancilla_qregs[q][0], self.ancilla_qregs[q][1])
+            super().cx(self.ancilla_qregs[q][0], self.logical_qregs[q][0])
+            super().cx(self.logical_qregs[q][3], self.ancilla_qregs[q][2])
+            super().cx(self.logical_qregs[q][4], self.ancilla_qregs[q][1])
+            super().cx(self.ancilla_qregs[q][0], self.logical_qregs[q][1])
+            super().cx(self.logical_qregs[q][6], self.ancilla_qregs[q][2])
+            super().cx(self.logical_qregs[q][2], self.ancilla_qregs[q][1])
+            super().cx(self.ancilla_qregs[q][0], self.ancilla_qregs[q][2])
+            super().cx(self.ancilla_qregs[q][0], self.logical_qregs[q][2])
+            super().cx(self.logical_qregs[q][5], self.ancilla_qregs[q][2])
+            super().cx(self.logical_qregs[q][1], self.ancilla_qregs[q][1])
+            super().h(self.ancilla_qregs[q][0])
+            super().barrier()
+
+    def steane_flagged_circuit2(self, logical_qubit_indices):
+        for q in logical_qubit_indices:
+            super().barrier()
+            super().h(self.ancilla_qregs[q][1])
+            super().h(self.ancilla_qregs[q][2])
+            super().cx(self.logical_qregs[q][3], self.ancilla_qregs[q][0])
+            super().cx(self.ancilla_qregs[q][2], self.logical_qregs[q][2])
+            super().cx(self.ancilla_qregs[q][1], self.logical_qregs[q][5])
+            super().cx(self.ancilla_qregs[q][1], self.ancilla_qregs[q][0])
+            super().cx(self.logical_qregs[q][0], self.ancilla_qregs[q][0])
+            super().cx(self.ancilla_qregs[q][2], self.logical_qregs[q][3])
+            super().cx(self.ancilla_qregs[q][1], self.logical_qregs[q][4])
+            super().cx(self.logical_qregs[q][1], self.ancilla_qregs[q][0])
+            super().cx(self.ancilla_qregs[q][2], self.logical_qregs[q][6])
+            super().cx(self.ancilla_qregs[q][1], self.logical_qregs[q][2])
+            super().cx(self.ancilla_qregs[q][2], self.ancilla_qregs[q][0])
+            super().cx(self.logical_qregs[q][2], self.ancilla_qregs[q][0])
+            super().cx(self.ancilla_qregs[q][2], self.logical_qregs[q][5])
+            super().cx(self.ancilla_qregs[q][1], self.logical_qregs[q][1])
+            super().h(self.ancilla_qregs[q][1])
+            super().h(self.ancilla_qregs[q][2])
+            super().barrier()
+
     # Measure specified specifiers to the circuit as controlled Pauli operators
     def measure_stabilizers(self, logical_qubit_indices=None, stabilizer_indices=None):
         if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
@@ -363,7 +407,7 @@ class LogicalCircuit(QuantumCircuit):
                     super().cz(self.ancilla_qregs[q][0], self.ancilla_qregs[q][2])
 
     # Measure flagged or unflagged syndrome differences for specified logical qubits and stabilizers
-    def measure_syndrome_diff(self, logical_qubit_indices=None, stabilizer_indices=None, flagged=False):
+    def measure_syndrome_diff(self, logical_qubit_indices=None, stabilizer_indices=None, flagged=False, steane_flag_1=False, steane_flag_2=False):
         if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
             logical_qubit_indices = list(range(self.n_logical_qubits))
         
@@ -374,7 +418,12 @@ class LogicalCircuit(QuantumCircuit):
             syndrome_diff_creg = self.flagged_syndrome_diff_cregs[q] if flagged else self.unflagged_syndrome_diff_cregs[q]
 
             # Apply and measure stabilizers for the desired syndrome
-            self.measure_stabilizers(logical_qubit_indices=[q], stabilizer_indices=stabilizer_indices)
+            if steane_flag_1:
+                self.steane_flagged_circuit1(logical_qubit_indices)
+            elif steane_flag_2:
+                self.steane_flagged_circuit2(logical_qubit_indices)
+            else:
+                self.measure_stabilizers(logical_qubit_indices=[q], stabilizer_indices=stabilizer_indices)
             for n in range(self.n_ancilla_qubits):
                 super().measure(self.ancilla_qregs[q][n], self.curr_syndrome_cregs[q][n])
         
@@ -392,6 +441,9 @@ class LogicalCircuit(QuantumCircuit):
         raise NotImplementedError("QEC cycle configuration has not yet been implemented.")
 
     def perform_qec_cycle(self, logical_qubit_indices=None):
+        #Use hardcoded flagged circuits for steane code
+        use_steane_flagged_circuits = True if [self.n, self.k, self.d] == [7,1,3] else False
+
         if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
             logical_qubit_indices = list(range(self.n_logical_qubits))
 
@@ -399,11 +451,11 @@ class LogicalCircuit(QuantumCircuit):
             super().reset(self.ancilla_qregs[q])
 
             # Perform first flagged syndrome measurements
-            self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_1, flagged=True)
+            self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_1, flagged=True, steane_flag_1=use_steane_flagged_circuits)
         
             # If no change in syndrome, perform second flagged syndrome measurement
             with self.if_test(expr.equal(self.flagged_syndrome_diff_cregs[q], 0)):
-                self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_2, flagged=True)
+                self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_2, flagged=True, steane_flag_2=use_steane_flagged_circuits)
         
             # If change in syndrome, perform unflagged syndrome measurement, decode, and correct
             with self.if_test(expr.not_equal(self.flagged_syndrome_diff_cregs[q], 0)):
