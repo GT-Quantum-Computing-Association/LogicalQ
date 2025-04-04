@@ -392,8 +392,6 @@ class LogicalCircuit(QuantumCircuit):
         
         for q in logical_qubit_indices:
             for p in range(self.n_physical_qubits):
-                if p == (self.n_physical_qubits-1)-1:
-                    super().cz(self.ancilla_qregs[q][0], self.ancilla_qregs[q][1])
                 
                 for s, stabilizer_index in enumerate(stabilizer_indices):
                     stabilizer = self.stabilizer_tableau[stabilizer_index]
@@ -402,9 +400,6 @@ class LogicalCircuit(QuantumCircuit):
                     
                     CPauliInstruction = measurement_pauli.to_instruction().control(1)
                     self.append(CPauliInstruction, [self.logical_qregs[q][p], self.ancilla_qregs[q][s]])
-
-                if p == 0:
-                    super().cz(self.ancilla_qregs[q][0], self.ancilla_qregs[q][2])
 
     # Measure flagged or unflagged syndrome differences for specified logical qubits and stabilizers
     def measure_syndrome_diff(self, logical_qubit_indices=None, stabilizer_indices=None, flagged=False, steane_flag_1=False, steane_flag_2=False):
@@ -501,7 +496,7 @@ class LogicalCircuit(QuantumCircuit):
     def measure(self, logical_qubit_indices, cbit_indices, with_error_correction=True):
         if len(logical_qubit_indices) != len(cbit_indices):
             raise ValueError("Number of qubits should equal number of classical bits")
-        
+
         for q, c in zip(logical_qubit_indices, cbit_indices):
             # Measurement of state
             for n in range(self.n_physical_qubits):
@@ -580,7 +575,6 @@ class LogicalCircuit(QuantumCircuit):
         """
         Logical PauliX gate
         """
-
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
             targets = targets[0]
         
