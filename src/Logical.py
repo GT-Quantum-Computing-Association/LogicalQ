@@ -192,6 +192,35 @@ class LogicalCircuit(QuantumCircuit):
             if row >= m:
                 break
 
+        r = np.linalg.matrix_rank(G[0])
+
+        E = np.copy(G[:, r:, r:])
+        row = 0
+        for col in range(self.n-r):
+            pivot_row = None
+            for i in range(row, m-r):
+                if E[1, i, col] == 1:
+                    pivot_row = i
+                    break
+            
+            if pivot_row is None:
+                continue
+            
+            E[:, [row, pivot_row]] = E[:, [pivot_row, row]]
+            G[:, [r+row, r+pivot_row]] = G[:, [r+pivot_row, r+row]]
+
+            # Flip any other rows with a "1" in the same column
+            for i in range(m-r):
+                if i != row and E[1, i, col] == 1:
+                    E[:, i] = E[:, i].astype(int) ^ E[:, row].astype(int)
+                    G[:, r+i] = G[:, r+i].astype(int) ^ G[:, r+row].astype(int)
+
+            # Move to the next row, if we haven't reached the end of the matrix
+            row += 1
+            if row >= m:
+                break
+
+
         self.G = G
     
         # Step 3: Construct logical operators using Pauli vector representations due to Gottesmann (1997)
