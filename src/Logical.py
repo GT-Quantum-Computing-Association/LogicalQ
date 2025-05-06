@@ -1,10 +1,12 @@
 import sys
+import copy
 import numpy as np
 
 from qiskit import QuantumRegister, AncillaRegister, ClassicalRegister, QuantumCircuit
-from qiskit.quantum_info import Pauli, Clifford
+from qiskit.circuit import CircuitInstruction
 from qiskit.circuit.library import HGate
 from qiskit.circuit.classical import expr
+from qiskit.quantum_info import Pauli, Clifford
 
 class LogicalCircuit(QuantumCircuit):
     def __init__(
@@ -30,7 +32,7 @@ class LogicalCircuit(QuantumCircuit):
         # Auxiliary data preparation
         self.n_ancilla_qubits = self.n_stabilizers//2
         self.n_measure_qubits = self.n_ancilla_qubits
-        
+
         self.flagged_stabilizers_1 = []
         self.flagged_stabilizers_2 = []
         self.x_stabilizers = []
@@ -60,29 +62,22 @@ class LogicalCircuit(QuantumCircuit):
         self.add_register(self.cbit_setter_qreg)
         super().x(self.cbit_setter_qreg[1])
 
-    # @TODO
+    # @TODO - this completely ignores QEC (besides encoding), do we want to have some sort of default QEC behavior?
+    #       - alternatively, we let the user configure_qec_cycles and/or inject_qec_cycles
     @classmethod
     def from_physical_circuit(cls, physical_circuit, label, stabilizer_tableau, name=None):
         logical_circuit = cls(physical_circuit.num_qubits, label, stabilizer_tableau, name)
-        
-        logical_circuit_data = []
-        for i in range(len(physical_circuit.depth())):
-            circuit_instruction = physical_circuit.data[i]
-            operation = circuit_instruction[0]
-            qubits = circuit_instruction[1]
-            clbits = circuit_instruction[2]
-            
-            # @TODO - get other pieces of data from the circuit instruction, if any
-            # ...
 
-            # @TODO - this doesn't make sense, but the idea is to have some modularized function that knows how to add any quantum operation to the circuit
+        # @TODO - expose the options that encode takes to the user of from_physical_circuit
+        logical_circuit.encode(range(physical_circuit.num_qubits), max_iterations=3)
+
+        for i in range(physical_circuit.depth()):
+            circuit_instruction = physical_circuit.data[i]
+
             logical_circuit.append(circuit_instruction)
 
-        # @TODO - right now, this doesn't exactly make sense either because we haven't defined the notion of LogicalCircuit data, but this might be something we want to implement and use at some point, so it's worth thinking about
-        logical_circuit.data = logical_circuit_data
-    
         return logical_circuit
-        
+
     def add_logical_qubits(self, logical_qubit_count):
         current_logical_qubit_count = len(self.logical_qregs)
 
@@ -119,7 +114,7 @@ class LogicalCircuit(QuantumCircuit):
             self.unflagged_syndrome_diff_cregs.append(unflagged_syndrome_diff_creg_i)
             self.pauli_frame_cregs.append(pauli_frame_creg_i)
             self.final_measurement_cregs.append(final_measurement_creg_i)
-            
+
             # Add new registers to quantum circuit
             super().add_register(logical_qreg_i)
             super().add_register(ancilla_qreg_i)
@@ -139,7 +134,7 @@ class LogicalCircuit(QuantumCircuit):
     def group_stabilizers(self):
         # @TODO - determine how stabilizers are generally selected for flagged measurements
         #       - the below is a heuristic which happens to work for the Steane code and potentially all CSS codes, but maybe not all stabilizer codes in general
-        
+
         # Take the middle k stabilizers
         k = self.n_stabilizers//2
         self.flagged_stabilizers_1 = [s for s in range(self.n_stabilizers) if s < k - k//2 - 1 or s > k + k//2 - 1]
@@ -154,7 +149,7 @@ class LogicalCircuit(QuantumCircuit):
     # Function which generates encoding circuit and logical operators for a given tableau
     def generate_code(self):
         m = len(self.stabilizer_tableau)
-    
+
         # Step 1: Assemble generator matrix
         G = np.zeros((2, m, self.n))
         for i, stabilizer in enumerate(self.stabilizer_tableau):
@@ -165,7 +160,7 @@ class LogicalCircuit(QuantumCircuit):
                     G[1, i, j] = 1
                 elif pauli_j == "Y":
                     G[:, i, j] = 1
-    
+
         # Step 2: Perform Gaussian reduction in base 2
         row = 0
         for col in range(self.n):
@@ -174,19 +169,19 @@ class LogicalCircuit(QuantumCircuit):
                 if G[0, i, col] == 1:
                     pivot_row = i
                     break
-            
+
             if pivot_row is None:
                 continue
-            
+
             G[:, [row, pivot_row]] = G[:, [pivot_row, row]]
-    
+
             # Flip any other rows with a "1" in the same column
             for i in range(m):
                 if i != row and G[0, i, col] == 1:
                     G[:, i] = G[:, i].astype(int) ^ G[:, row].astype(int)
                     # G[0, i] = G[0, i].astype(int) ^ G[0, row].astype(int)
                     # G[1, i] = G[1, i].astype(int) ^ G[1, row].astype(int)
-    
+
             # Move to the next row, if we haven't reached the end of the matrix
             row += 1
             if row >= m:
@@ -202,10 +197,10 @@ class LogicalCircuit(QuantumCircuit):
                 if E[1, i, col] == 1:
                     pivot_row = i
                     break
-            
+
             if pivot_row is None:
                 continue
-            
+
             E[:, [row, pivot_row]] = E[:, [pivot_row, row]]
             G[:, [r+row, r+pivot_row]] = G[:, [r+pivot_row, r+row]]
 
@@ -222,14 +217,14 @@ class LogicalCircuit(QuantumCircuit):
 
 
         self.G = G
-    
+
         # Step 3: Construct logical operators using Pauli vector representations due to Gottesmann (1997)
         r = np.linalg.matrix_rank(self.G[0])
         A_2 = self.G[0, 0:r, m:self.n] # r x k
         C_1 = self.G[1, 0:r, r:m] # r x m-r
         C_2 = self.G[1, 0:r, m:self.n] # r x k
         E_2 = self.G[1, r:m, m:self.n] # m-r x k
-    
+
         self.LogicalXVector = np.block([
             [[np.zeros((self.k, r)), E_2.T,                        np.eye(self.k, self.k)    ]],
             [[E_2.T @ C_1.T + C_2.T,      np.zeros((self.k, m-r)), np.zeros((self.k, self.k))]]
@@ -272,27 +267,27 @@ class LogicalCircuit(QuantumCircuit):
         # Create Logical H circuit using Childs and Wiebe's linear combination of unitaries method
         LogicalHCircuit_LCU = QuantumCircuit(self.n + 1)
         LogicalHCircuit_LCU.h(self.n)
-        
+
         LogicalHCircuit_LCU.append(self.LogicalXGate.control(1), [self.n, *list(range(self.n))])
 
         LogicalHCircuit_LCU.x(self.n)
         LogicalHCircuit_LCU.append(self.LogicalZGate.control(1), [self.n, *list(range(self.n))])
         LogicalHCircuit_LCU.x(self.n)
-        
+
         LogicalHCircuit_LCU.h(self.n)
         self.LogicalHGate_LCU = LogicalHCircuit_LCU.to_gate(label="$H_L$")
 
         # @TODO - Logical S
 
         # @TODO - Logical CX
-    
+
         # Step 4: Apply the respective stabilizers
         encoding_circuit = QuantumCircuit(self.n)
         for i in range(self.k):
             for j in range(r, self.n-self.k):
                 if self.LogicalXVector[0, i, j]:
                     encoding_circuit.cx(self.n-self.k+i, j)
-        
+
         for i in range(r):
             encoding_circuit.h(i)
             for j in range(self.n):
@@ -304,7 +299,7 @@ class LogicalCircuit(QuantumCircuit):
                     elif self.G[0, i, j] and self.G[1, i, j]:
                         encoding_circuit.cx(i, j)
                         encoding_circuit.cz(i, j)
-     
+
         self.encoding_gate = encoding_circuit.to_gate(label="$U_{enc}$")
 
     # Encodes logical qubits for a given number of iterations
@@ -312,15 +307,29 @@ class LogicalCircuit(QuantumCircuit):
         """
         Prepare logical qubit(s) in the specified initial state
         """
+        if self.encoding_gate is None:
+            raise RuntimeError("LogicalCircuit code has not been properly constructed (missing encoding gate)")
+
+        if qubits is None or (hasattr(qubits, "__iter__") and len(qubits) == 0):
+            raise ValueError("No qubits specified for logical state encoding")
+        else:
+            if len(qubits) > 0 and hasattr(qubits[0], "__iter__"):
+                # Double unwrapping in case qubits is actually a list of lists
+                qubits = [qj for qi in qubits for qj in qi]
+            else:
+                # Simple list conversion to guarantee type
+                qubits = list(qubits)
+
         if initial_states is None:
             initial_states = [0] * len(qubits)
+
         if initial_states is None or len(qubits) != len(initial_states):
             raise ValueError("Number of qubits should equal number of initial states if initial states are provided")
-        
+
         for q, init_state in zip(qubits, initial_states):
             # Preliminary physical qubit reset
             super().reset(self.logical_qregs[q])
-            
+
             # Initial encoding
             super().append(self.encoding_gate, self.logical_qregs[q])
 
@@ -347,7 +356,7 @@ class LogicalCircuit(QuantumCircuit):
 
                     # Measure ancilla
                     super().measure(self.ancilla_qregs[q][0], self.enc_verif_cregs[q][0])
-        
+
             # Reset ancilla qubit
             super().reset(self.ancilla_qregs[q][0])
 
@@ -356,14 +365,14 @@ class LogicalCircuit(QuantumCircuit):
                 self.x(q)
             elif init_state != 0:
                 raise ValueError("Initial state should be either 0 or 1 (arbitrary statevectors not yet supported)!")
-        
+
         return True
 
     # Reset all ancillas associated with specified logical qubits
     def reset_ancillas(self, logical_qubit_indices=None):
         if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
             logical_qubit_indices = list(range(self.n_logical_qubits))
-        
+
         for q in logical_qubit_indices:
             self.reset(self.ancilla_qregs[q])
 
@@ -415,26 +424,26 @@ class LogicalCircuit(QuantumCircuit):
     def measure_stabilizers(self, logical_qubit_indices=None, stabilizer_indices=None):
         if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
             logical_qubit_indices = list(range(self.n_logical_qubits))
-        
+
         if stabilizer_indices is None or len(logical_qubit_indices) == 0:
             stabilizer_indices = list(range(self.n_stabilizers))
-        
+
         for q in logical_qubit_indices:
             for p in range(self.n_physical_qubits):
-                
+
                 for s, stabilizer_index in enumerate(stabilizer_indices):
                     stabilizer = self.stabilizer_tableau[stabilizer_index]
                     stabilizer_pauli = Pauli(stabilizer[p])
                     measurement_pauli = stabilizer_pauli.evolve(Clifford(HGate()))
-                    
+
                     CPauliInstruction = measurement_pauli.to_instruction().control(1)
-                    self.append(CPauliInstruction, [self.logical_qregs[q][p], self.ancilla_qregs[q][s]])
+                    super().append(CPauliInstruction, [self.logical_qregs[q][p], self.ancilla_qregs[q][s]])
 
     # Measure flagged or unflagged syndrome differences for specified logical qubits and stabilizers
     def measure_syndrome_diff(self, logical_qubit_indices=None, stabilizer_indices=None, flagged=False, steane_flag_1=False, steane_flag_2=False):
         if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
             logical_qubit_indices = list(range(self.n_logical_qubits))
-        
+
         if stabilizer_indices is None or len(stabilizer_indices) == 0:
             stabilizer_indices = list(range(self.n_stabilizers))
 
@@ -450,14 +459,14 @@ class LogicalCircuit(QuantumCircuit):
                 self.measure_stabilizers(logical_qubit_indices=[q], stabilizer_indices=stabilizer_indices)
             for n in range(self.n_ancilla_qubits):
                 super().measure(self.ancilla_qregs[q][n], self.curr_syndrome_cregs[q][n])
-        
+
             # Determine the syndrome difference
             for n in range(len(stabilizer_indices)):
                 with self.if_test(self.cbit_xor([self.curr_syndrome_cregs[q][n], self.prev_syndrome_cregs[q][stabilizer_indices[n]]])) as _else:
                     self.set_cbit(syndrome_diff_creg[stabilizer_indices[n]], 1)
                 with _else:
                     self.set_cbit(syndrome_diff_creg[stabilizer_indices[n]], 0)
-        
+
         self.reset_ancillas(logical_qubit_indices=logical_qubit_indices)
 
     # @TODO - allow configuration of QEC cycling
@@ -466,7 +475,7 @@ class LogicalCircuit(QuantumCircuit):
 
     def perform_qec_cycle(self, logical_qubit_indices=None):
         #Use hardcoded flagged circuits for steane code
-        use_steane_flagged_circuits = True if [self.n, self.k, self.d] == [7,1,3] else False
+        use_steane_flagged_circuits = True if (self.n, self.k, self.d) == (7,1,3) else False
 
         if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
             logical_qubit_indices = list(range(self.n_logical_qubits))
@@ -476,21 +485,21 @@ class LogicalCircuit(QuantumCircuit):
 
             # Perform first flagged syndrome measurements
             self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_1, flagged=True, steane_flag_1=use_steane_flagged_circuits)
-        
+
             # If no change in syndrome, perform second flagged syndrome measurement
             with self.if_test(expr.equal(self.flagged_syndrome_diff_cregs[q], 0)):
                 self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_2, flagged=True, steane_flag_2=use_steane_flagged_circuits)
-        
+
             # If change in syndrome, perform unflagged syndrome measurement, decode, and correct
             with self.if_test(expr.not_equal(self.flagged_syndrome_diff_cregs[q], 0)):
                 self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, flagged=False)
                 self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, flagged=False)
-        
+
                 self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, with_flagged=False)
                 self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, with_flagged=False)
                 self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, with_flagged=True)
                 self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, with_flagged=True)
-        
+
                 # Update previous syndrome
                 for n in range(self.n_stabilizers):
                     with self.if_test(expr.lift(self.unflagged_syndrome_diff_cregs[q][n])):
@@ -512,7 +521,7 @@ class LogicalCircuit(QuantumCircuit):
                     self.cbit_not(self.pauli_frame_cregs[q][pf_ind])
                 with super().if_test(expr.bit_and(self.cbit_and(flag_diff, [0, 1, 1]), self.cbit_and(syn_diff, [0, 0, 1]))):
                     self.cbit_not(self.pauli_frame_cregs[q][pf_ind])
-            
+
             # Unflagged decoding sequence
             else:
                 with super().if_test(self.cbit_and(syn_diff, [0, 1, 0])):
@@ -531,6 +540,7 @@ class LogicalCircuit(QuantumCircuit):
             for n in range(self.n_physical_qubits):
                 super().measure(self.logical_qregs[q][n], self.final_measurement_cregs[q][n])
 
+            # @TODO - use LogicalXVector instead
             with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][x] for x in [4,5,6]])):
                 self.set_cbit(self.output_creg[c], 1)
 
@@ -573,7 +583,7 @@ class LogicalCircuit(QuantumCircuit):
             else:
                 counts[output] += 1
 
-        return counts  
+        return counts
 
     ######################################
     ##### Logical quantum operations #####
@@ -592,24 +602,24 @@ class LogicalCircuit(QuantumCircuit):
         if method == "LCU":
             for t in targets:
                 super().append(self.LogicalHGate_LCU, [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:])
-            
+
             # @TODO - perform resets after main operation is complete to allow for faster(?) parallel operation
-            for t in targets:
+            # for t in targets:
                 # @TODO - determine whether extra reset is necessary at the end
-                super().reset(self.logical_op_qregs[t])
+                # super().reset(self.logical_op_qregs[t])
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical Hadamard gate")
-    
+
     def x(self, *targets):
         """
         Logical PauliX gate
         """
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
             targets = targets[0]
-        
+
         for t in targets:
             super().append(self.LogicalXGate, self.logical_qregs[t])
-    
+
     def y(self, *targets):
         """
         Logical PauliY gate
@@ -617,7 +627,7 @@ class LogicalCircuit(QuantumCircuit):
 
         self.z(targets)
         self.x(targets)
-    
+
     def z(self, *targets):
         """
         Logical PauliZ gate
@@ -628,7 +638,7 @@ class LogicalCircuit(QuantumCircuit):
 
         for t in targets:
             super().append(self.LogicalZGate, self.logical_qregs[t])
-    
+
     def s(self, *targets):
         """
         Logical S (pi/4 phase) gate
@@ -638,17 +648,20 @@ class LogicalCircuit(QuantumCircuit):
             super().s(self.logical_qregs[t])
             super().s(self.logical_qregs[t])
             super().s(self.logical_qregs[t])
-    
-    def cx(self, control, *targets):
+
+    def cx(self, control, *_targets):
         """
         Logical Controlled-PauliX gate
         """
 
-        if len(targets) == 1 and hasattr(targets[0], "__iter__"):
-            targets = targets[0]
+        if hasattr(_targets, "__iter__"):
+            targets = _targets
+        else:
+            targets = [_targets]
 
+        # @TODO - implement a better, more generalized CNOT gate
         for t in targets:
-            super().append(self.LogicalXGate.control(1), self.logical_qregs[control][:] + self.logical_qregs[t][:])
+            super().append(self.LogicalXGate.control(7), self.logical_qregs[control][:] + self.logical_qregs[t][:])
 
     def mcmt(self, controls, targets):
         """
@@ -665,18 +678,76 @@ class LogicalCircuit(QuantumCircuit):
         target_qubits = [self.logical_qregs[t][:] for t in targets]
 
         assert set(control_qubits).isdisjoint(target_qubits), "Qubit(s) specified as both control and target"
-        
+
         super().append(self.LogicalXGate.control(len(controls)), control_qubits + target_qubits)
+
+    def append(self, instruction, qargs=None, cargs=None, copy=True):
+        if isinstance(instruction, str):
+            operation = instruction
+        elif hasattr(instruction, "name"):
+            operation = instruction.name.lower()
+        else:
+            raise ValueError(f"Instruction could not be parsed: {instruction}")
+
+        # @TODO - copy.deepcopy fails for some instructions (such as IfElseOp), figure out a fix
+        # if copy:
+            # instruction = copy.deepcopy(instruction)
+            # print(f"WARNING: LogicalCircuit does not support append-by-copy for instruction '{operation}', ignoring")
+
+        if qargs is None:
+            if hasattr(instruction, "qubits"):
+                qargs = instruction.qubits
+                qubits = [qubit._index for qubit in instruction.qubits]
+        else:
+            if all([isinstance(qarg, int) for qarg in qargs]):
+                qubits = qargs
+            elif hasattr(instruction, "qubits"):
+                qubits = [qubit._index for qubit in instruction.qubits]
+
+        if cargs is None:
+            if hasattr(instruction, "clbits"):
+                cargs = instruction.clbits
+                clbits = [clbit._index for clbit in instruction.clbits]
+        else:
+            if all([isinstance(carg, int) for carg in cargs]):
+                clbits = cargs
+            elif hasattr(instruction, "clbits"):
+                clbits = [clbit._index for clbit in instruction.clbits]
+
+        match operation:
+            case "h":
+                self.h(qubits)
+            case "x":
+                self.x(qubits)
+            case "y":
+                self.y(qubits)
+            case "z":
+                self.z(qubits)
+            case "s":
+                self.s(qubits)
+            case "cx":
+                control_qubit = instruction.qubits[0]._index
+                target_qubit = instruction.qubits[1]._index
+                self.cx(control_qubit, target_qubit)
+            case "mcmt":
+                raise NotImplementedError(f"Physical operation 'MCMT' does not have physical gate conversion implemented!")
+            case _:
+                # @TODO - identify a better way of providing these warnings
+                # print(f"WARNING: Physical operation '{operation.upper()}' does not have a logical counterpart implemented! Defaulting to physical operation.")
+
+                instruction = super().append(instruction, qargs, cargs, copy=copy)
+
+        return instruction
 
     ###########################
     ##### Utility methods #####
     ###########################
 
     # Adds a desired error for testing
-    def add_error(self, l_ind, p_ind, type):
-        if type == 'X':
+    def add_error(self, l_ind, p_ind, error_type):
+        if error_type == 'X':
             super().x(self.logical_qregs[l_ind][p_ind])
-        if type == 'Z':
+        if error_type == 'Z':
             super().z(self.logical_qregs[l_ind][p_ind])
 
     # @TODO - find alternative to classical methods, possibly by implementing upstream
@@ -694,17 +765,18 @@ class LogicalCircuit(QuantumCircuit):
             self.set_cbit(cbit, 0)
         with _else:
             self.set_cbit(cbit, 1)
-    
+
     # Performs AND and NOT statements on multiple classical bits, e.g. (~c[0] & ~c[1] & c[2])
     def cbit_and(self, cbits, values):
         result = expr.bit_not(cbits[0]) if values[0] == 0 else expr.lift(cbits[0])
         for n in range(len(cbits)-1):
             result = expr.bit_and(result, expr.bit_not(cbits[n+1])) if values[n+1] == 0 else expr.bit_and(result, cbits[n+1])
         return result
-    
+
     # XOR multiple classical bits
     def cbit_xor(self, cbits):
         result = expr.lift(cbits[0])
         for n in range(len(cbits)-1):
             result = expr.bit_xor(result, cbits[n+1])
         return result
+
