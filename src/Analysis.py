@@ -1,5 +1,6 @@
 import time
-import matplotlib as mpl
+import numpy as np
+from matplotlib import pyplot as plt
 
 from qiskit.visualization import plot_distribution, plot_histogram
 
@@ -25,20 +26,18 @@ def circuit_scaling_bar3d(data, title=None, save=False, filename=None, save_dir=
     if save:
         filename, save_dir = sanitize_save_parameters(filename, save_dir, default_filename="circuit_scaling_bar3d")
 
-    exp_vals = []
-
-    n_qubits_vals = list(dict.keys())
+    n_qubits_vals = []
     circuit_length_vals = []
-
-    for n_qubits, sub_data in dict.items():
-        sub_exp_vals = []
-
+    exp_vals = []
+    
+    for n_qubits, sub_data in data.items():
         # @TODO - make this work better for data where not every qubit count has the same range of circuit lengths
         for circuit_length, (result, counts) in sub_data.items():
+            n_qubits_vals.append(n_qubits)
+            circuit_length_vals.append(circuit_length)
+            
             exp_val = calculate_exp_val(counts)
-            sub_exp_vals.append(exp_val)
-
-        data_array.append(n_qubits_data)
+            exp_vals.append(exp_val)
 
     ax = plt.figure().add_subplot(projection='3d')
 
@@ -88,7 +87,7 @@ def qec_cycle_efficiency_plot(qec_cycle_counts, fidelities=None, counts_list=Non
             else:
                 fidelities = [calculate_state_probability(reference_state, counts) for counts in counts_list]
 
-    raise NotImplementedError("Circuit length fidelity profiles are not yet supported!")
+    raise NotImplementedError("Circuit length fidelity profiles are not fully implemented!")
 
 """
     Computes expectation value from circuit measurement counts.
@@ -102,10 +101,9 @@ def calculate_state_probability(state, counts):
     return state_probability
 
 def calculate_exp_val(counts):
-    total_counts = sum(list(counts.values()))
+    total_counts = sum(list(counts.values())) 
 
-    # @TODO - generalize for multi-qubit data
-    exp_val = counts["1"]/total_counts
+    exp_val = sum([key.count("1") for key in counts])/total_counts
 
     return exp_val
 
