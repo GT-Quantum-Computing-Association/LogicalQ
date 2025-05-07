@@ -3,7 +3,7 @@ import copy
 import numpy as np
 
 from qiskit import QuantumRegister, AncillaRegister, ClassicalRegister, QuantumCircuit
-from qiskit.circuit import CircuitInstruction
+from qiskit.circuit import CircuitInstruction, Bit, Measure
 from qiskit.circuit.library import HGate
 from qiskit.circuit.classical import expr
 from qiskit.quantum_info import Pauli, Clifford
@@ -339,7 +339,8 @@ class LogicalCircuit(QuantumCircuit):
             super().cx(self.logical_qregs[q][5], self.ancilla_qregs[q][0])
 
             # Measure ancilla(e)
-            super().measure(self.ancilla_qregs[q][0], self.enc_verif_cregs[q][0])
+            # super().measure(self.ancilla_qregs[q][0], self.enc_verif_cregs[q][0])
+            super().append(Measure(), [self.ancilla_qregs[q][0]], [self.enc_verif_cregs[q][0]], copy=False)
 
             for _ in range(max_iterations - 1):
                 # If the ancilla stores a 1, reset the entire logical qubit and redo
@@ -355,7 +356,8 @@ class LogicalCircuit(QuantumCircuit):
                     super().cx(self.logical_qregs[q][5], self.ancilla_qregs[q][0])
 
                     # Measure ancilla
-                    super().measure(self.ancilla_qregs[q][0], self.enc_verif_cregs[q][0])
+                    # super().measure(self.ancilla_qregs[q][0], self.enc_verif_cregs[q][0])
+                    super().append(Measure(), [self.ancilla_qregs[q][0]], [self.enc_verif_cregs[q][0]], copy=False)
 
             # Reset ancilla qubit
             super().reset(self.ancilla_qregs[q][0])
@@ -532,13 +534,20 @@ class LogicalCircuit(QuantumCircuit):
                     self.cbit_not(self.pauli_frame_cregs[q][pf_ind])
 
     def measure(self, logical_qubit_indices, cbit_indices, with_error_correction=True):
+        if not hasattr(logical_qubit_indices, "__iter__"):
+            raise ValueError("Logical qubit indices must be an iterable!")
+
+        if not hasattr(cbit_indices, "__iter__"):
+            raise ValueError("Classical bit indices must be an iterable!")
+        
         if len(logical_qubit_indices) != len(cbit_indices):
             raise ValueError("Number of qubits should equal number of classical bits")
 
         for q, c in zip(logical_qubit_indices, cbit_indices):
             # Measurement of state
             for n in range(self.n_physical_qubits):
-                super().measure(self.logical_qregs[q][n], self.final_measurement_cregs[q][n])
+                # super().measure(self.logical_qregs[q][n], self.final_measurement_cregs[q][n])
+                super().append(Measure(), [self.logical_qregs[q][n]], [self.final_measurement_cregs[q][n]], copy=False)
 
             # @TODO - use LogicalXVector instead
             with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][x] for x in [4,5,6]])):
@@ -567,6 +576,9 @@ class LogicalCircuit(QuantumCircuit):
                 self.apply_decoding([q], self.z_stabilizers, with_flagged=False)
                 with super().if_test(expr.lift(self.pauli_frame_cregs[q][1])):
                     self.cbit_not(self.output_creg[c])
+
+    def measure_all(self, with_error_correction=True):
+        self.measure(range(self.n_logical_qubits), range(self.n_logical_qubits))
 
     def get_logical_output_counts(self, outputs, logical_qubit_indices=None):
         if logical_qubit_indices == None:
@@ -701,6 +713,8 @@ class LogicalCircuit(QuantumCircuit):
         else:
             if all([isinstance(qarg, int) for qarg in qargs]):
                 qubits = qargs
+            elif all([isinstance(qarg, Bit) for qarg in qargs]):
+                qubits = [qarg._index for qarg in qargs]
             elif hasattr(instruction, "qubits"):
                 qubits = [qubit._index for qubit in instruction.qubits]
 
@@ -711,6 +725,8 @@ class LogicalCircuit(QuantumCircuit):
         else:
             if all([isinstance(carg, int) for carg in cargs]):
                 clbits = cargs
+            elif all([isinstance(carg, Bit) for carg in cargs]):
+                qubits = [carg._index for carg in cargs]
             elif hasattr(instruction, "clbits"):
                 clbits = [clbit._index for clbit in instruction.clbits]
 
@@ -731,6 +747,13 @@ class LogicalCircuit(QuantumCircuit):
                 self.cx(control_qubit, target_qubit)
             case "mcmt":
                 raise NotImplementedError(f"Physical operation 'MCMT' does not have physical gate conversion implemented!")
+            case "measure":
+                # If classical bits for measurement aren't specified, default to match logical qubit indices
+                if clbits is None:
+                    clbits = qubits
+                
+                # @TODO - decide best default behavior here (maybe we should ask during from_physical_circuit)
+                self.measure(qubits, clbits, with_error_correction=True)
             case _:
                 # @TODO - identify a better way of providing these warnings
                 # print(f"WARNING: Physical operation '{operation.upper()}' does not have a logical counterpart implemented! Defaulting to physical operation.")
@@ -755,9 +778,12 @@ class LogicalCircuit(QuantumCircuit):
     # Set values of classical bits
     def set_cbit(self, cbit, value):
         if value == 0:
-            super().measure(self.cbit_setter_qreg[0], cbit)
+            # super().measure(self.cbit_setter_qreg[0], cbit)
+            super().append(Measure(), [self.cbit_setter_qreg[0]], [cbit], copy=False)
         else:
-            super().measure(self.cbit_setter_qreg[1], cbit)
+            # super().measure(self.cbit_setter_qreg[1], cbit)
+            super().append(Measure(), [self.cbit_setter_qreg[1]], [cbit], copy=False)
+
 
     # Performs a NOT statement on a classical bit
     def cbit_not(self, cbit):
@@ -779,4 +805,3 @@ class LogicalCircuit(QuantumCircuit):
         for n in range(len(cbits)-1):
             result = expr.bit_xor(result, cbits[n+1])
         return result
-
