@@ -381,7 +381,7 @@ class LogicalCircuit(QuantumCircuit):
     def steane_flagged_circuit1(self, logical_qubit_indices):
         for q in logical_qubit_indices:
             super().barrier()
-            super().h(self.ancillas[0])
+            super().h(self.ancilla_qregs[q][0])
             super().cx(self.ancilla_qregs[q][0], self.logical_qregs[q][3])
             super().cx(self.logical_qregs[q][2], self.ancilla_qregs[q][2])
             super().cx(self.logical_qregs[q][5], self.ancilla_qregs[q][1])
@@ -790,7 +790,6 @@ class LogicalCircuit(QuantumCircuit):
         else:
             # super().measure(self.cbit_setter_qreg[1], cbit)
             super().append(Measure(), [self.cbit_setter_qreg[1]], [cbit], copy=False)
-
 
     # Performs a NOT statement on a classical bit
     def cbit_not(self, cbit):
