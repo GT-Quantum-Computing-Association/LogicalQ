@@ -138,7 +138,7 @@ class LogicalCircuit(QuantumCircuit):
         # Take the middle k stabilizers
         k = self.n_stabilizers//2
         self.flagged_stabilizers_1 = [s for s in range(self.n_stabilizers) if s < k - k//2 - 1 or s > k + k//2 - 1]
-        self.flagged_stabilizers_2 = [s for s in range(self.n_stabilizers) if s < k - k//2 - 1 or s > k + k//2 - 1]
+        self.flagged_stabilizers_2 = list(set(range(self.n_stabilizers)) - set(self.flagged_stabilizers_1))
 
         for i in range(self.n_stabilizers):
             if 'X' in self.stabilizer_tableau[i]:
