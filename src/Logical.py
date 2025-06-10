@@ -711,7 +711,8 @@ class LogicalCircuit(QuantumCircuit):
             try:
                 instruction = copy.deepcopy(instruction)
             except:
-                print(f"WARNING: LogicalCircuit does not support append-by-copy for instruction '{operation}', ignoring")
+                pass
+                #print(f"WARNING: LogicalCircuit does not support append-by-copy for instruction '{operation}', ignoring")
 
         if qargs is None:
             if hasattr(instruction, "qubits"):
@@ -763,7 +764,7 @@ class LogicalCircuit(QuantumCircuit):
                 self.measure(qubits, clbits, with_error_correction=True)
             case _:
                 # @TODO - identify a better way of providing these warnings
-                print(f"WARNING: Physical operation '{operation.upper()}' does not have a logical counterpart implemented! Defaulting to physical operation.")
+                #print(f"WARNING: Physical operation '{operation.upper()}' does not have a logical counterpart implemented! Defaulting to physical operation.")
 
                 instruction = super().append(instruction, qargs, cargs, copy=copy)
 
