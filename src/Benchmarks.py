@@ -1,7 +1,7 @@
 import random
 import numpy as np
 
-from qiskit import QuantumCircuit
+from qiskit import QuantumCircuit, ClassicalRegister
 from qiskit.circuit.library import HGate, XGate, YGate, ZGate, SGate, TGate, CXGate, CYGate, CZGate, RXGate, RYGate, RZGate
 from qiskit_experiments.library import StandardRB, QuantumVolume
 
@@ -38,7 +38,7 @@ def mirror_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sampl
     for gate in gate_sample:
         if gate not in clifford_gates:
             raise ValueError(f"Gate {gate.__name__} is not a Clifford gate")
-        if gate.num_qubits > n_qubits:
+        if gate().num_qubits > n_qubits:
             raise ValueError(f"Gate {gate.__name__} requires more qubits than available")
 
     # random shuffled sample of gates used for circuit
@@ -47,7 +47,7 @@ def mirror_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sampl
 
     # append original gates to circuit, targeting random qubits
     for gate in shuffled_gates:
-        target_qubits = np.random.choice(qubits, gate.num_qubits)
+        target_qubits = np.random.choice(qubits, gate().num_qubits)
         mb_circuit.append(gate(), [0])
 
     # append inverse of current circuit so that final state is left unchanged under no errors
