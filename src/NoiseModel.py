@@ -13,7 +13,7 @@ def construct_noise_model(basis_gates, n_qubits=None, qubits=None, **noise_param
     elif qubits is not None and n_qubits is None:
         n_qubits = len(qubits)
 
-    noise_model = NoiseModel(basis_gates=basis_gates) # check if basis gates are really being used
+    noise_model = NoiseModel(basis_gates=basis_gates) # @todo - check if basis gates are really being used
 
     # Depolarizing errors: Simulates decay into random mixed state
     for gate in ["x", "y", "z", "h"]:
