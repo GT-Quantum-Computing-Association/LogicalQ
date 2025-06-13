@@ -48,10 +48,12 @@ def mirror_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sampl
     # append original gates to circuit, targeting random qubits
     for gate in shuffled_gates:
         target_qubits = np.random.choice(qubits, gate().num_qubits)
-        mb_circuit.append(gate(), [0])
+        mb_circuit.append(gate(), list(target_qubits))
 
     # append inverse of current circuit so that final state is left unchanged under no errors
     mb_circuit = mb_circuit.compose(mb_circuit.inverse())
+
+    mb_circuit.measure_all()
 
     return mb_circuit
 

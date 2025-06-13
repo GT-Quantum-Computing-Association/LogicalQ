@@ -629,6 +629,7 @@ class LogicalCircuit(QuantumCircuit):
         """
         Logical PauliX gate
         """
+        
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
             targets = targets[0]
 
@@ -639,6 +640,9 @@ class LogicalCircuit(QuantumCircuit):
         """
         Logical PauliY gate
         """
+        
+        if len(targets) == 1 and hasattr(targets[0], "__iter__"):
+            targets = targets[0]
 
         self.z(targets)
         self.x(targets)
@@ -658,11 +662,14 @@ class LogicalCircuit(QuantumCircuit):
         """
         Logical S (pi/4 phase) gate
         """
+        
+        if len(targets) == 1 and hasattr(targets[0], "__iter__"):
+            targets = targets[0]
 
         for t in targets:
-            super().s(self.logical_qregs[t])
-            super().s(self.logical_qregs[t])
-            super().s(self.logical_qregs[t])
+            super().s(self.logical_qregs[t][4])
+            super().s(self.logical_qregs[t][5])
+            super().s(self.logical_qregs[t][6])
 
     def cx(self, control, *_targets):
         """
@@ -696,8 +703,8 @@ class LogicalCircuit(QuantumCircuit):
 
         super().append(self.LogicalXGate.control(len(controls)), control_qubits + target_qubits)
 
-    # Instruction could be a CircuitInstruction(name="...", qargs="...", cargs="...")
-    # Instruction could be a Instruction(name="..."), qargs = [..], cargs = [...]
+    # Input could be: 1. (CircuitInstruction(name="...", qargs="...", cargs="..."), qargs=None, cargs=None)
+    #                 2. (Instruction(name="..."), qargs=[..], cargs=[...])
     def append(self, instruction, qargs=None, cargs=None, copy=True):
         if isinstance(instruction, str):
             operation = instruction
@@ -725,6 +732,8 @@ class LogicalCircuit(QuantumCircuit):
                 qubits = [qarg._index for qarg in qargs]
             elif hasattr(instruction, "qubits"):
                 qubits = [qubit._index for qubit in instruction.qubits]
+            else:
+                raise ValueError(f"At least one of the following quantum arguments to operation '{operation}' are unrecognized: {qargs}")
 
         if cargs is None:
             if hasattr(instruction, "clbits"):
@@ -737,6 +746,8 @@ class LogicalCircuit(QuantumCircuit):
                 qubits = [carg._index for carg in cargs]
             elif hasattr(instruction, "clbits"):
                 clbits = [clbit._index for clbit in instruction.clbits]
+            else:
+                raise ValueError(f"At least one of the following classical arguments to operation '{operation}' are unrecognized: {cargs}")
 
         match operation:
             case "h":

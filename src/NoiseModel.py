@@ -113,7 +113,7 @@ def construct_noise_model(basis_gates, n_qubits=None, qubits=None, ignore_qubits
 #           - Harvard/MIT/QuEra collaboration (e.g. papers by Vuletic, Lukin, Bluvstein, Evered, Levine, Kalinowski, Li)
 
 # Quantinuum H1-1:
-def construct_noise_model_QuantinuumH1_1(n_qubits=None, qubits=None):
+def construct_noise_model_QuantinuumH1_1(n_qubits=None, qubits=None, ignore_qubits=None):
     basis_gates = ["u", "rz", "zz", "rzz"] # @TODO - missing RXXYYZZ, not sure if ZZ is valid, and need to verify that angle conventions are correct
     noise_params = {
         "depolarizing_error_1q": 2.1E-5, # single-qubit fault probability
@@ -128,5 +128,5 @@ def construct_noise_model_QuantinuumH1_1(n_qubits=None, qubits=None):
         "amplitude_damping_error_2q": 0.43 * 1E-3, # calculated as a fraction of two-qubit fault probability
     }
 
-    return construct_noise_model(n_qubits=n_qubits, basis_gates=basis_gates, **noise_params)
+    return construct_noise_model(n_qubits=n_qubits, basis_gates=basis_gates, ignore_qubits=ignore_qubits, **noise_params)
 
