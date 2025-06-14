@@ -732,6 +732,8 @@ class LogicalCircuit(QuantumCircuit):
                 qubits = [qarg._index for qarg in qargs]
             elif hasattr(instruction, "qubits"):
                 qubits = [qubit._index for qubit in instruction.qubits]
+            elif all([isinstance(qarg, QuantumRegister) for qarg in qargs]):
+                qubits = [qubit._index for qarg in qargs for qubit in qarg]
             else:
                 raise ValueError(f"At least one of the following quantum arguments to operation '{operation}' are unrecognized: {qargs}")
 
@@ -746,6 +748,8 @@ class LogicalCircuit(QuantumCircuit):
                 qubits = [carg._index for carg in cargs]
             elif hasattr(instruction, "clbits"):
                 clbits = [clbit._index for clbit in instruction.clbits]
+            elif all([isinstance(carg, ClassicalRegister) for carg in cargs]):
+                clbits = [clbit._index for carg in cargs for qubit in carg]
             else:
                 raise ValueError(f"At least one of the following classical arguments to operation '{operation}' are unrecognized: {cargs}")
 
@@ -775,7 +779,7 @@ class LogicalCircuit(QuantumCircuit):
                 self.measure(qubits, clbits, with_error_correction=True)
             case _:
                 # @TODO - identify a better way of providing these warnings
-                #print(f"WARNING: Physical operation '{operation.upper()}' does not have a logical counterpart implemented! Defaulting to physical operation.")
+                # print(f"WARNING: Physical operation '{operation.upper()}' does not have a logical counterpart implemented! Defaulting to physical operation.")
 
                 instruction = super().append(instruction, qargs, cargs, copy=copy)
 
