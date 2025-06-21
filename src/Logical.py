@@ -431,15 +431,17 @@ class LogicalCircuit(QuantumCircuit):
             stabilizer_indices = list(range(self.n_stabilizers))
 
         for q in logical_qubit_indices:
-            for p in range(self.n_physical_qubits):
+            for s, stabilizer_index in enumerate(stabilizer_indices):
 
-                for s, stabilizer_index in enumerate(stabilizer_indices):
-                    stabilizer = self.stabilizer_tableau[stabilizer_index]
+                stabilizer = self.stabilizer_tableau[stabilizer_index]
+                super().h(self.ancilla_qregs[q][s])
+                for p in range(self.n_physical_qubits):
                     stabilizer_pauli = Pauli(stabilizer[p])
-                    measurement_pauli = stabilizer_pauli.evolve(Clifford(HGate()))
+                    if stabilizer[p] != 'I':
+                        CPauliInstruction = stabilizer_pauli.to_instruction().control(1)
+                        super().append(CPauliInstruction, [self.ancilla_qregs[q][s], self.logical_qregs[q][p]])
+                super().h(self.ancilla_qregs[q][s])
 
-                    CPauliInstruction = measurement_pauli.to_instruction().control(1)
-                    super().append(CPauliInstruction, [self.logical_qregs[q][p], self.ancilla_qregs[q][s]])
 
     # Measure flagged or unflagged syndrome differences for specified logical qubits and stabilizers
     def measure_syndrome_diff(self, logical_qubit_indices=None, stabilizer_indices=None, flagged=False, steane_flag_1=False, steane_flag_2=False):
