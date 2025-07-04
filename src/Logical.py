@@ -47,6 +47,7 @@ class LogicalCircuit(QuantumCircuit):
         self.flagged_syndrome_diff_cregs = []
         self.unflagged_syndrome_diff_cregs = []
         self.pauli_frame_cregs = []
+        self.logical_op_meas_cregs = []
         self.final_measurement_cregs = []
         self.output_creg = ClassicalRegister(self.n_logical_qubits, name="output")
 
@@ -100,6 +101,8 @@ class LogicalCircuit(QuantumCircuit):
             unflagged_syndrome_diff_creg_i = ClassicalRegister(self.n_stabilizers, name=f"cunflagged_syndrome_diff{i}")
             # Classical bits needed to track the Pauli Frame
             pauli_frame_creg_i = ClassicalRegister(2, name=f"cpauli_frame{i}")
+            # Classical bits needed to take measurements of logical operation qubits
+            logical_op_meas_creg_i = ClassicalRegister(1, name=f"clogial_op_meas{i}")
             # Classical bits needed to take measurements of the final state of the logical qubit
             final_measurement_creg_i = ClassicalRegister(self.n_physical_qubits, name=f"cfinal_meas{i}")
 
@@ -113,6 +116,7 @@ class LogicalCircuit(QuantumCircuit):
             self.flagged_syndrome_diff_cregs.append(flagged_syndrome_diff_creg_i)
             self.unflagged_syndrome_diff_cregs.append(unflagged_syndrome_diff_creg_i)
             self.pauli_frame_cregs.append(pauli_frame_creg_i)
+            self.logical_op_meas_cregs.append(logical_op_meas_creg_i)
             self.final_measurement_cregs.append(final_measurement_creg_i)
 
             # Add new registers to quantum circuit
@@ -125,6 +129,7 @@ class LogicalCircuit(QuantumCircuit):
             super().add_register(flagged_syndrome_diff_creg_i)
             super().add_register(unflagged_syndrome_diff_creg_i)
             super().add_register(pauli_frame_creg_i)
+            super().add_register(logical_op_meas_creg_i)
             super().add_register(final_measurement_creg_i)
 
     ############################################
@@ -608,7 +613,7 @@ class LogicalCircuit(QuantumCircuit):
 
     # called when you do lqc.h() or self.h() inside lqc
     # if you do super().h
-    def h(self, *targets, method="LCU"):
+    def h(self, *targets, method="LCU_corrected"):
         """
         Logical Hadamard gate
         """
@@ -624,6 +629,21 @@ class LogicalCircuit(QuantumCircuit):
             # for t in targets:
                 # @TODO - determine whether extra reset is necessary at the end
                 # super().reset(self.logical_op_qregs[t])
+        elif method == "LCU_corrected": 
+            for t in targets:
+                #Construct circuit for implementing a Hadamard gate through the use of an ancilla
+                super().h(self.logical_op_qregs[t][0])
+                for physical_qubit_idx in range (self.n_physical_qubits):
+                    super().cx(self.logical_op_qregs[t][0],self.logical_qregs[t][physical_qubit_idx])
+                    super().cz(self.logical_op_qregs[t][0],self.logical_qregs[t][physical_qubit_idx])
+                super().h(self.logical_op_qregs[t][0])
+                super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
+
+                #Corrections to apply based on ancilla measurement
+                with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as else_:
+                    self.x(t)
+                with else_:
+                    self.z(t)
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical Hadamard gate")
 
