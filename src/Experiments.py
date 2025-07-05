@@ -45,24 +45,24 @@ def _experiment_core(circuit, noise_model, n_qubits, circuit_length, method, sho
     return n_qubits, circuit_length, result, counts
 
 # @TODO - implement experiments
-def circuit_scaling_experiment(circuit_factory, noise_model_factory, min_n_qubits=1, max_n_qubits=50, min_circuit_length=1, max_circuit_length=50, method="statevector", shots=1024, with_mp=True):
-    if isinstance(circuit_factory, QuantumCircuit) or isinstance(circuit_factory, LogicalCircuit):
+def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1, max_n_qubits=50, min_circuit_length=1, max_circuit_length=50, method="statevector", shots=1024, with_mp=True):
+    if isinstance(circuit_input, QuantumCircuit) or isinstance(circuit_input, LogicalCircuit):
         if max_n_qubits != min_n_qubits+1:
             print("A constant circuit has been provided as the circuit factory, but a non-trivial range of qubit counts and/or circuit lengths has also been provided, so the fixed input will not be scaled. If you would like for the number of qubits to be scaled, please provide a callable which takes in as an argument the number of qubits, n_qubits. If you would like for the circuit length to be scaled, please provide a callable which takes in as an argument the circuit length, circuit_length.")
         
-        circuit = lambda n_qubits, circuit_length: circuit_factory
-    elif callable(circuit_factory):
-        circuit = circuit_factory
+        circuit_factory = lambda n_qubits, circuit_length: circuit_input
+    elif callable(circuit_input):
+        circuit_factory = circuit_input
     else:
         raise ValueError("Please provide a QuantumCircuit/LogicalCircuit object or a method for constructing QuantumCircuits/LogicalCircuits.")
     
-    if isinstance(noise_model_factory, NoiseModel):
+    if isinstance(noise_model_input, NoiseModel):
         if max_n_qubits != min_n_qubits+1:
             print("A constant noise model has been provided as the noise model factory, but a non-trivial range of qubit counts has also been provided. The number of qubits will not be scaled; if you would like for the number of qubits to be scaled, please provide a callable which takes in as an argument the number of qubits, n_qubits.")
         
-        noise_model = lambda n_qubits: noise_model_factory
-    elif callable(noise_model_factory):
-        noise_model = noise_model_factory
+        noise_model_factory = lambda n_qubits: noise_model_input
+    elif callable(noise_model):
+        noise_model_factory = noise_model_input
     else:
         raise ValueError("Please provide a NoiseModel object or a method for constructing NoiseModels.")
 
@@ -124,3 +124,145 @@ def circuit_scaling_experiment(circuit_factory, noise_model_factory, min_n_qubit
     
     return all_data
 
+def qec_cycle_efficiency_experiment(circuit_inputs, noise_model_input, config_scan_keys, config_scan_val_lists, method="density_matrix", shots=1024, with_mp=False):
+    num_config_scan_keys = len(config_scan_keys)
+    num_config_scan_vals = np.shape(config_scan_val_lists)[-1]
+    if num_config_scan_vals != num_config_scan_keys:
+        raise ValueError(f"config_scan_val_lists has last dimension {num_config_scan_vals}, but config_scan_keys specifies {num_config_scan_keys} keys, which is not equal. Please make sure that config_scan_keys has as many keys as there are values in each list of config_scan_val_lists.")
+
+    if with_mp:
+        raise NotImplementedError("with_mp=True specified, but this functionality is not implemented yet for qec_cycle_efficiency_experiment; ignoring.")
+    
+    # Construct config dictionaries
+    config_scan_val_prods = itertools.product(*config_scan_val_lists)
+    configs = []
+    for config_scan_vals in config_scan_val_prods:
+        mapping = zip(config_scan_keys, config_scan_vals)
+        configs.append(dict(mapping))
+
+    all_data = []
+    for circuit_input in circuit_inputs:
+        # Compute exact result
+        density_matrix_exact = DensityMatrix(circuit_input)
+        
+        # Construct LogicalCircuit from physical circuit
+        lqc = LogicalCircuit.from_physical_circuit(circuit_input)
+        
+        # @TODO - determine whether this is a better data structure for this, including a better way to distinguish the data by circuit
+        sub_data = {
+            "qc": circuit_input,
+            "lqc": lqc,
+            "density_matrix_exact": density_matrix_exact
+            "results": []
+        }
+        
+        for config in configs:
+            qec_layer_idxs = lqc.inject_qec_cycles(**config)
+
+            result = benchmark_noise(circuit_input, noise_model=noise_model_input, method=method, shots=shots)
+    
+            sub_data["results"].append({
+                "config": config,
+                "qec_layer_idxs": qec_layer_idxs,
+                "result": result
+            })
+
+        all_data.append(sub_data)
+
+    return all_data
+
+def noise_scaling_experiment(circuit_inputs, noise_model_inputs, error_scan_keys, error_scan_val_lists, noise_qubits=None, basis_gates=None, method="density_matrix", compute_exact=False, shots=1024, with_mp=False):
+    if isinstance(circuit_input, QuantumCircuit) or isinstance(circuit_input, LogicalCircuit):
+        circuit_factory = lambda : circuit_input
+    elif callable(circuit_input):
+        raise NotImplementedError("QuantumCircuit/LogicalCircuit callables are not yet accepted as inputs, please provide a constant QuantumCircuit/LogicalCircuit object.")
+    else:
+        raise ValueError("Please provide a QuantumCircuit/LogicalCircuit input.")
+    
+    if isinstance(noise_model_input, NoiseModel):
+        # @TODO - for a more long-term solution, check if the noise_model_input already contains an error listed in error_scan_keys, and decide whether to override or to raise an exception if so
+        def noise_model_factory(error_dict):
+            # Currently overrides the base NoiseModel with error scan value if the same key is present in both
+            updated_error_dict = {
+                **noise_model_input.to_dict(),
+                **error_dict
+            }
+            
+            # @TODO - test compatibility between our error_dicts and the specification expected by the NoiseModel.from_dict method
+            noise_model = NoiseModel.from_dict(updated_error_dict)
+            
+            if basis_gates is not None and len(basis_gates) > 0:
+                noise_model.add_basis_gates(basis_gates)
+            
+            return noise_model
+    elif callable(noise_model):
+        raise NotImplementedError("NoiseModel callables are not yet accepted as inputs, please provide a constant NoiseModel object.")
+    else:
+        print("No base NoiseModel inputted, using an ideal NoiseModel as a base.")
+        def noise_model_factory(error_dict):
+            # @TODO - test compatibility between our error_dicts and the specification expected by the NoiseModel.from_dict method
+            noise_model = NoiseModel.from_dict(error_dict)
+            
+            if basis_gates is not None and len(basis_gates) > 0:
+                noise_model.add_basis_gates(basis_gates)
+            
+            return noise_model
+
+    num_error_scan_keys = len(error_scan_keys)
+    num_error_scan_vals = np.shape(error_scan_val_lists)[-1]
+    if num_error_scan_vals != num_error_scan_keys:
+        raise ValueError(f"error_scan_val_lists has last dimension {num_error_scan_vals}, but error_scan_keys specifies {num_error_scan_keys} keys, which is not equal. Please make sure that error_scan_keys has as many keys as there are values in each list of error_scan_val_lists.")
+
+    if with_mp:
+        raise NotImplementedError("with_mp=True specified, but this functionality is not implemented yet for noise_model_scaling_experiment; ignoring.")
+    
+    # Construct config dictionaries
+    error_scan_val_prods = itertools.product(*config_scan_val_lists)
+    error_dicts = []
+    noise_models = []
+    for error_scan_vals in error_scan_val_prods:
+        mapping = zip(error_scan_keys, error_scan_vals)
+        error_dict = dict(mapping)
+        error_dicts.append(error_dict)
+
+        noise_model = noise_model_factory(error_dict)
+        noise_models.append(noise_model)
+
+    all_data = []
+    for c, circuit_input in enumerate(circuit_inputs):
+        density_matrix_exact = None # Default exact reference
+        statevector_exact = None # Alternative exact reference, only used if exact DensityMatrix computation fails
+        if compute_exact:
+            # @TODO - have better checks in place to proactively avoid exceptions, such as checking qubit counts and memory constraints
+            try:
+                # Compute exact density matrix
+                density_matrix_exact = DensityMatrix(circuit_input)
+            except:
+                print(f"Failed to compute exact density matrix for circuit input at index {c}, attempting to compute exact statevector...")
+                try:
+                    # Compute exact statevector
+                    statevector_exact = Statevector(circuit_input)
+                except:
+                    # Fail since we don't have any exact reference now
+                    print(f"Failed to compute exact statevector, exiting.")
+                    raise
+
+        # @TODO - determine whether this is a better data structure for this, including a better way to distinguish the data by circuit
+        sub_data = {
+            "qc": circuit_input,
+            "density_matrix_exact": density_matrix_exact,
+            "statevector_exact": statevector_exact,
+            "results": []
+        }
+        
+        for error_dict, noise_model in zip(error_dict, noise_models):
+            result = benchmark_noise(circuit_input, noise_model=noise_model, method=method, shots=shots)
+    
+            sub_data["results"].append({
+                "error_dict": error_dict,
+                "result": result
+            })
+
+        all_data.append(sub_data)
+
+    return all_data
