@@ -29,13 +29,13 @@ def circuit_scaling_bar3d(data, title=None, save=False, filename=None, save_dir=
     n_qubits_vals = []
     circuit_length_vals = []
     exp_vals = []
-    
+
     for n_qubits, sub_data in data.items():
         # @TODO - make this work better for data where not every qubit count has the same range of circuit lengths
         for circuit_length, (result, counts) in sub_data.items():
             n_qubits_vals.append(n_qubits)
             circuit_length_vals.append(circuit_length)
-            
+
             exp_val = calculate_exp_val(counts)
             exp_vals.append(exp_val)
 
@@ -72,7 +72,7 @@ def noise_model_scaling_bar(all_data, scan_keys=None, separate_plots=False):
             raise ValueError("No ideal reference found. 'density_matrix_exact' or 'statevector_exact'")
 
         results = entry["results"]
-        
+
         if scan_keys is not None:
             keys = scan_keys
         else:
@@ -114,7 +114,7 @@ def noise_model_scaling_bar(all_data, scan_keys=None, separate_plots=False):
                 plt.tight_layout()
                 plt.show()
 
-                
+
         if not separate_plots:
             title = getattr(qc, "name", "Circuit")
             ax.set_xlabel("Noise-parameter value")
@@ -135,7 +135,7 @@ def qec_cycle_efficiency_bar(all_data, scan_keys=None):
             keys = scan_keys
         else:
             keys = list(results[0]["config"].keys())
-            
+
 
         for key in keys:
             x_Axis = []
@@ -148,7 +148,7 @@ def qec_cycle_efficiency_bar(all_data, scan_keys=None):
                     raise ValueError("You didn't experiment with any QEC cycles injected.")
 
                 benchmark_noise_return_obj = res["result"]
-                
+
                 # Converts the the benchmark_noise function return object to a DensityMatrix
                 # @TODO change accordingly based on the data structure in qec_cycle_efficiency_experiment
                 if isinstance(benchmark_noise_return_obj, DensityMatrix):
