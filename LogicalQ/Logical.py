@@ -633,11 +633,11 @@ class LogicalCircuit(QuantumCircuit):
             for t in targets:
                 #Construct circuit for implementing a Hadamard gate through the use of an ancilla
                 super().h(self.logical_op_qregs[t][0])
-                for physical_qubit_idx in range (self.n_physical_qubits):
-                    super().cx(self.logical_op_qregs[t][0],self.logical_qregs[t][physical_qubit_idx])
-                    super().cz(self.logical_op_qregs[t][0],self.logical_qregs[t][physical_qubit_idx])
+                super().append(self.LogicalXGate.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:])
+                super().append(self.LogicalZGate.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:])
                 super().h(self.logical_op_qregs[t][0])
                 super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
+                super().reset(self.logical_op_qregs[t][0])
 
                 #Corrections to apply based on ancilla measurement
                 with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as else_:
