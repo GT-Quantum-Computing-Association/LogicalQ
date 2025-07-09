@@ -88,7 +88,7 @@ class LogicalCircuit(QuantumCircuit):
             # Ancilla qubits needed for measurements
             ancilla_qreg_i = AncillaRegister(self.n_ancilla_qubits, name=f"qanc{i}")
             # Ancilla qubits needed for logical operations
-            logical_op_qreg_i = AncillaRegister(1, name=f"qlogical_op{i}")
+            logical_op_qreg_i = AncillaRegister(2, name=f"qlogical_op{i}")
             # Classical bits needed for encoding verification
             enc_verif_creg_i = ClassicalRegister(1, name=f"cenc_verif{i}")
             # Classical bits needed for measurements
@@ -680,18 +680,58 @@ class LogicalCircuit(QuantumCircuit):
         for t in targets:
             super().append(self.LogicalZGate, self.logical_qregs[t])
 
-    def s(self, *targets):
+    def s(self, *targets, method="LCU_corrected"):
         """
-        Logical S (pi/4 phase) gate
+        Logical S gate      (1   0
+                             0   i)
         """
         
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
             targets = targets[0]
 
-        for t in targets:
-            super().s(self.logical_qregs[t][4])
-            super().s(self.logical_qregs[t][5])
-            super().s(self.logical_qregs[t][6])
+        if method == "LCU_corrected":
+            for t in targets:
+                super().h(self.logical_op_qregs[t][0])
+                super().s(self.logical_op_qregs[t][0])
+                super().append(self.LogicalZGate.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:])
+                super().h(self.logical_op_qregs[t][0])
+                super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
+
+                with super().if_test((self.logical_op_meas_cregs[t][0], 0)) as else_:
+                    self.z(t)
+
+                super().reset(self.logical_op_qregs[t][0])
+
+
+    def t(self, *targets, method="LCU_corrected"):
+        """
+        Logical T gate     (1   0
+                            0    e^(iπ/4))
+        """
+        
+        if len(targets) == 1 and hasattr(targets[0], "__iter__"):
+            targets = targets[0]
+
+        if method == "LCU_corrected":
+            for t in targets:
+                super().h(self.logical_op_qregs[t][0])
+                super().h(self.logical_op_qregs[t][1])
+                super().t(self.logical_op_qregs[t][1])
+                super().cz(self.logical_op_qregs[t][1], self.logical_op_qregs[t][0])
+                super().h(self.logical_op_qregs[t][1])
+                super().append(Measure(), [self.logical_op_qregs[t][1]], [self.logical_op_meas_cregs[t][0]], copy=False)
+
+                with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as else_:
+                    super().x(self.logical_op_qregs[t][0])
+
+                super().append(self.LogicalZGate.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:])
+                super().h(self.logical_op_qregs[t][0])
+                super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
+
+                super().reset(self.logical_op_qregs[t])
+
+                with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as else_:
+                    self.s(t)
 
     def cx(self, control, *_targets):
         """
