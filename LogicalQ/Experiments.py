@@ -13,37 +13,47 @@ from qiskit_aer import AerSimulator
 from qiskit_aer.noise import NoiseModel
 
 # General function to benchmark a circuit using a noise model
-def benchmark_noise(circuit, noise_model=None, noise_params=None, method="statevector", shots=1024, optimization_level=0):
-    if noise_model is None:
-        if noise_params is not None:
-            # If noise_params are provided but not a noise_model, then construct noise model based on the provided parameters
-            noise_model = construct_noise_model(circuit.num_qubits, **noise_params)
+def benchmark_noise(circuit, backend=None, noise_model=None, noise_params=None, method="statevector", basis_gates=None, optimization_level=0, shots=1024):
+    if backend is None:
+        # Resolve noise_model or noise_params
+        if noise_model is None:
+            if noise_params is not None:
+                # If noise_params are provided but not a noise_model or backend, then construct noise model based on the provided parameters
+                noise_model = construct_noise_model(basis_gates=basis_gates, circuit.num_qubits, **noise_params)
+
+                backend = "aer_simulator"
+            else:
+                raise ValueError("One of backend, noise_model, or noise_params must be provided")
+
+    # Resolve backend
+    if isinstance(backend, str):
+        if backend == "aer_simulator":
+            backend = AerSimulator(method=method, noise_model=noise_model, basis_gates=basis_gates, coupling_map=coupling_map)
+
+            if coupling_map is None:
+                # Create a fully-coupled map by default since we don't care about non-fully-coupled hardware modalities
+                fully_coupled_map = [list(pair) for pair in itertools.product(range(circuit.num_qubits), range(circuit.num_qubits))]
         else:
-            # If a noise_model is not provided at all, then 
-            raise ValueError("Either noise_model or noise_params must be provided")
-    elif noise_params is not None:
-        print("Both noise_model and noise_params were provided, defaulting to use the noise_model and ignoring noise_params. If you would like to use custom noise_params, pass noise_model=None.")
-
-    # Construct noisy simulator based on chosen method using noise model
-    noisy_sim = AerSimulator(method=method, noise_model=noise_model)
-
-    # Create a fully-coupled map since we don't care about non-fully-coupled hardware modalities
-    fully_coupled_map = itertools.product(range(circuit.num_qubits), range(circuit.num_qubits))
-    fully_coupled_map = [list(pair) for pair in fully_coupled_map]
+            service = QiskitRuntimeService()
+            backend = service.get_backend(backend)
+    elif isinstance(backend, (AerSimulator, BackendV1, BackendV2, IBMBackend)):
+        # @TODO - handle this case better
+        backend = backend
+    else:
+        raise TypeError(f"backend must be None, a string containing either 'aer_simulator' or the name of a backend, or an instance of AerSimulator, BackendV1, BackendV2, or IBMBackend, not {type(backend)}")
 
     # Transpile circuit
     # Method defaults to optimization off to preserve form of benchmarking circuit and full QEC
-    circuit_transpiled = transpile(circuit, noisy_sim, coupling_map=fully_coupled_map, optimization_level=optimization_level)
-    result = noisy_sim.run(circuit_transpiled, shots=shots).result()
-    counts = result.get_counts(circuit_transpiled)
+    circuit_transpiled = transpile(circuit, backend=backend, optimization_level=optimization_level)
+    result = backend.run(circuit_transpiled, shots=shots).result()
 
-    return result, counts
+    return result
 
 # Core experiment function useful for multiprocessing
 def _experiment_core(circuit, noise_model, n_qubits, circuit_length, method, shots):
-    result, counts = benchmark_noise(circuit, noise_model=noise_model, method=method, shots=shots)
+    result = benchmark_noise(circuit, noise_model=noise_model, method=method, shots=shots)
 
-    return n_qubits, circuit_length, result, counts
+    return n_qubits, circuit_length, result
 
 # @TODO - implement experiments
 def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1, max_n_qubits=50, min_circuit_length=1, max_circuit_length=50, method="statevector", shots=1024, with_mp=True):
@@ -109,7 +119,7 @@ def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1,
             for circuit_length in range(min_circuit_length, max_circuit_length+1):
                 # Construct circuit and benchmark noise
                 circuit_nl = circuit(n_qubits=n_qubits, circuit_length=circuit_length)
-                result, counts = benchmark_noise(circuit_nl, noise_model=noise_model_n, method=method, shots=shots)
+                result = benchmark_noise(circuit_nl, noise_model=noise_model_n, method=method, shots=shots)
 
                 # Save expectation values
                 sub_data[circuit_length] = result, counts
@@ -268,4 +278,3 @@ def qec_cycle_efficiency_experiment(circuit_inputs, noise_model_input, config_sc
         all_data.append(sub_data)
 
     return all_data
-
