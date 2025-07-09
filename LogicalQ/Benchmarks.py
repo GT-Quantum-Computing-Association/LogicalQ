@@ -68,8 +68,8 @@ def mirror_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sampl
         seed (int): Random seed for reproducibility. Defaults to 1234.
 """
 def randomized_benchmarking(n_qubits=None, circuit_length=None, circuit_lengths=None, num_samples=10, seed=1234):
-    if qubits is None:
-        qubits = [0]
+    if n_qubits is None:
+        n_qubits = [0]
 
     if circuit_length is None:
         if circuit_lengths is None:
@@ -77,7 +77,7 @@ def randomized_benchmarking(n_qubits=None, circuit_length=None, circuit_lengths=
     else:
         circuit_lengths = [circuit_length]
 
-    experiment = StandardRB(qubits=qubits, lengths=circuit_lengths, num_samples=num_samples, seed=seed)
+    experiment = StandardRB(qubits=n_qubits, lengths=circuit_lengths, num_samples=num_samples, seed=seed)
 
     rb_circuits = experiment.circuits()
 
