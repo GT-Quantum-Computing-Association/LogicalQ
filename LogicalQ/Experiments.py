@@ -13,7 +13,23 @@ from qiskit_aer import AerSimulator
 from qiskit_aer.noise import NoiseModel
 
 # General function to benchmark a circuit using a noise model
-def benchmark_noise(circuit, backend=None, noise_model=None, noise_params=None, method="statevector", basis_gates=None, optimization_level=0, shots=1024):
+def execute_circuits(circuits, backend=None, noise_model=None, noise_params=None, method="statevector", basis_gates=None, optimization_level=0, shots=1024):
+    # Resolve circuits
+    if hasattr(circuits, "__iter__"):
+        error_out = False
+        error_str_list = []
+        for c, circuit in enumerate(circuits):
+            if not isinstance(circuit, QuantumCircuit):
+                error_out = True
+                error_str_list.append(f"Index {c}: {circuit} (type: {type(circuit)})")
+        if error_out:
+            raise TypeError("Iterable provided for circuits contains non-circuit object(s):\n" + "\n".join(error_str_list))
+    elif isinstance(circuits, QuantumCircuit):
+        circuits = [circuits]
+    else:
+        raise TypeError("")
+
+    # Resolve backend
     if backend is None:
         # Resolve noise_model or noise_params
         if noise_model is None:
@@ -25,7 +41,6 @@ def benchmark_noise(circuit, backend=None, noise_model=None, noise_params=None, 
             else:
                 raise ValueError("One of backend, noise_model, or noise_params must be provided")
 
-    # Resolve backend
     if isinstance(backend, str):
         if backend == "aer_simulator":
             backend = AerSimulator(method=method, noise_model=noise_model, basis_gates=basis_gates, coupling_map=coupling_map)
@@ -44,14 +59,14 @@ def benchmark_noise(circuit, backend=None, noise_model=None, noise_params=None, 
 
     # Transpile circuit
     # Method defaults to optimization off to preserve form of benchmarking circuit and full QEC
-    circuit_transpiled = transpile(circuit, backend=backend, optimization_level=optimization_level)
-    result = backend.run(circuit_transpiled, shots=shots).result()
+    circuits_transpiled = transpile(circuits, backend=backend, optimization_level=optimization_level)
+    result = backend.run(circuits_transpiled, shots=shots).result()
 
     return result
 
 # Core experiment function useful for multiprocessing
 def _experiment_core(circuit, noise_model, n_qubits, circuit_length, method, shots):
-    result = benchmark_noise(circuit, noise_model=noise_model, method=method, shots=shots)
+    result = execute_circuits(circuit, noise_model=noise_model, method=method, shots=shots)
 
     return n_qubits, circuit_length, result
 
@@ -119,7 +134,7 @@ def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1,
             for circuit_length in range(min_circuit_length, max_circuit_length+1):
                 # Construct circuit and benchmark noise
                 circuit_nl = circuit(n_qubits=n_qubits, circuit_length=circuit_length)
-                result = benchmark_noise(circuit_nl, noise_model=noise_model_n, method=method, shots=shots)
+                result = execute_circuits(circuit_nl, noise_model=noise_model_n, method=method, shots=shots)
 
                 # Save expectation values
                 sub_data[circuit_length] = result, counts
@@ -221,7 +236,7 @@ def noise_scaling_experiment(circuit_inputs, noise_model_inputs, error_scan_keys
         }
 
         for error_dict, noise_model in zip(error_dict, noise_models):
-            result = benchmark_noise(circuit_input, noise_model=noise_model, method=method, shots=shots)
+            result = execute_circuits(circuit_input, noise_model=noise_model, method=method, shots=shots)
 
             sub_data["results"].append({
                 "error_dict": error_dict,
@@ -267,7 +282,7 @@ def qec_cycle_efficiency_experiment(circuit_inputs, noise_model_input, config_sc
         for config in configs:
             qec_layer_idxs = lqc.inject_qec_cycles(**config)
 
-            result = benchmark_noise(circuit_input, noise_model=noise_model_input, method=method, shots=shots)
+            result = execute_circuits(circuit_input, noise_model=noise_model_input, method=method, shots=shots)
 
             sub_data["results"].append({
                 "config": config,

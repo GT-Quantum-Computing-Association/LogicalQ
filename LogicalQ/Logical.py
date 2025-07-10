@@ -479,12 +479,52 @@ class LogicalCircuit(QuantumCircuit):
 
         self.reset_ancillas(logical_qubit_indices=logical_qubit_indices)
 
-    # @TODO - allow configuration of QEC cycling
-    def configure_qec_cycle(self, **config):
-        raise NotImplementedError("QEC cycle configuration has not yet been implemented.")
+    # Inject QEC cycles at optimal locations
+    def configure_qec_cycle(self, logical_qubit_indices=None, **config):
+        if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
+            logical_qubit_indices = list(range(self.n_logical_qubits))
 
-    def perform_qec_cycle(self, logical_qubit_indices=None):
-        #Use hardcoded flagged circuits for steane code
+        qec_points = []
+        last_qec = -1
+
+        for layer_idx in range(self.depth()):
+            sub_data = self.data[last_qec + 1 : layer_idx + 1]
+
+            # optionally filter QEC operations
+            if ignore_qec:
+                sub_data = [entry for entry in sub_data if not is_qec_op(entry[0])]
+
+            sub_qc = QuantumCircuit(self.num_qubits, self.num_clbits)
+            sub_qc.data = sub_data
+
+            # check threshold criteria
+            for key, thresh in thresholds.items():
+                met = False
+
+                if key == "circuit_depth":
+                    if (layer_idx - last_qec) >= thresh:
+                        met = True
+                else:
+                    ops = sub_qc.count_ops()
+                    if key == "num_cx" and ops.get("cx", 0) > thresh:
+                        met = True
+                    elif key == "num_sq":
+                        sq = sum(c for name, c in ops.items() if name != "cx")
+                        if sq > thresh:
+                            met = True
+                    elif key == "num_tq" and ops.get("t", 0) > thresh:
+                        met = True
+
+                if met:
+                    self.append_qec_cycle(layer_idx)
+                    qec_points.append(layer_idx)
+                    last_qec = layer_idx
+                    break
+
+        return qec_points
+
+    def append_qec_cycle(self, logical_qubit_indices=None):
+        # Use hardcoded flagged circuits for steane code
         use_steane_flagged_circuits = True if (self.n, self.k, self.d) == (7,1,3) else False
 
         if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
@@ -705,10 +745,11 @@ class LogicalCircuit(QuantumCircuit):
 
     def t(self, *targets, method="LCU_corrected"):
         """
-        Logical T gate     (1   0
-                            0    e^(iπ/4))
+        Logical T gate
+        [1   0       ]
+        [0   e^(iπ/4)]
         """
-        
+
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
             targets = targets[0]
 
@@ -836,7 +877,7 @@ class LogicalCircuit(QuantumCircuit):
                 # If classical bits for measurement aren't specified, default to match logical qubit indices
                 if clbits is None:
                     clbits = qubits
-                
+
                 # @TODO - decide best default behavior here (maybe we should ask during from_physical_circuit)
                 self.measure(qubits, clbits, with_error_correction=True)
             case _:
@@ -889,3 +930,4 @@ class LogicalCircuit(QuantumCircuit):
         for n in range(len(cbits)-1):
             result = expr.bit_xor(result, cbits[n+1])
         return result
+

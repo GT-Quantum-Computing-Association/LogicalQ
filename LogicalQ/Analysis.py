@@ -124,7 +124,6 @@ def noise_model_scaling_bar(all_data, scan_keys=None, separate_plots=False):
             plt.tight_layout()
             plt.show()
 
-
 def qec_cycle_efficiency_bar(all_data, scan_keys=None):
     for entry in all_data:
         qc = entry["qc"]
@@ -136,10 +135,9 @@ def qec_cycle_efficiency_bar(all_data, scan_keys=None):
         else:
             keys = list(results[0]["config"].keys())
 
-
         for key in keys:
-            x_Axis = []
-            y_Axis = []
+            x_axis = []
+            y_axis = []
 
             for res in results:
                 cfg = res["config"]
@@ -147,16 +145,16 @@ def qec_cycle_efficiency_bar(all_data, scan_keys=None):
                 if num_QEC is None or num_QEC == 0:
                     raise ValueError("You didn't experiment with any QEC cycles injected.")
 
-                benchmark_noise_return_obj = res["result"]
+                return_obj = res["result"]
 
-                # Converts the the benchmark_noise function return object to a DensityMatrix
+                # Converts the the execute_circuits function return object to a DensityMatrix
                 # @TODO change accordingly based on the data structure in qec_cycle_efficiency_experiment
-                if isinstance(benchmark_noise_return_obj, DensityMatrix):
-                    noisy_dm = benchmark_noise_return_obj
-                elif isinstance(benchmark_noise_return_obj, tuple):
-                    result_obj = benchmark_noise_return_obj[0]
+                if isinstance(return_obj, DensityMatrix):
+                    noisy_dm = return_obj
+                elif isinstance(return_obj, tuple):
+                    result_obj = return_obj[0]
                     noisy_dm = DensityMatrix(result_obj.data(0))
-                elif hasattr(benchmark_noise_return_obj, "data"):
+                elif hasattr(return_obj, "data"):
                     noisy_dm = DensityMatrix(ret.data(0))
                 else:
                     raise TypeError("res['result'] type is not right")
@@ -167,15 +165,13 @@ def qec_cycle_efficiency_bar(all_data, scan_keys=None):
                 x_Axis.append(cfg[key])
                 y_Axis.append(metric)
 
-
             plt.figure()
-            plt.bar(x_Axis, y_Axis)
+            plt.bar(x_axis, y_axis)
             plt.xlabel(key)
-            plt.ylabel("Fidelity / Cycles")
+            plt.ylabel("Fidelity / Cycle Count")
             title = getattr(qc, "name", "Circuit")
-            plt.title(f"{title}: Fidelity / Cycles vs {key}")
+            plt.title(f"{title}: Fidelity / Cycle Count vs {key}")
             plt.show()
-
 
 """
     Computes expectation value from circuit measurement counts.
