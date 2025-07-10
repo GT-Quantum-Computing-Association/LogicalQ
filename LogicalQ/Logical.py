@@ -684,6 +684,11 @@ class LogicalCircuit(QuantumCircuit):
                     self.x(t)
                 with else_:
                     self.z(t)
+
+        elif method == "Transversal_Uniform":
+            for t in targets:
+                super().h(self.logical_qregs[t][:])
+
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical Hadamard gate")
 
@@ -722,8 +727,8 @@ class LogicalCircuit(QuantumCircuit):
 
     def s(self, *targets, method="LCU_corrected"):
         """
-        Logical S gate      (1   0
-                             0   i)
+        Logical S gate      [1   0]
+                            [0   i]
         """
         
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
@@ -742,14 +747,20 @@ class LogicalCircuit(QuantumCircuit):
 
                 super().reset(self.logical_op_qregs[t][0])
 
+        elif method == "Transversal_Uniform":
+            for t in targets:
+                super().p(-np.pi/2, self.logical_qregs[t][:])
+
+        else:
+            raise ValueError(f"'{method}' is not a valid method for the logical S gate")
+
 
     def t(self, *targets, method="LCU_corrected"):
         """
-        Logical T gate
-        [1   0       ]
-        [0   e^(iπ/4)]
+        Logical T gate     [1    0       ]
+                           [0    e^(iπ/4)]
         """
-
+        
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
             targets = targets[0]
 
@@ -774,7 +785,7 @@ class LogicalCircuit(QuantumCircuit):
                 with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as else_:
                     self.s(t)
 
-    def cx(self, control, *_targets):
+    def cx(self, control, *_targets, method="Ancilla_Assisted"):
         """
         Logical Controlled-PauliX gate
         """
@@ -785,8 +796,22 @@ class LogicalCircuit(QuantumCircuit):
             targets = [_targets]
 
         # @TODO - implement a better, more generalized CNOT gate
-        for t in targets:
-            super().append(self.LogicalXGate.control(7), self.logical_qregs[control][:] + self.logical_qregs[t][:])
+        if method == "Ancilla_Assisted":
+            for t in targets:
+                super().h(self.logical_op_qregs[t][0])
+                super().append(self.LogicalZGate.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[control][:])
+                super().h(self.logical_op_qregs[t][0])
+                super().append(self.LogicalXGate.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:])
+                super().h(self.logical_op_qregs[t][0])
+                super().append(self.LogicalZGate.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[control][:])
+                super().h(self.logical_op_qregs[t][0])
+
+        elif method == "Transversal_Uniform":
+            for t in targets:
+                super().cx(self.logical_qregs[control][:], self.logical_qregs[t][:])
+
+        else:
+            raise ValueError(f"'{method}' is not a valid method for the logical CX gate")
 
     def mcmt(self, controls, targets):
         """
