@@ -6,6 +6,7 @@ import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor as Pool
 import pickle
 import atexit
+from datetime import datetime
 
 from .Logical import LogicalCircuit
 from .NoiseModel import construct_noise_model
@@ -101,7 +102,8 @@ def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1,
 
     # saving boilerplate
     if save_filename is None:
-        save_filename = f"circuit_scaling_{int(time.time())}.pkl"
+        date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        save_filename = f"circuit_scaling_{date_str}.pkl"
     save_file = open(save_filename, "wb")
     def save_progress():
         pickle.dump(all_data, save_file, protocol=5)
@@ -230,7 +232,8 @@ def noise_scaling_experiment(circuit_inputs, noise_model_inputs, error_scan_keys
 
     # saving boilerplate
     if save_filename is None:
-        save_filename = f"noise_scaling_{int(time.time())}.pkl"
+        date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        save_filename = f"noise_scaling_{date_str}.pkl"
     save_file = open(save_filename, "wb")
     def save_progress():
         pickle.dump(all_data, save_file, protocol=5)
@@ -382,7 +385,8 @@ def qec_cycle_efficiency_experiment(circuit_inputs, noise_model_input, config_sc
 
     # saving boilerplate
     if save_filename is None:
-        save_filename = f"qec_cycle_efficiency_{int(time.time())}.pkl"
+        date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        save_filename = f"qec_cycle_efficiency_{date_str}.pkl"
     save_file = open(save_filename, "wb")
     def save_progress():
         pickle.dump(all_data, save_file, protocol=5)
@@ -486,7 +490,8 @@ def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, configs
 
     # saving boilerplate
     if save_filename is None:
-        save_filename = f"qec_cycle_noise_scaling_{int(time.time())}.pkl"
+        date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        save_filename = f"qec_cycle_noise_scaling_{date_str}.pkl"
     save_file = open(save_filename, "wb")
     def save_progress():
         pickle.dump(all_data, save_file, protocol=5)
