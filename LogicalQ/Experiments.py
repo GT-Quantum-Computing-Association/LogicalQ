@@ -1,4 +1,5 @@
 import time
+import copy
 import itertools
 import numpy as np
 import multiprocessing as mp
@@ -10,6 +11,7 @@ from .Benchmarks import *
 
 from qiskit import QuantumCircuit, transpile
 from qiskit_aer import AerSimulator
+from qiskit.providers import Backend
 from qiskit_aer.noise import NoiseModel
 
 # General function to benchmark a circuit using a noise model
@@ -51,11 +53,11 @@ def execute_circuits(circuits, backend=None, noise_model=None, noise_params=None
         else:
             service = QiskitRuntimeService()
             backend = service.get_backend(backend)
-    elif isinstance(backend, (AerSimulator, BackendV1, BackendV2, IBMBackend)):
+    elif isinstance(backend, (AerSimulator, Backend)):
         # @TODO - handle this case better
         backend = backend
     else:
-        raise TypeError(f"backend must be None, a string containing either 'aer_simulator' or the name of a backend, or an instance of AerSimulator, BackendV1, BackendV2, or IBMBackend, not {type(backend)}")
+        raise TypeError(f"backend must be None, 'aer_simulator', the name of a backend, or an instance of AerSimulator or Backend, not {type(backend)}")
 
     # Transpile circuit
     # Method defaults to optimization off to preserve form of benchmarking circuit and full QEC
@@ -92,7 +94,7 @@ def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1,
     else:
         raise ValueError("Please provide a NoiseModel object or a method for constructing NoiseModels.")
 
-    # Form a dict of dicts with the first layer (n_qubits) initialized to make later access faster
+    # Form a dict of dicts with the first layer (n_qubits) initialized to make later access faster and more reliable in parallel
     all_data = dict(zip(range(min_n_qubits, max_n_qubits+1), [{}]*(max_n_qubits+1-min_n_qubits)))
 
     if with_mp:
@@ -104,7 +106,7 @@ def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1,
             for (n_qubits, circuit_length) in itertools.product(range(min_n_qubits, max_n_qubits+1), range(min_circuit_length, max_circuit_length+1))
         ]
 
-        cpu_count = mp.cpu_count()#*16
+        cpu_count = len(os.sched_getaffinity(0))
         batch_size = max(int(np.ceil((max_n_qubits+1-min_n_qubits)*(max_circuit_length+1-min_circuit_length)/cpu_count)), 1)
         print(f"Applying mulitprocessing to {len(exp_inputs_list)} samples in batches of maximum size {batch_size} across {cpu_count} CPUs")
 
@@ -119,7 +121,7 @@ def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1,
 
             # Unzip results
             for result in results:
-                all_data[result[0]][result[1]] = result[2], result[3]
+                all_data[result[0]][result[1]] = result[2]
 
         stop = time.perf_counter()
     else:
@@ -137,7 +139,7 @@ def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1,
                 result = execute_circuits(circuit_nl, noise_model=noise_model_n, method=method, shots=shots)
 
                 # Save expectation values
-                sub_data[circuit_length] = result, counts
+                sub_data[circuit_length] = result
 
                 del circuit_nl
 
@@ -208,42 +210,83 @@ def noise_scaling_experiment(circuit_inputs, noise_model_inputs, error_scan_keys
         noise_model = noise_model_factory(error_dict)
         noise_models.append(noise_model)
 
-    all_data = []
-    for c, circuit_input in enumerate(circuit_inputs):
-        density_matrix_exact = None # Default exact reference
-        statevector_exact = None # Alternative exact reference, only used if exact DensityMatrix computation fails
-        if compute_exact:
-            # @TODO - have better checks in place to proactively avoid exceptions, such as checking qubit counts and memory constraints
-            try:
-                # Compute exact density matrix
-                density_matrix_exact = DensityMatrix(circuit_input)
-            except:
-                print(f"Failed to compute exact density matrix for circuit input at index {c}, attempting to compute exact statevector...")
-                try:
-                    # Compute exact statevector
-                    statevector_exact = Statevector(circuit_input)
-                except:
-                    # Fail since we don't have any exact reference now
-                    print(f"Failed to compute exact statevector, exiting.")
-                    raise
+    # Form a list of dicts to make later access faster and more reliable in parallel
+    all_data = [{}]*len(circuit_inputs)
 
-        # @TODO - determine whether this is a better data structure for this, including a better way to distinguish the data by circuit
-        sub_data = {
-            "qc": circuit_input,
-            "density_matrix_exact": density_matrix_exact,
-            "statevector_exact": statevector_exact,
-            "results": []
-        }
+    if with_mp:
+        exp_inputs_list = [
+            (
+                # circuit_factory(n_qubits=n_qubits, circuit_length=circuit_length),
+                # noise_model_factory(n_qubits=n_qubits), n_qubits, circuit_length, method, shots
+            )
+            # for (n_qubits, circuit_length) in itertools.product(range(min_n_qubits, max_n_qubits+1), range(min_circuit_length, max_circuit_length+1))
+        ]
 
-        for error_dict, noise_model in zip(error_dict, noise_models):
-            result = execute_circuits(circuit_input, noise_model=noise_model, method=method, shots=shots)
+        cpu_count = len(os.sched_getaffinity(0))
+        batch_size = max(int(np.ceil((max_n_qubits+1-min_n_qubits)*(max_circuit_length+1-min_circuit_length)/cpu_count)), 1)
+        print(f"Applying mulitprocessing to {len(exp_inputs_list)} samples in batches of maximum size {batch_size} across {cpu_count} CPUs")
+
+        start = time.perf_counter()
+
+        with Pool(cpu_count) as pool:
+            results = pool.map(
+                _experiment_core,
+                *[list(exp_inputs) for exp_inputs in zip(*exp_inputs_list)],
+                chunksize=batch_size
+            )
 
             sub_data["results"].append({
                 "error_dict": error_dict,
                 "result": result
             })
 
-        all_data.append(sub_data)
+            # Unzip results
+            for result in results:
+                all_data[c] = sub_data
+
+        stop = time.perf_counter()
+    else:
+        start = time.perf_counter()
+
+        for c, circuit_input in enumerate(circuit_inputs):
+            density_matrix_exact = None # Default exact reference
+            statevector_exact = None # Alternative exact reference, only used if exact DensityMatrix computation fails
+            if compute_exact:
+                # @TODO - have better checks in place to proactively avoid exceptions, such as checking qubit counts and memory constraints
+                try:
+                    # Compute exact density matrix
+                    density_matrix_exact = DensityMatrix(circuit_input)
+                except:
+                    print(f"Failed to compute exact density matrix for circuit input at index {c}, attempting to compute exact statevector...")
+                    try:
+                        # Compute exact statevector
+                        statevector_exact = Statevector(circuit_input)
+                    except:
+                        # Fail since we don't have any exact reference now
+                        print(f"Failed to compute exact statevector, exiting.")
+                        raise
+
+            # @TODO - determine whether this is a better data structure for this, including a better way to distinguish the data by circuit
+            sub_data = {
+                "qc": circuit_input,
+                "density_matrix_exact": density_matrix_exact,
+                "statevector_exact": statevector_exact,
+                "results": []
+            }
+
+            for error_dict, noise_model in zip(error_dict, noise_models):
+                result = execute_circuits(circuit_input, noise_model=noise_model, method=method, shots=shots)
+
+                sub_data["results"].append({
+                    "error_dict": error_dict,
+                    "result": result
+                })
+
+            all_data[c] = sub_data
+
+        stop = time.perf_counter()
+
+    print(f"Completed experiment in {stop-start} seconds")
 
     return all_data
 
@@ -253,9 +296,6 @@ def qec_cycle_efficiency_experiment(circuit_inputs, noise_model_input, config_sc
     if num_config_scan_vals != num_config_scan_keys:
         raise ValueError(f"config_scan_val_lists has last dimension {num_config_scan_vals}, but config_scan_keys specifies {num_config_scan_keys} keys, which is not equal. Please make sure that config_scan_keys has as many keys as there are values in each list of config_scan_val_lists.")
 
-    if with_mp:
-        raise NotImplementedError("with_mp=True specified, but this functionality is not implemented yet for qec_cycle_efficiency_experiment; ignoring.")
-
     # Construct config dictionaries
     config_scan_val_prods = itertools.product(*config_scan_val_lists)
     configs = []
@@ -263,7 +303,55 @@ def qec_cycle_efficiency_experiment(circuit_inputs, noise_model_input, config_sc
         mapping = zip(config_scan_keys, config_scan_vals)
         configs.append(dict(mapping))
 
+    if isinstance(circuit_input, LogicalCircuit):
+        circuit_factory = lambda c : copy.deepcopy(circuit_input)
+    elif isinstance(circuit_input, QuantumCircuit):
+        circuit_factory = lambda c : LogicalCircuit.from_physical_circuit(circuit_input)
+    elif hasattr(circuit_input, "__iter__"):
+        if len(circuit_input) == len(configs):
+            circuit_callable_list = []
+            for circuit_input_element in circuit_input:
+                if isinstance(circuit_input_element, LogicalCircuit):
+                    circuit_callable_list.append(copy.deepcopy(circuit_input_element))
+                elif isinstance(circuit_input_element, QuantumCircuit):
+                    circuit_callable_list.append(LogicalCircuit.from_physical_circuit(circuit_input_element))
+                else:
+                    raise ValueError("List provided for circuit_input does not match length of configs list input; circuit_input must either be constant, a callable, or a list.")
+
+            circuit_factory = lambda c : circuit_callable_list[c]
+        else:
+            raise ValueError("List provided for circuit_input does not match length of configs list - circuit_input must either be constant, a callable, or a list with length matching that of configs list.")
+    elif callable(circuit_input):
+        # @TODO - make sure this accepts the config c (or is actually just constant)
+        circuit_factory = circuit_input
+    else:
+        raise TypeError("Please provide a QuantumCircuit/LogicalCircuit object, a method for constructing QuantumCircuit/LogicalCircuit, or a list of either.")
+
+    if isinstance(noise_model_input, NoiseModel):
+        noise_model_factory = lambda c : noise_model_input
+    elif hasattr(noise_model_input, "__iter__"):
+        if len(noise_model_input) == len(configs):
+            noise_model_callable_list = []
+            for noise_model_input_element in noise_model_input:
+                if isinstance(noise_model_input_element, NoiseModel):
+                    noise_model_callable_list.append(noise_model_input_element)
+                else:
+                    raise ValueError("List provided for noise_model_input does not match length of configs list input; noise_model_input must either be constant, a callable, or a list.")
+
+            noise_model_factory = lambda c : noise_model_callable_list[c]
+        else:
+            raise ValueError("List provided for noise_model_input does not match length of configs list - noise_model_input must either be constant, a callable, or a list with length matching that of configs list.")
+    elif callable(noise_model_input):
+        # @TODO - make sure this accepts the config c (or is actually just constant)
+        noise_model_factory = noise_model_input
+    else:
+        raise ValueError("Please provide a NoiseModel object, a method for constructing NoiseModels, or a list of either.")
+
+    if with_mp:
+        raise NotImplementedError("with_mp=True specified, but this functionality is not implemented yet for qec_cycle_efficiency_experiment; ignoring.")
+
     all_data = []
+
     for circuit_input in circuit_inputs:
         # Compute exact result
         density_matrix_exact = DensityMatrix(circuit_input)
@@ -293,3 +381,88 @@ def qec_cycle_efficiency_experiment(circuit_inputs, noise_model_input, config_sc
         all_data.append(sub_data)
 
     return all_data
+
+def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, configs, error_scan_keys, error_scan_val_lists, logical_kwargs=None):
+    if isinstance(circuit_input, LogicalCircuit):
+        circuit_factory = lambda c : copy.deepcopy(circuit_input)
+    elif isinstance(circuit_input, QuantumCircuit):
+        circuit_factory = lambda c : LogicalCircuit.from_physical_circuit(circuit_input)
+    elif hasattr(circuit_input, "__iter__"):
+        if len(circuit_input) == len(configs):
+            circuit_callable_list = []
+            for circuit_input_element in circuit_input:
+                if isinstance(circuit_input_element, LogicalCircuit):
+                    circuit_callable_list.append(copy.deepcopy(circuit_input_element))
+                elif isinstance(circuit_input_element, QuantumCircuit):
+                    circuit_callable_list.append(LogicalCircuit.from_physical_circuit(circuit_input_element))
+                else:
+                    raise ValueError("List provided for circuit_input does not match length of configs list input; circuit_input must either be constant, a callable, or a list.")
+
+            circuit_factory = lambda c : circuit_callable_list[c]
+        else:
+            raise ValueError("List provided for circuit_input does not match length of configs list - circuit_input must either be constant, a callable, or a list with length matching that of configs list.")
+    elif callable(circuit_input):
+        # @TODO - make sure this accepts the config c (or is actually just constant)
+        circuit_factory = circuit_input
+    else:
+        raise TypeError("Please provide a QuantumCircuit/LogicalCircuit object, a method for constructing QuantumCircuit/LogicalCircuit, or a list of either.")
+
+    if isinstance(noise_model_input, NoiseModel):
+        noise_model_factory = lambda c : noise_model_input
+    elif hasattr(noise_model_input, "__iter__"):
+        if len(noise_model_input) == len(configs):
+            noise_model_callable_list = []
+            for noise_model_input_element in noise_model_input:
+                if isinstance(noise_model_input_element, NoiseModel):
+                    noise_model_callable_list.append(noise_model_input_element)
+                else:
+                    raise ValueError("List provided for noise_model_input does not match length of configs list input; noise_model_input must either be constant, a callable, or a list.")
+
+            noise_model_factory = lambda c : noise_model_callable_list[c]
+        else:
+            raise ValueError("List provided for noise_model_input does not match length of configs list - noise_model_input must either be constant, a callable, or a list with length matching that of configs list.")
+    elif callable(noise_model_input):
+        # @TODO - make sure this accepts the config c (or is actually just constant)
+        noise_model_factory = noise_model_input
+    else:
+        raise ValueError("Please provide a NoiseModel object, a method for constructing NoiseModels, or a list of either.")
+
+    if logical_kwargs is None:
+        # Default to the Steane code
+        logical_kwargs = {
+            "label": (7,1,3),
+            "stabilizer_tableau": [
+                "XXXXIII",
+                "IXXIXXI",
+                "IIXXIXX",
+                "ZZZZIII",
+                "IZZIZZI",
+                "IIZZIZZ",
+            ]
+        }
+
+    all_data = []
+
+    for c, config in enumerate(configs):
+        # Build LogicalCircuit with the desired QEC config
+        lqc = circuit_factory(c)
+
+        # Build NoiseModel for the desired QEC config
+        noise_model = noise_model_factor(c)
+
+        sub_data_results = noise_scaling_experiment(
+            circuit_inputs=[lqc],
+            noise_model_input=noise_model,
+            error_scan_keys=error_scan_keys,
+            error_scan_val_lists=error_scan_val_lists,
+        )
+
+        sub_data = {
+            "config": config,
+            "results": sub_data_results
+        }
+
+        all_data.append(sub_data)
+
+    return all_data
+
