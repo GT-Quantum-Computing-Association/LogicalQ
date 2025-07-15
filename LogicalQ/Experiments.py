@@ -4,6 +4,8 @@ import itertools
 import numpy as np
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor as Pool
+import pickle
+import atexit
 
 from .Logical import LogicalCircuit
 from .NoiseModel import construct_noise_model
@@ -73,7 +75,7 @@ def _experiment_core(circuit, noise_model, n_qubits, circuit_length, method, sho
     return n_qubits, circuit_length, result
 
 # @TODO - implement experiments
-def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1, max_n_qubits=50, min_circuit_length=1, max_circuit_length=50, method="statevector", shots=1024, with_mp=True):
+def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1, max_n_qubits=50, min_circuit_length=1, max_circuit_length=50, method="statevector", shots=1024, with_mp=True, save_filename=None):
     if isinstance(circuit_input, QuantumCircuit) or isinstance(circuit_input, LogicalCircuit):
         if max_n_qubits != min_n_qubits+1:
             print("A constant circuit has been provided as the circuit factory, but a non-trivial range of qubit counts and/or circuit lengths has also been provided, so the fixed input will not be scaled. If you would like for the number of qubits to be scaled, please provide a callable which takes in as an argument the number of qubits, n_qubits. If you would like for the circuit length to be scaled, please provide a callable which takes in as an argument the circuit length, circuit_length.")
@@ -96,6 +98,14 @@ def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1,
 
     # Form a dict of dicts with the first layer (n_qubits) initialized to make later access faster and more reliable in parallel
     all_data = dict(zip(range(min_n_qubits, max_n_qubits+1), [{}]*(max_n_qubits+1-min_n_qubits)))
+
+    # saving boilerplate
+    if save_filename is None:
+        save_filename = f"circuit_scaling_{int(time.time())}.pkl"
+    save_file = open(save_filename, "wb")
+    def save_progress():
+        pickle.dump(all_data, save_file, protocol=5)
+    atexit.register(save_progress)
 
     if with_mp:
         exp_inputs_list = [
@@ -151,9 +161,14 @@ def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1,
 
     print(f"Completed experiment in {stop-start} seconds")
 
+    # run save_progress once for good measure and then unregister save_progress so it doesn't clutter our exit routine
+    save_progress()
+    save_file.close()
+    atexit.unregister(save_progress)
+
     return all_data
 
-def noise_scaling_experiment(circuit_inputs, noise_model_inputs, error_scan_keys, error_scan_val_lists, noise_qubits=None, basis_gates=None, method="density_matrix", compute_exact=False, shots=1024, with_mp=False):
+def noise_scaling_experiment(circuit_inputs, noise_model_inputs, error_scan_keys, error_scan_val_lists, noise_qubits=None, basis_gates=None, method="density_matrix", compute_exact=False, shots=1024, with_mp=False, save_filename=None):
     if isinstance(circuit_input, QuantumCircuit) or isinstance(circuit_input, LogicalCircuit):
         circuit_factory = lambda : circuit_input
     elif callable(circuit_input):
@@ -212,6 +227,14 @@ def noise_scaling_experiment(circuit_inputs, noise_model_inputs, error_scan_keys
 
     # Form a list of dicts to make later access faster and more reliable in parallel
     all_data = [{}]*len(circuit_inputs)
+
+    # saving boilerplate
+    if save_filename is None:
+        save_filename = f"noise_scaling_{int(time.time())}.pkl"
+    save_file = open(save_filename, "wb")
+    def save_progress():
+        pickle.dump(all_data, save_file, protocol=5)
+    atexit.register(save_progress)
 
     if with_mp:
         exp_inputs_list = [
@@ -288,9 +311,14 @@ def noise_scaling_experiment(circuit_inputs, noise_model_inputs, error_scan_keys
 
     print(f"Completed experiment in {stop-start} seconds")
 
+    # run save_progress once for good measure and then unregister save_progress so it doesn't clutter our exit routine
+    save_progress()
+    save_file.close()
+    atexit.unregister(save_progress)
+
     return all_data
 
-def qec_cycle_efficiency_experiment(circuit_inputs, noise_model_input, config_scan_keys, config_scan_val_lists, method="density_matrix", shots=1024, with_mp=False):
+def qec_cycle_efficiency_experiment(circuit_inputs, noise_model_input, config_scan_keys, config_scan_val_lists, method="density_matrix", shots=1024, with_mp=False, save_filename=None):
     num_config_scan_keys = len(config_scan_keys)
     num_config_scan_vals = np.shape(config_scan_val_lists)[-1]
     if num_config_scan_vals != num_config_scan_keys:
@@ -352,6 +380,14 @@ def qec_cycle_efficiency_experiment(circuit_inputs, noise_model_input, config_sc
 
     all_data = []
 
+    # saving boilerplate
+    if save_filename is None:
+        save_filename = f"qec_cycle_efficiency_{int(time.time())}.pkl"
+    save_file = open(save_filename, "wb")
+    def save_progress():
+        pickle.dump(all_data, save_file, protocol=5)
+    atexit.register(save_progress)
+
     for circuit_input in circuit_inputs:
         # Compute exact result
         density_matrix_exact = DensityMatrix(circuit_input)
@@ -380,9 +416,14 @@ def qec_cycle_efficiency_experiment(circuit_inputs, noise_model_input, config_sc
 
         all_data.append(sub_data)
 
+    # run save_progress once for good measure and then unregister save_progress so it doesn't clutter our exit routine
+    save_progress()
+    save_file.close()
+    atexit.unregister(save_progress)
+
     return all_data
 
-def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, configs, error_scan_keys, error_scan_val_lists, logical_kwargs=None):
+def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, configs, error_scan_keys, error_scan_val_lists, logical_kwargs=None, save_filename=None):
     if isinstance(circuit_input, LogicalCircuit):
         circuit_factory = lambda c : copy.deepcopy(circuit_input)
     elif isinstance(circuit_input, QuantumCircuit):
@@ -443,6 +484,14 @@ def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, configs
 
     all_data = []
 
+    # saving boilerplate
+    if save_filename is None:
+        save_filename = f"qec_cycle_noise_scaling_{int(time.time())}.pkl"
+    save_file = open(save_filename, "wb")
+    def save_progress():
+        pickle.dump(all_data, save_file, protocol=5)
+    atexit.register(save_progress)
+
     for c, config in enumerate(configs):
         # Build LogicalCircuit with the desired QEC config
         lqc = circuit_factory(c)
@@ -463,6 +512,11 @@ def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, configs
         }
 
         all_data.append(sub_data)
+
+    # run save_progress once for good measure and then unregister save_progress so it doesn't clutter our exit routine
+    save_progress()
+    save_file.close()
+    atexit.unregister(save_progress)
 
     return all_data
 
