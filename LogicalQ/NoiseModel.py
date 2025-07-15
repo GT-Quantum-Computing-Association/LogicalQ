@@ -112,21 +112,66 @@ def construct_noise_model(basis_gates, n_qubits=None, qubits=None, ignore_qubits
 #           - Quantinuum H2-1
 #           - Harvard/MIT/QuEra collaboration (e.g. papers by Vuletic, Lukin, Bluvstein, Evered, Levine, Kalinowski, Li)
 
-# Quantinuum H1-1:
+
+# Quantinuum H1-1 (02-May-2025 Calibration):
 def construct_noise_model_QuantinuumH1_1(n_qubits=None, qubits=None, ignore_qubits=None):
     basis_gates = ["u", "rz", "zz", "rzz"] # @TODO - missing RXXYYZZ, not sure if ZZ is valid, and need to verify that angle conventions are correct
+    
     noise_params = {
-        "depolarizing_error_1q": 2.1E-5, # single-qubit fault probability
-        "depolarizing_error_2q": 1E-3, # single-qubit fault probability
-        "readout_error_1|0": 4.0E-3,
-        "readout_error_0|1": 1.0E-3,
-        "t1": 60 * 1E9, # converted from seconds to nanoseconds
-        "t2": 4 * 1E9, # converted from seconds to nanoseconds
-        "gate_time_1q": 10 * 1E3, # converted from microseconds to nanoseconds (pessimistic)
-        "gate_time_2q": 300 * 1E3, # converted from microseconds to nanoseconds (pessimistic)
-        "amplitude_damping_error_1q": 0.54 * 2.1E-5, # calculated as a fraction of single-qubit fault probability
-        "amplitude_damping_error_2q": 0.43 * 1E-3, # calculated as a fraction of two-qubit fault probability
+        "depolarizing_error_1q": 1.80e-5, # single-qubit fault probability
+        "depolarizing_error_2q": 9.73e-4, # two-qubit fault probability
+        "readout_error_0|1": 1.22e-3,
+        "readout_error_1|0": 3.43e-3,
+        "crosstalk_measure": 1.45e-5,
+        "memory_error": 2.22e-4,
+        "amplitude_damping_error_1q" : 0.54 * 1.80e-5, # calculated as a fraction of single-qubit fault probability
+        "amplitude_damping_error_2q" : 0.43 * 9.73e-4, # calculated as a fraction of single-qubit fault probability
+        "t1": 60e9, # converted from seconds to nanoseconds
+        "t2": 4e9, # converted from seconds to nanoseconds
+        "gate_time_1q": 10e3, # converted from microseconds to nanoseconds (pessimistic)
+        "gate_time_2q": 300e3, # converted from microseconds to nanoseconds (pessimistic)
+    }
+    
+    return construct_noise_model(n_qubits=n_qubits, basis_gates=basis_gates, ignore_qubits=ignore_qubits, **noise_params)
+
+# Quantinuum H2-1 (30-Apr-2025 Calibration):
+def construct_noise_model_QuantinuumH2_1(n_qubits=None, qubits=None, ignore_qubits=None):
+    basis_gates = ["u", "rz", "zz", "rzz"]
+    
+    noise_params = {
+        "depolarizing_error_1q": 1.89e-5, # single-qubit fault probability
+        "depolarizing_error_2q": 1.05e-3, # two-qubit fault probability
+        "readout_error_0|1": 6.00e-4,
+        "readout_error_1|0": 1.39e-3,
+        "crosstalk_measure": 6.65e-6,
+        "memory_error": 2.03e-4,
+        "amplitude_damping_error_1q": 0.54 * 1.89e-5, # calculated as a fraction of single-qubit fault probability
+        "amplitude_damping_error_2q": 0.43 * 1.05e-3, # calculated as a fraction of single-qubit fault probability
+        "t1": 60e9, # converted from seconds to nanoseconds
+        "t2": 4e9, # converted from seconds to nanoseconds
+        "gate_time_1q": 10e3, # converted from microseconds to nanoseconds (pessimistic)
+        "gate_time_2q": 300e3, # converted from microseconds to nanoseconds (pessimistic)
     }
 
     return construct_noise_model(n_qubits=n_qubits, basis_gates=basis_gates, ignore_qubits=ignore_qubits, **noise_params)
 
+# Quantinuum H2-2 (31-May-2024 Calibration):
+def construct_noise_model_QuantinuumH2_2(n_qubits=None, qubits=None, ignore_qubits=None):
+    basis_gates = ["u", "rz", "zz", "rzz"]
+    
+    noise_params = {
+        "depolarizing_error_1q": 7.30e-5, # single-qubit fault probability
+        "depolarizing_error_2q": 1.29e-3, # two-qubit fault probability
+        "readout_error_0|1": 9.00e-4,
+        "readout_error_1|0": 1.80e-3,
+        "crosstalk_measure": 8.80e-6,
+        "memory_error": 5.00e-4,
+        "amplitude_damping_error_1q": 0.54 * 7.30e-5, # calculated as a fraction of single-qubit fault probability
+        "amplitude_damping_error_2q": 0.43 * 1.29e-3, # calculated as a fraction of single-qubit fault probability
+        "t1": 60e9, # converted from seconds to nanoseconds
+        "t2": 4e9, # converted from seconds to nanoseconds
+        "gate_time_1q": 10e3, # converted from microseconds to nanoseconds (pessimistic)
+        "gate_time_2q": 300e3, # converted from microseconds to nanoseconds (pessimistic)
+    }
+    
+    return construct_noise_model(n_qubits=n_qubits, basis_gates=basis_gates, ignore_qubits=ignore_qubits, **noise_params)
