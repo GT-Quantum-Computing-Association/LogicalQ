@@ -282,7 +282,41 @@ class LogicalCircuit(QuantumCircuit):
         LogicalHCircuit_LCU.h(self.n)
         self.LogicalHGate_LCU = LogicalHCircuit_LCU.to_gate(label="$H_L$")
 
+        # Creates Logical H circuit using coherent feedback
+        LogicalHCircuit_CF = QuantumCircuit(self.n + 1)
+        LogicalHCircuit_CF.h(self.n)
+        LogicalHCircuit_CF.append(self.LogicalXGate.control(1), [LogicalHCircuit_CF.qubits[self.n]] + LogicalHCircuit_CF.qubits[:self.n])
+        LogicalHCircuit_CF.append(self.LogicalZGate.control(1), [LogicalHCircuit_CF.qubits[self.n]] + LogicalHCircuit_CF.qubits[:self.n])
+        LogicalHCircuit_CF.h(self.n)
+        LogicalHCircuit_CF.append(self.LogicalXGate.control(1), [LogicalHCircuit_CF.qubits[self.n]] + LogicalHCircuit_CF.qubits[:self.n])
+        LogicalHCircuit_CF.x(self.n)
+        LogicalHCircuit_CF.append(self.LogicalZGate.control(1), [LogicalHCircuit_CF.qubits[self.n]] + LogicalHCircuit_CF.qubits[:self.n])
+        LogicalHCircuit_CF.h(self.n)
+        self.LogicalHGate_CF = LogicalHCircuit_CF.to_gate(label="$H_{CF}$")
+
         # @TODO - Logical S
+        # Creates Logical S circuit using coherent feedback
+        LogicalSCircuit_CF = QuantumCircuit(self.n + 1)
+        LogicalSCircuit_CF.h(self.n)
+        LogicalSCircuit_CF.sdg(self.n)
+        LogicalSCircuit_CF.append(self.LogicalZGate.control(1), [LogicalSCircuit_CF.qubits[self.n]] + LogicalSCircuit_CF.qubits[:self.n])
+        LogicalSCircuit_CF.h(self.n)
+        LogicalSCircuit_CF.append(self.LogicalZGate.control(1), [LogicalSCircuit_CF.qubits[self.n]] + LogicalSCircuit_CF.qubits[:self.n])
+        LogicalSCircuit_CF.sdg(self.n)
+        LogicalSCircuit_CF.h(self.n)
+        self.LogicalSGate_CF = LogicalSCircuit_CF.to_gate(label="$S_{CF}$")
+
+        # @TODO - Logical S†
+        # Creates Logical S† circuit using coherent feedback
+        LogicalSdgCircuit_CF = QuantumCircuit(self.n + 1)
+        LogicalSdgCircuit_CF.h(self.n)
+        LogicalSdgCircuit_CF.s(self.n)
+        LogicalSdgCircuit_CF.append(self.LogicalZGate.control(1), [LogicalSdgCircuit_CF.qubits[self.n]] + LogicalSdgCircuit_CF.qubits[:self.n])
+        LogicalSdgCircuit_CF.h(self.n)
+        LogicalSdgCircuit_CF.append(self.LogicalZGate.control(1), [LogicalSdgCircuit_CF.qubits[self.n]] + LogicalSdgCircuit_CF.qubits[:self.n])
+        LogicalSdgCircuit_CF.s(self.n)
+        LogicalSdgCircuit_CF.h(self.n)
+        self.LogicalSdgGate_CF = LogicalSdgCircuit_CF.to_gate(label="$S†_{CF}$")
 
         # @TODO - Logical CX
 
@@ -685,6 +719,19 @@ class LogicalCircuit(QuantumCircuit):
                 with else_:
                     self.z(t)
 
+        elif method == "Coherent_Feedback":
+            for t in targets:
+                super().append(self.LogicalHGate_CF, self.logical_qregs[t][:] + [self.logical_op_qregs[t][0]])
+                #Construct circuit for implementing a Hadamard gate through the use of an ancilla and no measurement
+                # super().h(self.logical_op_qregs[t][0])
+                # super().append(self.LogicalXGate.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:])
+                # super().append(self.LogicalZGate.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:])
+                # super().h(self.logical_op_qregs[t][0])
+                # super().append(self.LogicalXGate.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:])
+                # super().x(self.logical_op_qregs[t][0])
+                # super().append(self.LogicalZGate.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:])
+                # super().h(self.logical_op_qregs[t][0])
+
         elif method == "Transversal_Uniform":
             for t in targets:
                 super().h(self.logical_qregs[t][:])
@@ -747,13 +794,64 @@ class LogicalCircuit(QuantumCircuit):
 
                 super().reset(self.logical_op_qregs[t][0])
 
+        elif method == "Coherent_Feedback":
+            for t in targets:
+                super().append(self.LogicalSGate_CF, self.logical_qregs[t][:] + [self.logical_op_qregs[t][0]])
+                # super().h(self.logical_op_qregs[t][0])
+                # super().s(self.logical_op_qregs[t][0])
+                # super().append(self.LogicalZGate.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:])
+                # super().h(self.logical_op_qregs[t][0])
+                # super().x(self.logical_op_qregs[t][0])
+                # super().append(self.LogicalZGate.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:])
+                # super().sdg(self.logical_op_qregs[t][0])
+                # super().h(self.logical_op_qregs[t][0])
+
         elif method == "Transversal_Uniform":
             for t in targets:
-                super().p(-np.pi/2, self.logical_qregs[t][:])
+                super().sdg(self.logical_qregs[t][:])
 
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical S gate")
 
+    def sdg(self, *targets, method="LCU_corrected"):
+        """
+        Logical S† gate     [1    0]
+                            [0   -i]
+        """
+        
+        if len(targets) == 1 and hasattr(targets[0], "__iter__"):
+            targets = targets[0]
+
+        if method == "LCU_corrected":
+            for t in targets:
+                super().h(self.logical_op_qregs[t][0])
+                super().s(self.logical_op_qregs[t][0])
+                super().append(self.LogicalZGate.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:])
+                super().h(self.logical_op_qregs[t][0])
+                super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
+
+                with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as else_:
+                    self.z(t)
+
+                super().reset(self.logical_op_qregs[t][0])
+
+        elif method == "Coherent_Feedback":
+            for t in targets:
+                super().append(self.LogicalSdgGate_CF, self.logical_qregs[t][:] + [self.logical_op_qregs[t][0]])
+                # super().h(self.logical_op_qregs[t][0])
+                # super().s(self.logical_op_qregs[t][0])
+                # super().append(self.LogicalZGate.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:])
+                # super().h(self.logical_op_qregs[t][0])
+                # super().append(self.LogicalZGate.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:])
+                # super().h(self.logical_op_qregs[t][0])
+                #super().reset(self.logical_op_qregs[t][0])
+
+        elif method == "Transversal_Uniform":
+            for t in targets:
+                super().s(self.logical_qregs[t][:])
+
+        else:
+            raise ValueError(f"'{method}' is not a valid method for the logical S† gate")
 
     def t(self, *targets, method="LCU_corrected"):
         """
@@ -784,6 +882,30 @@ class LogicalCircuit(QuantumCircuit):
 
                 with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as else_:
                     self.s(t)
+
+        elif method == "Coherent_Feedback":
+            for t in targets:
+                super().h(self.logical_op_qregs[t][0])
+                super().h(self.logical_op_qregs[t][1])
+                super().t(self.logical_op_qregs[t][1])
+                super().cz(self.logical_op_qregs[t][1], self.logical_op_qregs[t][0])
+                super().h(self.logical_op_qregs[t][1])
+                super().cx(self.logical_op_qregs[t][1], self.logical_op_qregs[t][0])
+                super().h(self.logical_op_qregs[t][1])
+
+                super().append(self.LogicalZGate.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:])
+                super().h(self.logical_op_qregs[t][0])
+
+                super().barrier()
+                super().append(self.LogicalSGate_CF.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:] + [self.logical_op_qregs[t][1]])
+                super().barrier()
+
+                #super().tdg(self.logical_op_qregs[t][0])
+                super().h(self.logical_op_qregs[t][0])
+
+        else:
+            raise ValueError(f"'{method}' is not a valid method for the logical T gate")
+        
 
     def cx(self, control, *_targets, method="Ancilla_Assisted"):
         """
@@ -892,6 +1014,8 @@ class LogicalCircuit(QuantumCircuit):
                 self.z(qubits)
             case "s":
                 self.s(qubits)
+            case "sdg":
+                self.sdg(qubits)
             case "cx":
                 control_qubit = instruction.qubits[0]._index
                 target_qubit = instruction.qubits[1]._index
