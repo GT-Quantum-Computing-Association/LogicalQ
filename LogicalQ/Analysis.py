@@ -190,15 +190,3 @@ def calculate_exp_val(counts):
     exp_val = sum([key.count("1") for key in counts])/total_counts
 
     return exp_val
-
-def sanitize_save_parameters(filename, save_dir, default_filename="plot", default_save_dir="./"):
-    if filename == None:
-        filename = default_filename + str(int(time.time())) + ".png"
-    elif "." not in filename:
-        filename += ".png"
-
-    if save_dir == None and filename[:2] != "./" and filename[0] != "/":
-        save_dir = default_save_dir
-    elif save_dir[-1] != "/":
-        save_dir += "/"
-
