@@ -14,7 +14,7 @@ def sanitize_save_parameters(filename, save_dir, default_filename="file", defaul
             filename = base + default_extension
         else:
             filename = base
-    
+
     # Determine save directory
     if Path(filename).parent != Path('.'):
         # User included directory in filename
@@ -33,15 +33,3 @@ def sanitize_save_parameters(filename, save_dir, default_filename="file", defaul
     if not save_dir.endswith(os.sep):
         save_dir += os.sep
 
-"""
-def sanitize_save_parameters(filename, save_dir, default_filename="plot", default_save_dir="./"):
-    if filename == None:
-        filename = default_filename + str(int(time.time())) + ".png"
-    elif "." not in filename:
-        filename += ".png"
-
-    if save_dir == None and filename[:2] != "./" and filename[0] != "/":
-        save_dir = default_save_dir
-    elif save_dir[-1] != "/":
-        save_dir += "/"
-"""
