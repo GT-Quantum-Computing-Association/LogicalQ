@@ -394,8 +394,6 @@ class LogicalCircuit(QuantumCircuit):
 
         for q, init_state in zip(qubits, initial_states):
             with self.box(label="logical.qec.encode"):
-                super().barrier(label="logical.qec.encode:begin")
-
                 # Preliminary physical qubit reset
                 super().reset(self.logical_qregs[q])
 
@@ -436,8 +434,6 @@ class LogicalCircuit(QuantumCircuit):
                     self.x(q)
                 elif init_state != 0:
                     raise ValueError("Initial state should be either 0 or 1 (arbitrary statevectors not yet supported)!")
-
-                super().barrier(label="logical.qec.encode:finish")
 
         return True
 
@@ -726,8 +722,6 @@ class LogicalCircuit(QuantumCircuit):
             index_initial = len(self.data)
 
             with self.box(label="logical.qec.qec_cycle"):
-                super().barrier(label="logical.qec.qec_cycle:begin")
-
                 super().reset(self.ancilla_qregs[q])
 
                 # Perform first flagged syndrome measurements
@@ -751,8 +745,6 @@ class LogicalCircuit(QuantumCircuit):
                     for n in range(self.n_stabilizers):
                         with self.if_test(expr.lift(self.unflagged_syndrome_diff_cregs[q][n])):
                             self.cbit_not(self.prev_syndrome_cregs[q][n])
-
-                super().barrier(label="logical.qec.qec_cycle:finish")
 
             index_final = len(self.data)-1
 
