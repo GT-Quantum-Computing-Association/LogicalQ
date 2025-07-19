@@ -393,7 +393,7 @@ class LogicalCircuit(QuantumCircuit):
             raise ValueError("Number of qubits should equal number of initial states if initial states are provided")
 
         for q, init_state in zip(qubits, initial_states):
-            with self.box(label="logical.qec.encode"):
+            with self.box(label="logical.qec.encode:$\\hat U_{enc}$"):
                 # Preliminary physical qubit reset
                 super().reset(self.logical_qregs[q])
 
@@ -721,7 +721,7 @@ class LogicalCircuit(QuantumCircuit):
             # Keep track of the initial index for now, only append at the end once we know this call was successful
             index_initial = len(self.data)
 
-            with self.box(label="logical.qec.qec_cycle"):
+            with self.box(label="logical.qec.qec_cycle:$\\hat U_{QEC}$"):
                 super().reset(self.ancilla_qregs[q])
 
                 # Perform first flagged syndrome measurements
@@ -863,7 +863,7 @@ class LogicalCircuit(QuantumCircuit):
 
         if method == "LCU":
             for t in targets:
-                with self.box(label="logical.logicalop.h.lcu"):
+                with self.box(label="logical.logicalop.h.lcu:$\\hat H_{L}$"):
                     super().compose(self.LogicalHCircuit_LCU, [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
 
             # @TODO - perform resets after main operation is complete to allow for faster(?) parallel operation
@@ -873,7 +873,7 @@ class LogicalCircuit(QuantumCircuit):
                     # super().reset(self.logical_op_qregs[t])
         elif method == "LCU_Corrected": 
             for t in targets:
-                with self.box(label="logical.logicalop.h.lcu_corrected"):
+                with self.box(label="logical.logicalop.h.lcu_corrected:$\\hat H_{L}$"):
                     # Construct circuit for implementing a Hadamard gate through the use of an ancilla
                     super().h(self.logical_op_qregs[t][0])
                     super().compose(self.LogicalXCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
@@ -890,12 +890,12 @@ class LogicalCircuit(QuantumCircuit):
 
         elif method == "Coherent_Feedback":
             for t in targets:
-                with self.box(label="logical.logicalop.h.coherent_feedback"):
+                with self.box(label="logical.logicalop.h.coherent_feedback:$\\hat H_{L}$"):
                     super().compose(self.LogicalHCircuit_CF, self.logical_qregs[t][:] + [self.logical_op_qregs[t][0]], inplace=True)
 
         elif method == "Transversal_Uniform":
             for t in targets:
-                with self.box(label="logical.logicalop.h.transversal_uniform"):
+                with self.box(label="logical.logicalop.h.transversal_uniform:$\\hat H_{L}$"):
                     super().h(self.logical_qregs[t][:])
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical Hadamard gate")
@@ -909,7 +909,7 @@ class LogicalCircuit(QuantumCircuit):
             targets = targets[0]
 
         for t in targets:
-            with self.box(label="logical.logicalop.x.gottesman"):
+            with self.box(label="logical.logicalop.x.gottesman:$\\hat X_{L}$"):
                 super().compose(self.LogicalXCircuit, self.logical_qregs[t], inplace=True)
 
     def y(self, *targets):
@@ -920,7 +920,7 @@ class LogicalCircuit(QuantumCircuit):
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
             targets = targets[0]
 
-        with self.box(label="logical.logicalop.y.derived"):
+        with self.box(label="logical.logicalop.y.derived:$\\hat Y_{L}$"):
             self.z(targets)
             self.x(targets)
 
@@ -933,7 +933,7 @@ class LogicalCircuit(QuantumCircuit):
             targets = targets[0]
 
         for t in targets:
-            with self.box(label="logical.logicalop.z.gottesman"):
+            with self.box(label="logical.logicalop.z.gottesman:$\\hat Z_{L}$"):
                 super().compose(self.LogicalZCircuit, self.logical_qregs[t], inplace=True)
 
     def s(self, *targets, method="LCU_Corrected"):
@@ -950,7 +950,7 @@ class LogicalCircuit(QuantumCircuit):
 
         if method == "LCU_Corrected":
             for t in targets:
-                with self.box(label="logical.logicalop.s.lcu_corrected"):
+                with self.box(label="logical.logicalop.s.lcu_corrected:$\\hat S_{L}$"):
                     super().h(self.logical_op_qregs[t][0])
                     super().s(self.logical_op_qregs[t][0])
                     super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
@@ -960,14 +960,14 @@ class LogicalCircuit(QuantumCircuit):
                     with super().if_test((self.logical_op_meas_cregs[t][0], 0)) as else_:
                         self.z(t)
 
-                super().reset(self.logical_op_qregs[t][0])
+                    super().reset(self.logical_op_qregs[t][0])
         elif method == "Coherent_Feedback":
             for t in targets:
-                with self.box(label="logical.logicalop.s.coherent_feedback"):
+                with self.box(label="logical.logicalop.s.coherent_feedback:$\\hat S_{L}$"):
                     super().Circuit(self.LogicalSGate_CF, self.logical_qregs[t][:] + [self.logical_op_qregs[t][0]], inplace=True)
         elif method == "Transversal_Uniform":
             for t in targets:
-                with self.box(label="logical.logicalop.s.transversal_uniform"):
+                with self.box(label="logical.logicalop.s.transversal_uniform:$\\hat S_{L}$"):
                     super().p(-np.pi/2, self.logical_qregs[t][:])
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical S gate")
@@ -986,7 +986,7 @@ class LogicalCircuit(QuantumCircuit):
 
         if method == "LCU_Corrected":
             for t in targets:
-                with self.box(label="logical.logicalop.sdg.lcu_corrected"):
+                with self.box(label="logical.logicalop.sdg.lcu_corrected:$\\hat{S^\\dagger}_{L}$"):
                     super().h(self.logical_op_qregs[t][0])
                     super().s(self.logical_op_qregs[t][0])
                     super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
@@ -999,12 +999,13 @@ class LogicalCircuit(QuantumCircuit):
                     super().reset(self.logical_op_qregs[t][0])
         elif method == "Coherent_Feedback":
             for t in targets:
-                with self.box(label="logical.logicalop.sdg.coherent_feedback"):
+                with self.box(label="logical.logicalop.sdg.coherent_feedback:$\\hat{S^\\dagger}_{L}$"):
                     super().compose(self.LogicalSdgCircuit_CF, self.logical_qregs[t][:] + [self.logical_op_qregs[t][0]], inplace=True)
 
         elif method == "Transversal_Uniform":
             for t in targets:
-                super().s(self.logical_qregs[t][:])
+                with self.box(label="logical.logicalop.sdg.transversal_uniform:$\\hat{S^\\dagger}_{L}$"):
+                    super().s(self.logical_qregs[t][:])
 
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical S^dagger gate")
@@ -1023,7 +1024,7 @@ class LogicalCircuit(QuantumCircuit):
 
         if method == "LCU_Corrected":
             for t in targets:
-                with self.box(label="logical.logicalop.t.lcu_corrected"):
+                with self.box(label="logical.logicalop.t.lcu_corrected:$\\hat T_{L}$"):
                     super().h(self.logical_op_qregs[t][0])
                     super().h(self.logical_op_qregs[t][1])
                     super().t(self.logical_op_qregs[t][1])
@@ -1044,7 +1045,7 @@ class LogicalCircuit(QuantumCircuit):
                         self.s(t)
         elif method == "Coherent_Feedback":
             for t in targets:
-                with self.box(label="logical.logicalop.t.coherent_feedback"):
+                with self.box(label="logical.logicalop.t.coherent_feedback:$\\hat T_{L}$"):
                     super().h(self.logical_op_qregs[t][0])
                     super().h(self.logical_op_qregs[t][1])
                     super().t(self.logical_op_qregs[t][1])
@@ -1079,7 +1080,7 @@ class LogicalCircuit(QuantumCircuit):
         # @TODO - implement a better, more generalized CNOT gate
         if method == "Ancilla_Assisted":
             for t in targets:
-                with self.box(label="logical.logicalop.cx.ancilla_assisted"):
+                with self.box(label="logical.logicalop.cx.ancilla_assisted:$\\hat{CX}_{L}$"):
                     super().h(self.logical_op_qregs[t][0])
                     super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[control][:], inplace=True)
                     super().h(self.logical_op_qregs[t][0])
@@ -1089,7 +1090,7 @@ class LogicalCircuit(QuantumCircuit):
                     super().h(self.logical_op_qregs[t][0])
         elif method == "Transversal_Uniform":
             for t in targets:
-                with self.box(label="logical.logicalop.cx.ancilla_assisted"):
+                with self.box(label="logical.logicalop.cx.transversal_uniform:$\\hat{CX}_{L}$"):
                     super().cx(self.logical_qregs[control][:], self.logical_qregs[t][:])
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical CX gate")
@@ -1111,7 +1112,7 @@ class LogicalCircuit(QuantumCircuit):
         if not set(control_qubits).isdisjoint(target_qubits):
             raise ValueError("Qubit(s) specified as both control and target")
 
-        with self.box(label="logical.logicalop.mcmt.default"):
+        with self.box(label="logical.logicalop.mcmt.default:$\\hat{MCMT}_{L}$"):
             super().append(gate.control(len(controls)), control_qubits + target_qubits)
 
     # Input could be: 1. (CircuitInstruction(name="...", qargs="...", cargs="..."), qargs=None, cargs=None)
@@ -1241,3 +1242,59 @@ class LogicalCircuit(QuantumCircuit):
             result = expr.bit_xor(result, cbits[n+1])
         return result
 
+    ##############################################
+    ##### Visualization and analysis methods #####
+    ##############################################
+
+    def draw(
+        self,
+        output=None,
+        scale=None,
+        filename=None,
+        style=None,
+        interactive=False,
+        plot_barriers=True,
+        reverse_bits=None,
+        justify=None,
+        vertical_compression="medium",
+        idle_wires=None,
+        with_layout=True,
+        fold=None,
+        # The type of ax is matplotlib.axes.Axes, but this is not a fixed dependency, so cannot be
+        # safely forward-referenced.
+        ax=None,
+        initial_state=False,
+        cregbundle=None,
+        wire_order=None,
+        expr_len=30,
+        fold_qec=True,
+        fold_logicalop=True,
+    ):
+        """
+        LogicalCircuit drawer based on Qiskit circuit drawer
+        """
+        
+        from .Visualization.LogicalCircuitVisualization import logical_circuit_drawer
+
+        return logical_circuit_drawer(
+            self,
+            scale=scale,
+            filename=filename,
+            style=style,
+            output=output,
+            interactive=interactive,
+            plot_barriers=plot_barriers,
+            reverse_bits=reverse_bits,
+            justify=justify,
+            vertical_compression=vertical_compression,
+            idle_wires=idle_wires,
+            with_layout=with_layout,
+            fold=fold,
+            ax=ax,
+            initial_state=initial_state,
+            cregbundle=cregbundle,
+            wire_order=wire_order,
+            expr_len=expr_len,
+            fold_qec=fold_qec,
+            fold_logicalop=fold_logicalop,
+        )
