@@ -22,7 +22,8 @@ sq_gates = [
 """
     Constructs circuits composed of various Clifford gates and the full inverse, such that the composite operation is the identity if no errors occur.
 """
-def mirror_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sample=None):
+def mirror_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sample=None,
+                        measure=False):
     if n_qubits is None and qubits is None:
         qubits = [0]
         n_qubits = 1
@@ -53,7 +54,7 @@ def mirror_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sampl
     # append inverse of current circuit so that final state is left unchanged under no errors
     mb_circuit = mb_circuit.compose(mb_circuit.inverse())
 
-    mb_circuit.measure_all()
+    if measure: mb_circuit.measure_all()
 
     return mb_circuit
 
@@ -61,59 +62,51 @@ def mirror_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sampl
     Constructs circuits composed of various Clifford gates, such that the composite operation is the identity if no errors occur.
 
     Parameters:
-        n_qubits (int): Index of the qubit to benchmark. Defaults to 0.
-        circuit_length (int): RB sequence length. Defaults to [2,16,64,128].
-        circuit_lengths (list): List of RB sequence lengths. Defaults to [2,16,64,128].
-        num_samples (int): Number of random samples to run. Defaults to 10.
+        n_qubits (int): Number of qubits to benchmark. Defaults to 1.
+        qubits (list): Indices of qubits to benchmark.
+        circuit_lengths (list): List of RB sequence lengths. Defaults to [2, 16, 64, 256].
+        num_samples (int): Number of random samples to run. Defaults to 1.
         seed (int): Random seed for reproducibility. Defaults to 1234.
 """
-def randomized_benchmarking(n_qubits=None, circuit_length=None, circuit_lengths=None, num_samples=10, seed=1234):
-    if n_qubits is None:
-        n_qubits = [0]
+def randomized_benchmarking(n_qubits=None, qubits=None, circuit_lengths=None, num_samples=1, seed=1234):
+    if qubits is None:
+        if n_qubits is None:
+            raise ValueError("At least one of n_qubits or qubits must be specified.")
+        else:
+            qubits = range(n_qubits)
 
-    if circuit_length is None:
-        if circuit_lengths is None:
-            circuit_lengths = [2, 16, 64, 128]
-    else:
-        circuit_lengths = [circuit_length]
+    if circuit_lengths is None:
+        circuit_lengths = [2, 16, 64, 256]
 
-    experiment = StandardRB(qubits=n_qubits, lengths=circuit_lengths, num_samples=num_samples, seed=seed)
+    raise NotImplementedError("Randomized benchmarking is currently not implemented; see mirror_benhmarking for an alternative.")
 
-    rb_circuits = experiment.circuits()
+    rb_circuits = []
 
-    if len(circuit_lengths) == 0:
-        return rb_circuits[0]
-    else:
-        return rb_circuits
+    return rb_circuits
 
 """
     Generate quantum volume benchmark circuits.
 
     Parameters:
         n_qubits (int): Number of qubits available for the benchmark (sets a maximum iteration limit on the circuit width).
-        circuit_length: Not used.
-        trials: Number of trials to run for each qubit count.
-        seed (int): Random seed for reproducibility.
+        trials: Number of trials to run for each qubit count. Defaults to 1.
+        seed (int): Random seed for reproducibility. Defaults to 1234.
         backend: Backend to be used for simulation.
 """
-def quantum_volume(n_qubits=1, circuit_length=None, trials=100, seed=1234, backend=None):
-    qv_experiment = QuantumVolume(num_qubits=n_qubits, trials=trials, seed=seed, simulation_backend=backend)
+def quantum_volume(n_qubits=1, trials=100, seed=1234, backend=None):
+    qv_experiment = QuantumVolume(num_qubits=n_qubits, trials=1, seed=seed, simulation_backend=backend)
 
     qv_circuits = qv_experiment.circuits()
 
     return qv_circuits
 
 """
-
     Generate a quantum teleportation circuit.
 
     Parameters:
         statevector: Arbitrary input state
-        n_qubits: Not used.
-        circuit_length: Not used.
-
 """
-def generate_quantum_teleportation_circuit(statevector, n_qubits=None, circuit_length=None, barriers=False):
+def generate_quantum_teleportation_circuit(statevector, barriers=False):
     creg0 = ClassicalRegister(1, 'cr0')
     creg1 = ClassicalRegister(1, 'cr1')
     creg2 = ClassicalRegister(1, 'cr2')
@@ -152,11 +145,11 @@ def generate_quantum_teleportation_circuit(statevector, n_qubits=None, circuit_l
 
 """
     Generate an n-qubit GHZ state generation circuit.
+
     Parameters:
         n_qubits (int): Number of qubits in the GHZ state.
-        circuit_length: Not used.
 """
-def n_qubit_ghz_generation(n_qubits=3, circuit_length=None, barriers=False):
+def n_qubit_ghz_generation(n_qubits=3, barriers=False):
     qc = QuantumCircuit(n_qubits, n_qubits)
 
     # Apply Hadamard to qubit 0 to generate superposition
@@ -175,3 +168,4 @@ def n_qubit_ghz_generation(n_qubits=3, circuit_length=None, barriers=False):
 
 # @TODO - implement other methods of benchmarking
 #       - implement methods as described in https://github.com/CQCL/quantinuum-hardware-specifications/blob/main/notebooks/Loading%20Experimental%20Data.ipynb
+
