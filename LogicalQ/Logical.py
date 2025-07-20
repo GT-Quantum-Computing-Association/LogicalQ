@@ -555,7 +555,7 @@ class LogicalCircuit(QuantumCircuit):
         for d, slice in enumerate(slices):
             depths.extend([d]*len(slice.data))
 
-        def compute_instruction_contributions(i, d, instruction, counters, running_costs):
+        def compute_instruction_contributions(i, d, instruction, counters, running_cost):
             # Ignore certain "trivial" operations
             if instruction.name in ["barrier"]:
                 return False
@@ -571,7 +571,7 @@ class LogicalCircuit(QuantumCircuit):
                 for param in instruction.params:
                     if isinstance(param, QuantumCircuit):
                         for sub_instruction in param:
-                            met = met or compute_instruction_contributions(i, d, sub_instruction, counters, running_costs)
+                            met = met or compute_instruction_contributions(i, d, sub_instruction, counters, running_cost)
 
             # @TODO - handle controlled gates
             if instruction.is_controlled_gate():
@@ -588,13 +588,13 @@ class LogicalCircuit(QuantumCircuit):
                 counters[f"num_{instruction.name}"] = counters.get(f"num_{instruction.name}", 0) + 1
                 met = met or counters[f"num_{instruction.name}"] >= constraint_model[f"num_{instruction.name}"]
             if f"cost_{instruction.name}" in constraint_model.keys():
-                running_costs[-1] += constraint_model[f"cost_{instruction.name}"]
+                running_cost[-1] += constraint_model[f"cost_{instruction.name}"]
 
             if f"num_ops_{len(instruction.qubits)}q" in constraint_model.keys():
                 counters[f"num_ops_{len(instruction.qubits)}q"] = counters.get(f"num_ops_{len(instruction.qubits)}q", 0) + 1
                 met = met or counters[f"num_ops_{len(instruction.qubits)}q"] >= constraint_model[f"num_ops_{len(instruction.qubits)}q"]
             if f"cost_ops_{len(instruction.qubits)}q" in constraint_model.keys():
-                running_costs[-1] += constraint_model[f"cost_ops_{len(instruction.qubits)}q"]
+                running_cost[-1] += constraint_model[f"cost_ops_{len(instruction.qubits)}q"]
 
             # @TODO - check key "num_ops_clifford"
             # @TODO - check key "cost_ops_clifford"
@@ -615,7 +615,7 @@ class LogicalCircuit(QuantumCircuit):
             # Counters track constraints which are contributed to and met separately when any one reaches its limit
             counters = {}
             # Running costs tracks collective constraints which sum over contributions from many sources, which must remain below the effective threshold
-            running_costs = [0.0]
+            running_cost = [0.0]
 
             for i, (d, instruction) in enumerate(zip(depths, self.data)):
                 # Check whether instruction involves logical qubit
@@ -631,15 +631,19 @@ class LogicalCircuit(QuantumCircuit):
                 if not instruction_involves_logical_qubit:
                     continue
 
-                met = compute_instruction_contributions(i, d, instruction, counters, running_costs)
+                met = compute_instruction_contributions(i, d, instruction, counters, running_cost)
 
-                # print(counters, running_costs[-1])
+                # print(counters, running_cost[-1])
 
                 met = met or np.isclose(running_costs[-1], constraint_model["effective_threshold"])
                 if met:
                     # print(f"Inserting QEC cycle at index {i}, depth {d}")
                     new_qec_cycle_indices_initial[q] = new_qec_cycle_indices_initial.get(q, []) + [i]
-                    running_costs.append(0.0)
+
+                    # Reset counters and running cost
+                    counters = {}
+                    running_cost[-1] = 0.0
+
                     break
 
         return new_qec_cycle_indices_initial
