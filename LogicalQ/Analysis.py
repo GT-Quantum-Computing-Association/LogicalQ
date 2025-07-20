@@ -191,7 +191,7 @@ def calculate_exp_val(counts):
 
     return exp_val
 
-# @TODO use the one in Utilities.py
+# @TODO - use the one in Utilities.py
 def sanitize_save_parameters(filename, save_dir, default_filename="plot", default_save_dir="./"):
     if filename == None:
         filename = default_filename + str(int(time.time())) + ".png"
