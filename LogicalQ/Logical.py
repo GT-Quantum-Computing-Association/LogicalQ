@@ -162,9 +162,9 @@ class LogicalCircuit(QuantumCircuit):
             self.qec_cycle_indices_initial[i] = []
             self.qec_cycle_indices_final[i] = []
 
-    ############################################
-    ##### Quantum error correction methods #####
-    ############################################
+    ####################################
+    ##### Quantum error correction #####
+    ####################################
 
     def group_stabilizers(self):
         # @TODO - determine how stabilizers are generally selected for flagged measurements
@@ -554,7 +554,7 @@ class LogicalCircuit(QuantumCircuit):
         depths = []
         for d, slice in enumerate(slices):
             depths.extend([d]*len(slice.data))
-        
+
         def compute_instruction_contributions(i, d, instruction, counters, running_costs):
             # Ignore certain "trivial" operations
             if instruction.name in ["barrier"]:
@@ -589,7 +589,7 @@ class LogicalCircuit(QuantumCircuit):
                 met = met or counters[f"num_{instruction.name}"] >= constraint_model[f"num_{instruction.name}"]
             if f"cost_{instruction.name}" in constraint_model.keys():
                 running_costs[-1] += constraint_model[f"cost_{instruction.name}"]
-            
+
             if f"num_ops_{len(instruction.qubits)}q" in constraint_model.keys():
                 counters[f"num_ops_{len(instruction.qubits)}q"] = counters.get(f"num_ops_{len(instruction.qubits)}q", 0) + 1
                 met = met or counters[f"num_ops_{len(instruction.qubits)}q"] >= constraint_model[f"num_ops_{len(instruction.qubits)}q"]
@@ -1066,7 +1066,7 @@ class LogicalCircuit(QuantumCircuit):
 
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical T gate")
-        
+
     def cx(self, control, *_targets, method="Ancilla_Assisted"):
         """
         Logical Controlled-PauliX gate
@@ -1242,9 +1242,9 @@ class LogicalCircuit(QuantumCircuit):
             result = expr.bit_xor(result, cbits[n+1])
         return result
 
-    ##############################################
-    ##### Visualization and analysis methods #####
-    ##############################################
+    ######################################
+    ##### Visualization and analysis #####
+    ######################################
 
     def draw(
         self,
@@ -1273,7 +1273,7 @@ class LogicalCircuit(QuantumCircuit):
         """
         LogicalCircuit drawer based on Qiskit circuit drawer
         """
-        
+
         from .Visualization.LogicalCircuitVisualization import logical_circuit_drawer
 
         return logical_circuit_drawer(
@@ -1298,3 +1298,4 @@ class LogicalCircuit(QuantumCircuit):
             fold_qec=fold_qec,
             fold_logicalop=fold_logicalop,
         )
+
