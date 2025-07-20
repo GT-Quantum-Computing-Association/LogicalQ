@@ -112,11 +112,10 @@ def construct_noise_model(basis_gates, n_qubits=None, qubits=None, ignore_qubits
 #           - Quantinuum H2-1
 #           - Harvard/MIT/QuEra collaboration (e.g. papers by Vuletic, Lukin, Bluvstein, Evered, Levine, Kalinowski, Li)
 
-
 # Quantinuum H1-1 (02-May-2025 Calibration):
 def construct_noise_model_QuantinuumH1_1(n_qubits=None, qubits=None, ignore_qubits=None):
     basis_gates = ["u", "rz", "zz", "rzz"] # @TODO - missing RXXYYZZ, not sure if ZZ is valid, and need to verify that angle conventions are correct
-    
+
     noise_params = {
         "depolarizing_error_1q": 1.80e-5, # single-qubit fault probability
         "depolarizing_error_2q": 9.73e-4, # two-qubit fault probability
@@ -131,13 +130,13 @@ def construct_noise_model_QuantinuumH1_1(n_qubits=None, qubits=None, ignore_qubi
         "gate_time_1q": 10e3, # converted from microseconds to nanoseconds (pessimistic)
         "gate_time_2q": 300e3, # converted from microseconds to nanoseconds (pessimistic)
     }
-    
+
     return construct_noise_model(n_qubits=n_qubits, basis_gates=basis_gates, ignore_qubits=ignore_qubits, **noise_params)
 
 # Quantinuum H2-1 (30-Apr-2025 Calibration):
 def construct_noise_model_QuantinuumH2_1(n_qubits=None, qubits=None, ignore_qubits=None):
     basis_gates = ["u", "rz", "zz", "rzz"]
-    
+
     noise_params = {
         "depolarizing_error_1q": 1.89e-5, # single-qubit fault probability
         "depolarizing_error_2q": 1.05e-3, # two-qubit fault probability
@@ -158,7 +157,7 @@ def construct_noise_model_QuantinuumH2_1(n_qubits=None, qubits=None, ignore_qubi
 # Quantinuum H2-2 (31-May-2024 Calibration):
 def construct_noise_model_QuantinuumH2_2(n_qubits=None, qubits=None, ignore_qubits=None):
     basis_gates = ["u", "rz", "zz", "rzz"]
-    
+
     noise_params = {
         "depolarizing_error_1q": 7.30e-5, # single-qubit fault probability
         "depolarizing_error_2q": 1.29e-3, # two-qubit fault probability
@@ -173,5 +172,6 @@ def construct_noise_model_QuantinuumH2_2(n_qubits=None, qubits=None, ignore_qubi
         "gate_time_1q": 10e3, # converted from microseconds to nanoseconds (pessimistic)
         "gate_time_2q": 300e3, # converted from microseconds to nanoseconds (pessimistic)
     }
-    
+
     return construct_noise_model(n_qubits=n_qubits, basis_gates=basis_gates, ignore_qubits=ignore_qubits, **noise_params)
+
