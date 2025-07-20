@@ -21,21 +21,6 @@ from qiskit_aer.noise import NoiseModel
 from qiskit.providers import Backend
 from qiskit.transpiler import PassManager
 
-# def unbox(_qc):
-#     qc = QuantumCircuit(_qc.copy())
-#
-#     data = []
-#     for instruction in _qc.data:
-#         if instruction.name == "box":
-#             sub_qc = unbox(instruction.params[0])
-#             for sub_instruction in sub_qc.data:
-#                 data.append(sub_instruction)
-#         else:
-#             data.append(instruction)
-#
-#     qc.data = data
-#     return qc
-
 # General function to benchmark a circuit using a noise model
 def execute_circuits(circuits, backend=None, noise_model=None, noise_params=None, coupling_map=None, basis_gates=None, method="statevector", optimization_level=0, shots=1024):
     # Resolve circuits
@@ -73,8 +58,6 @@ def execute_circuits(circuits, backend=None, noise_model=None, noise_params=None
                 max_num_qubits = max([circuit.num_qubits for circuit in circuits])
                 coupling_map = [list(pair) for pair in itertools.product(range(max_num_qubits), range(max_num_qubits))]
 
-            print(coupling_map)
-            
             if basis_gates is not None:
                 backend = AerSimulator(method=method, noise_model=noise_model, basis_gates=basis_gates, coupling_map=coupling_map)
             else:
