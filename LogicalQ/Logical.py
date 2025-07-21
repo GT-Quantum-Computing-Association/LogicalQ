@@ -98,7 +98,7 @@ class LogicalCircuit(QuantumCircuit):
         # @TODO - expose the options that encode takes to the user of from_physical_circuit
         logical_circuit.encode(range(physical_circuit.num_qubits), max_iterations=3)
 
-        for i in range(physical_circuit.depth()):
+        for i in range(len(physical_circuit.data)):
             circuit_instruction = physical_circuit.data[i]
 
             logical_circuit.append(circuit_instruction)
@@ -311,12 +311,12 @@ class LogicalCircuit(QuantumCircuit):
         # Creates Logical H circuit using coherent feedback
         self.LogicalHCircuit_CF = QuantumCircuit(self.n + 1)
         self.LogicalHCircuit_CF.h(self.n)
-        self.LogicalHCircuit_CF.compose(self.LogicalXCircuit.control(1), [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
-        self.LogicalHCircuit_CF.compose(self.LogicalZCircuit.control(1), [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalHCircuit_CF.compose(self.LogicalXGate.control(1), [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalHCircuit_CF.compose(self.LogicalZGate.control(1), [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
         self.LogicalHCircuit_CF.h(self.n)
-        self.LogicalHCircuit_CF.compose(self.LogicalXCircuit.control(1), [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalHCircuit_CF.compose(self.LogicalXGate.control(1), [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
         self.LogicalHCircuit_CF.x(self.n)
-        self.LogicalHCircuit_CF.compose(self.LogicalZCircuit.control(1), [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalHCircuit_CF.compose(self.LogicalZGate.control(1), [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
         self.LogicalHCircuit_CF.h(self.n)
         self.LogicalHGate_CF = self.LogicalHCircuit_CF.to_gate(label="$H_{CF}$")
 
@@ -324,10 +324,11 @@ class LogicalCircuit(QuantumCircuit):
         # Creates Logical S circuit using coherent feedback
         self.LogicalSCircuit_CF = QuantumCircuit(self.n + 1)
         self.LogicalSCircuit_CF.h(self.n)
-        self.LogicalSCircuit_CF.sdg(self.n)
-        self.LogicalSCircuit_CF.compose(self.LogicalZCircuit.control(1), [self.LogicalSCircuit_CF.qubits[self.n]] + self.LogicalSCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalSCircuit_CF.s(self.n)
         self.LogicalSCircuit_CF.h(self.n)
-        self.LogicalSCircuit_CF.compose(self.LogicalZCircuit.control(1), [self.LogicalSCircuit_CF.qubits[self.n]] + self.LogicalSCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalSCircuit_CF.compose(self.LogicalZGate.control(1), [self.LogicalSCircuit_CF.qubits[self.n]] + self.LogicalSCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalSCircuit_CF.h(self.n)
+        self.LogicalSCircuit_CF.compose(self.LogicalZGate.control(1), [self.LogicalSCircuit_CF.qubits[self.n]] + self.LogicalSCircuit_CF.qubits[:self.n], inplace=True)
         self.LogicalSCircuit_CF.sdg(self.n)
         self.LogicalSCircuit_CF.h(self.n)
         self.LogicalSGate_CF = self.LogicalSCircuit_CF.to_gate(label="$S_{CF}$")
@@ -336,13 +337,54 @@ class LogicalCircuit(QuantumCircuit):
         # Creates Logical S† circuit using coherent feedback
         self.LogicalSdgCircuit_CF = QuantumCircuit(self.n + 1)
         self.LogicalSdgCircuit_CF.h(self.n)
-        self.LogicalSdgCircuit_CF.s(self.n)
-        self.LogicalSdgCircuit_CF.compose(self.LogicalZCircuit.control(1), [self.LogicalSdgCircuit_CF.qubits[self.n]] + self.LogicalSdgCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalSdgCircuit_CF.sdg(self.n)
         self.LogicalSdgCircuit_CF.h(self.n)
-        self.LogicalSdgCircuit_CF.compose(self.LogicalZCircuit.control(1), [self.LogicalSdgCircuit_CF.qubits[self.n]] + self.LogicalSdgCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalSdgCircuit_CF.compose(self.LogicalZGate.control(1), [self.LogicalSdgCircuit_CF.qubits[self.n]] + self.LogicalSdgCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalSdgCircuit_CF.h(self.n)
+        self.LogicalSdgCircuit_CF.compose(self.LogicalZGate.control(1), [self.LogicalSdgCircuit_CF.qubits[self.n]] + self.LogicalSdgCircuit_CF.qubits[:self.n], inplace=True)
         self.LogicalSdgCircuit_CF.s(self.n)
         self.LogicalSdgCircuit_CF.h(self.n)
-        self.LogicalSdgGate_CF = self.LogicalSdgCircuit_CF.to_gate(label="$S^\\dagger_{CF}$")
+        self.LogicalSdgGate_CF = self.LogicalSdgCircuit_CF.to_gate(label="$S†_{CF}$")
+
+        # @TODO - Logical T
+        # Creates Logical T circuit using coherent feedback
+        self.LogicalTCircuit_CF = QuantumCircuit(self.n + 2)
+        self.LogicalTCircuit_CF.h(self.n)
+        self.LogicalTCircuit_CF.h(self.n + 1)
+        self.LogicalTCircuit_CF.t(self.n)
+        self.LogicalTCircuit_CF.s(self.n + 1)
+        self.LogicalTCircuit_CF.h(self.n)
+        self.LogicalTCircuit_CF.compose(self.LogicalZGate.control(1), [self.LogicalTCircuit_CF.qubits[self.n]] + self.LogicalTCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalTCircuit_CF.h(self.n)
+        self.LogicalTCircuit_CF.h(self.n + 1)
+        self.LogicalTCircuit_CF.compose(self.LogicalZGate.control(2), self.LogicalTCircuit_CF.qubits[self.n:self.n+2] + self.LogicalTCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalTCircuit_CF.h(self.n + 1)
+        self.LogicalTCircuit_CF.compose(self.LogicalZGate.control(2), self.LogicalTCircuit_CF.qubits[self.n:self.n+2] + self.LogicalTCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalTCircuit_CF.tdg(self.n)
+        self.LogicalTCircuit_CF.sdg(self.n + 1)
+        self.LogicalTCircuit_CF.h(self.n)
+        self.LogicalTCircuit_CF.h(self.n + 1)
+        self.LogicalTGate_CF = self.LogicalTCircuit_CF.to_gate(label="$T_{CF}$")
+
+        # @TODO - Logical T†
+        # Creates Logical T† circuit using coherent feedback
+        self.LogicalTdgCircuit_CF = QuantumCircuit(self.n + 2)
+        self.LogicalTdgCircuit_CF.h(self.n)
+        self.LogicalTdgCircuit_CF.h(self.n + 1)
+        self.LogicalTdgCircuit_CF.tdg(self.n)
+        self.LogicalTdgCircuit_CF.sdg(self.n + 1)
+        self.LogicalTdgCircuit_CF.h(self.n)
+        self.LogicalTdgCircuit_CF.compose(self.LogicalZGate.control(1), [self.LogicalTdgCircuit_CF.qubits[self.n]] + self.LogicalTdgCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalTdgCircuit_CF.h(self.n)
+        self.LogicalTdgCircuit_CF.h(self.n + 1)
+        self.LogicalTdgCircuit_CF.compose(self.LogicalZGate.control(2), self.LogicalTdgCircuit_CF.qubits[self.n:self.n+2] + self.LogicalTdgCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalTdgCircuit_CF.h(self.n + 1)
+        self.LogicalTdgCircuit_CF.compose(self.LogicalZGate.control(2), self.LogicalTdgCircuit_CF.qubits[self.n:self.n+2] + self.LogicalTdgCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalTdgCircuit_CF.t(self.n)
+        self.LogicalTdgCircuit_CF.s(self.n + 1)
+        self.LogicalTdgCircuit_CF.h(self.n)
+        self.LogicalTdgCircuit_CF.h(self.n + 1)
+        self.LogicalTdgGate_CF = self.LogicalTdgCircuit_CF.to_gate(label="$T†_{CF}$")
 
         # @TODO - Logical CX
 
@@ -842,7 +884,7 @@ class LogicalCircuit(QuantumCircuit):
         for n in range(len(outputs)):
             output = ''
             for l in logical_qubit_indices:
-                output += outputs[n][self.n_logical_qubits-1-l]
+                output = outputs[n][self.n_logical_qubits-1-l] + output
 
             if output not in counts:
                 counts[output] = 1
@@ -857,7 +899,7 @@ class LogicalCircuit(QuantumCircuit):
 
     # @TODO - generalize logical quantum operations using stabilizers
 
-    def h(self, *targets, method="LCU_Corrected"):
+    def h(self, *targets, method="Coherent_Feedback"):
         """
         Logical Hadamard gate
         """
@@ -940,7 +982,7 @@ class LogicalCircuit(QuantumCircuit):
             with self.box(label="logical.logicalop.z.gottesman:$\\hat Z_{L}$"):
                 super().compose(self.LogicalZCircuit, self.logical_qregs[t], inplace=True)
 
-    def s(self, *targets, method="LCU_Corrected"):
+    def s(self, *targets, method="Coherent_Feedback"):
         """
         Logical S gate
 
@@ -957,26 +999,28 @@ class LogicalCircuit(QuantumCircuit):
                 with self.box(label="logical.logicalop.s.lcu_corrected:$\\hat S_{L}$"):
                     super().h(self.logical_op_qregs[t][0])
                     super().s(self.logical_op_qregs[t][0])
+                    super().h(self.logical_op_qregs[t][0])
                     super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
                     super().h(self.logical_op_qregs[t][0])
                     super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
 
-                    with super().if_test((self.logical_op_meas_cregs[t][0], 0)) as else_:
+                    with super().if_test((self.logical_op_meas_cregs[t][0], 1)):
                         self.z(t)
 
                     super().reset(self.logical_op_qregs[t][0])
         elif method == "Coherent_Feedback":
             for t in targets:
                 with self.box(label="logical.logicalop.s.coherent_feedback:$\\hat S_{L}$"):
-                    super().Circuit(self.LogicalSGate_CF, self.logical_qregs[t][:] + [self.logical_op_qregs[t][0]], inplace=True)
+                    super().compose(self.LogicalSCircuit_CF, self.logical_qregs[t][:] + [self.logical_op_qregs[t][0]], inplace=True)
         elif method == "Transversal_Uniform":
             for t in targets:
                 with self.box(label="logical.logicalop.s.transversal_uniform:$\\hat S_{L}$"):
-                    super().p(-np.pi/2, self.logical_qregs[t][:])
+                    super().sdg(self.logical_qregs[t][:])
+
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical S gate")
 
-    def sdg(self, *targets, method="LCU_Corrected"):
+    def sdg(self, *targets, method="Coherent_Feedback"):
         """
         Logical S^dagger gate
 
@@ -992,12 +1036,13 @@ class LogicalCircuit(QuantumCircuit):
             for t in targets:
                 with self.box(label="logical.logicalop.sdg.lcu_corrected:$\\hat{S^\\dagger}_{L}$"):
                     super().h(self.logical_op_qregs[t][0])
-                    super().s(self.logical_op_qregs[t][0])
+                    super().sdg(self.logical_op_qregs[t][0])
+                    super().h(self.logical_op_qregs[t][0])
                     super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
                     super().h(self.logical_op_qregs[t][0])
                     super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
 
-                    with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as else_:
+                    with super().if_test((self.logical_op_meas_cregs[t][0], 1)):
                         self.z(t)
 
                     super().reset(self.logical_op_qregs[t][0])
@@ -1014,12 +1059,12 @@ class LogicalCircuit(QuantumCircuit):
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical S^dagger gate")
 
-    def t(self, *targets, method="LCU_Corrected"):
+    def t(self, *targets, method="Coherent_Feedback"):
         """
         Logical T gate
 
         Definition:
-        [1    0       ]
+        [1    0        ]
         [0    e^(ipi/4)]
         """
 
@@ -1030,46 +1075,59 @@ class LogicalCircuit(QuantumCircuit):
             for t in targets:
                 with self.box(label="logical.logicalop.t.lcu_corrected:$\\hat T_{L}$"):
                     super().h(self.logical_op_qregs[t][0])
-                    super().h(self.logical_op_qregs[t][1])
-                    super().t(self.logical_op_qregs[t][1])
-                    super().cz(self.logical_op_qregs[t][1], self.logical_op_qregs[t][0])
-                    super().h(self.logical_op_qregs[t][1])
-                    super().append(Measure(), [self.logical_op_qregs[t][1]], [self.logical_op_meas_cregs[t][0]], copy=False)
-
-                    with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as else_:
-                        super().x(self.logical_op_qregs[t][0])
-
-                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
+                    super().t(self.logical_op_qregs[t][0])
                     super().h(self.logical_op_qregs[t][0])
+                    super().compose(self.LogicalZGate.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
+                    super().h(self.logical_op_qregs[t][0])
+
                     super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
+                    super().reset(self.logical_op_qregs[t][0])
 
-                    super().reset(self.logical_op_qregs[t])
-
-                    with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as else_:
-                        self.s(t)
+                    with super().if_test((self.logical_op_meas_cregs[t][0], 1)):
+                        self.s(t, method='LCU_corrected')
+                    
         elif method == "Coherent_Feedback":
             for t in targets:
                 with self.box(label="logical.logicalop.t.coherent_feedback:$\\hat T_{L}$"):
-                    super().h(self.logical_op_qregs[t][0])
-                    super().h(self.logical_op_qregs[t][1])
-                    super().t(self.logical_op_qregs[t][1])
-                    super().cz(self.logical_op_qregs[t][1], self.logical_op_qregs[t][0])
-                    super().h(self.logical_op_qregs[t][1])
-                    super().cx(self.logical_op_qregs[t][1], self.logical_op_qregs[t][0])
-                    super().h(self.logical_op_qregs[t][1])
-
-                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
-                    super().h(self.logical_op_qregs[t][0])
-
-                    super().barrier()
-                    super().compose(self.LogicalSCircuit_CF.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:] + [self.logical_op_qregs[t][1]], inplace=True)
-                    super().barrier()
-
-                    # super().tdg(self.logical_op_qregs[t][0])
-                    super().h(self.logical_op_qregs[t][0])
+                    super().compose(self.LogicalTCircuit_CF, self.logical_qregs[t][:] + self.logical_op_qregs[t][:], inplace=True)
 
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical T gate")
+        
+    def tdg(self, *targets, method="Coherent_Feedback"):
+            """
+            Logical T^dagger gate
+
+            Definition:
+            [1    0         ]
+            [0    e^(-ipi/4)]
+            """
+
+            if len(targets) == 1 and hasattr(targets[0], "__iter__"):
+                targets = targets[0]
+
+            if method == "LCU_Corrected":
+                for t in targets:
+                    with self.box(label="logical.logicalop.t.lcu_corrected:$\\hat{T^\\dagger}_{L}$"):
+                        super().h(self.logical_op_qregs[t][0])
+                        super().tdg(self.logical_op_qregs[t][0])
+                        super().h(self.logical_op_qregs[t][0])
+                        super().compose(self.LogicalZGate.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
+                        super().h(self.logical_op_qregs[t][0])
+
+                        super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
+                        super().reset(self.logical_op_qregs[t][0])
+
+                        with super().if_test((self.logical_op_meas_cregs[t][0], 1)):
+                            self.sdg(t, method='LCU_corrected')
+                        
+            elif method == "Coherent_Feedback":
+                for t in targets:
+                    with self.box(label="logical.logicalop.t.coherent_feedback:$\\hat{T^\\dagger}_{L}$"):
+                        super().compose(self.LogicalTdgCircuit_CF, self.logical_qregs[t][:] + self.logical_op_qregs[t][:], inplace=True)
+
+            else:
+                raise ValueError(f"'{method}' is not a valid method for the logical T^dagger gate")
 
     def cx(self, control, *_targets, method="Ancilla_Assisted"):
         """
@@ -1098,6 +1156,64 @@ class LogicalCircuit(QuantumCircuit):
                     super().cx(self.logical_qregs[control][:], self.logical_qregs[t][:])
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical CX gate")
+
+    def cz(self, control, *_targets, method="Ancilla_Assisted"):
+        """
+        Logical Controlled-PauliZ gate
+        """
+
+        if hasattr(_targets, "__iter__"):
+            targets = _targets
+        else:
+            targets = [_targets]
+
+        # @TODO - implement a better, more generalized CNOT gate
+        if method == "Ancilla_Assisted":
+            for t in targets:
+                with self.box(label="logical.logicalop.cx.ancilla_assisted:$\\hat{CZ}_{L}$"):
+                    super().h(self.logical_op_qregs[t][0])
+                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[control][:], inplace=True)
+                    super().h(self.logical_op_qregs[t][0])
+                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
+                    super().h(self.logical_op_qregs[t][0])
+                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[control][:], inplace=True)
+                    super().h(self.logical_op_qregs[t][0])
+        elif method == "Transversal_Uniform":
+            for t in targets:
+                with self.box(label="logical.logicalop.cx.transversal_uniform:$\\hat{CZ}_{L}$"):
+                    super().cz(self.logical_qregs[control][:], self.logical_qregs[t][:])
+        else:
+            raise ValueError(f"'{method}' is not a valid method for the logical CZ gate")
+        
+    def cy(self, control, *_targets, method="Ancilla_Assisted"):
+        """
+        Logical Controlled-PauliY gate
+        """
+
+        if hasattr(_targets, "__iter__"):
+            targets = _targets
+        else:
+            targets = [_targets]
+
+        # @TODO - implement a better, more generalized CNOT gate
+        if method == "Ancilla_Assisted":
+            for t in targets:
+                with self.box(label="logical.logicalop.cx.ancilla_assisted:$\\hat{CY}_{L}$"):
+                    self.sdg(t)
+                    super().h(self.logical_op_qregs[t][0])
+                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[control][:], inplace=True)
+                    super().h(self.logical_op_qregs[t][0])
+                    super().compose(self.LogicalXCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
+                    super().h(self.logical_op_qregs[t][0])
+                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[control][:], inplace=True)
+                    super().h(self.logical_op_qregs[t][0])
+                    self.s(t)
+        elif method == "Transversal_Uniform":
+            for t in targets:
+                with self.box(label="logical.logicalop.cx.transversal_uniform:$\\hat{CY}_{L}$"):
+                    super().cx(self.logical_qregs[control][:], self.logical_qregs[t][:])
+        else:
+            raise ValueError(f"'{method}' is not a valid method for the logical CY gate")
 
     def mcmt(self, gate, controls, targets):
         """
@@ -1182,10 +1298,22 @@ class LogicalCircuit(QuantumCircuit):
                 self.s(qubits)
             case "sdg":
                 self.sdg(qubits)
+            case "t":
+                self.t(qubits)
+            case "tdg":
+                self.tdg(qubits)
             case "cx":
                 control_qubit = instruction.qubits[0]._index
                 target_qubit = instruction.qubits[1]._index
                 self.cx(control_qubit, target_qubit)
+            case "cz":
+                control_qubit = instruction.qubits[0]._index
+                target_qubit = instruction.qubits[1]._index
+                self.cz(control_qubit, target_qubit)
+            case "cy":
+                control_qubit = instruction.qubits[0]._index
+                target_qubit = instruction.qubits[1]._index
+                self.cy(control_qubit, target_qubit)
             case "mcmt":
                 raise NotImplementedError(f"Physical operation 'MCMT' does not have physical gate conversion implemented!")
             case "measure":
@@ -1195,6 +1323,8 @@ class LogicalCircuit(QuantumCircuit):
 
                 # @TODO - decide best default behavior here (maybe we should ask during from_physical_circuit)
                 self.measure(qubits, clbits, with_error_correction=True)
+            case "barrier":
+                pass
             case _:
                 # @TODO - identify a better way of providing these warnings
                 # print(f"WARNING: Physical operation '{operation.upper()}' does not have a logical counterpart implemented! Defaulting to physical operation.")
