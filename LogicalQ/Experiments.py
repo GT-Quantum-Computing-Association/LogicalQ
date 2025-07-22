@@ -7,6 +7,7 @@ from concurrent.futures import ProcessPoolExecutor as Pool
 import pickle
 import atexit
 from datetime import datetime
+import os
 
 from .Logical import LogicalCircuit
 from .NoiseModel import construct_noise_model
@@ -133,8 +134,14 @@ def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1,
             )
             for (n_qubits, circuit_length) in itertools.product(range(min_n_qubits, max_n_qubits+1), range(min_circuit_length, max_circuit_length+1))
         ]
+        
+        try:
+            # Linux: precise list of CPUs available to the process
+            cpu_count = len(os.sched_getaffinity(0))
+        except AttributeError:
+            # macOS / Windows fallback
+            cpu_count = os.cpu_count() or 1 
 
-        cpu_count = len(os.sched_getaffinity(0))
         batch_size = max(int(np.ceil((max_n_qubits+1-min_n_qubits)*(max_circuit_length+1-min_circuit_length)/cpu_count)), 1)
         print(f"Applying mulitprocessing to {len(exp_inputs_list)} samples in batches of maximum size {batch_size} across {cpu_count} CPUs")
 
@@ -231,11 +238,8 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
     if num_error_scan_vals != num_error_scan_keys:
         raise ValueError(f"error_scan_val_lists has last dimension {num_error_scan_vals}, but error_scan_keys specifies {num_error_scan_keys} keys, which is not equal. Please make sure that error_scan_keys has as many keys as there are values in each list of error_scan_val_lists.")
 
-    if with_mp:
-        raise NotImplementedError("with_mp=True specified, but this functionality is not implemented yet for noise_model_scaling_experiment; ignoring.")
-
     # Construct noise models
-    error_scan_val_prods = itertools.product(*config_scan_val_lists)
+    error_scan_val_prods = itertools.product(*error_scan_val_lists)
     error_dicts = []
     noise_models = []
     for error_scan_vals in error_scan_val_prods:
@@ -271,12 +275,12 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
                 # @TODO - have better checks in place to proactively avoid exceptions, such as checking qubit counts and memory constraints
                 try:
                     # Compute exact density matrix
-                    density_matrix_exact = DensityMatrix(circuit_input)
+                    density_matrix_exact = DensityMatrix.from_instruction(circuit)
                 except:
                     print(f"Failed to compute exact density matrix for circuit input at index {c}, attempting to compute exact statevector...")
                     try:
                         # Compute exact statevector
-                        statevector_exact = Statevector(circuit_input)
+                        statevector_exact = Statevector.from_instruction(circuit)
                     except:
                         # Fail since we don't have any exact reference now
                         print(f"Failed to compute exact statevector, exiting.")
@@ -297,10 +301,16 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
                     noise_model,
                     backend, method, shots
                 )
-                for nm, noise_model in enumerate(noise_model)
+                for nm, noise_model in enumerate(noise_models)
             ]
 
-            cpu_count = len(os.sched_getaffinity(0))
+            try:
+                # Linux: precise list of CPUs available to the process
+                cpu_count = len(os.sched_getaffinity(0))
+            except AttributeError:
+                # macOS / Windows fallback
+                cpu_count = os.cpu_count() or 1 
+                
             batch_size = max(int(np.ceil(len(circuit_input)*len(error_dicts)/cpu_count)), 1)
             print(f"Applying mulitprocessing to {len(exp_inputs_list)} samples in batches of maximum size {batch_size} across {cpu_count} CPUs")
 
