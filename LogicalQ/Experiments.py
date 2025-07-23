@@ -14,12 +14,18 @@ from .NoiseModel import construct_noise_model
 
 from .Transpilation.UnBox import UnBox
 
-from qiskit import QuantumCircuit, transpile
+from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector, DensityMatrix
+
 from qiskit_aer import AerSimulator
 from qiskit_aer.noise import NoiseModel
-from qiskit.providers import Backend
+
+from qiskit import transpile
 from qiskit.transpiler import PassManager
+
+from qiskit.providers import Backend
+from qbraid import QbraidProvider
+from qbraid.runtime.native.device import QbraidDevice
 
 # General function to benchmark a circuit using a noise model
 def execute_circuits(circuits, target=None, backend=None, noise_model=None, noise_params=None, coupling_map=None, basis_gates=None, method="statevector", optimization_level=0, shots=1024, memory=False):
@@ -76,9 +82,11 @@ def execute_circuits(circuits, target=None, backend=None, noise_model=None, nois
 
                 backend = AerSimulator(method=method, target=target, noise_model=noise_model)
         else:
+            # @TODO - handle this case better, e.g. by checking whether the device exists in Qbraid, not just IBM
+
             service = QiskitRuntimeService()
             backend = service.get_backend(backend)
-    elif isinstance(backend, (AerSimulator, Backend)):
+    elif isinstance(backend, (AerSimulator, Backend, QbraidDevice)):
         # @TODO - handle this case better
         backend = backend
     else:
