@@ -24,6 +24,7 @@ from qiskit import transpile
 from qiskit.transpiler import PassManager
 
 from qiskit.providers import Backend
+from pytket.extensions.qiskit.tket_backend import TketBackend
 from qbraid import QbraidProvider
 from qbraid.runtime.native.device import QbraidDevice
 
@@ -82,11 +83,12 @@ def execute_circuits(circuits, target=None, backend=None, noise_model=None, nois
 
                 backend = AerSimulator(method=method, target=target, noise_model=noise_model)
         else:
-            # @TODO - handle this case better, e.g. by checking whether the device exists in Qbraid, not just IBM
+            # @TODO - handle this case better, e.g. by checking whether access to the device exists through
+            #         Tket or Qbraid, not just IBM
 
             service = QiskitRuntimeService()
             backend = service.get_backend(backend)
-    elif isinstance(backend, (AerSimulator, Backend, QbraidDevice)):
+    elif isinstance(backend, (AerSimulator, Backend, TketBackend, QbraidDevice)):
         # @TODO - handle this case better
         backend = backend
     else:
