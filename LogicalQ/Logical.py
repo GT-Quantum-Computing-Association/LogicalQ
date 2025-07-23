@@ -1,4 +1,3 @@
-import sys
 import copy
 import numpy as np
 
@@ -676,7 +675,7 @@ class LogicalCircuit(QuantumCircuit):
 
                 # print(counters, running_cost[-1])
 
-                met = met or np.isclose(running_costs[-1], constraint_model["effective_threshold"])
+                met = met or np.isclose(running_cost[-1], constraint_model["effective_threshold"])
                 if met:
                     # print(f"Inserting QEC cycle at index {i}, depth {d}")
                     new_qec_cycle_indices_initial[q] = new_qec_cycle_indices_initial.get(q, []) + [i]
