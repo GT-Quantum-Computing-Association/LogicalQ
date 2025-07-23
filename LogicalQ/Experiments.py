@@ -11,7 +11,6 @@ import os
 
 from .Logical import LogicalCircuit
 from .NoiseModel import construct_noise_model
-from .Benchmarks import *
 
 from .Transpilation.UnBox import UnBox
 
@@ -23,7 +22,7 @@ from qiskit.providers import Backend
 from qiskit.transpiler import PassManager
 
 # General function to benchmark a circuit using a noise model
-def execute_circuits(circuits, backend=None, noise_model=None, noise_params=None, coupling_map=None, basis_gates=None, method="statevector", optimization_level=0, shots=1024):
+def execute_circuits(circuits, target=None, backend=None, noise_model=None, noise_params=None, coupling_map=None, basis_gates=None, method="statevector", optimization_level=0, shots=1024, memory=False):
     # Resolve circuits
     if hasattr(circuits, "__iter__"):
         for c, circuit in enumerate(circuits):
@@ -54,15 +53,28 @@ def execute_circuits(circuits, backend=None, noise_model=None, noise_params=None
 
     if isinstance(backend, str):
         if backend == "aer_simulator":
-            if coupling_map is None:
-                # Create a fully-coupled map by default since we don't care about non-fully-coupled hardware modalities
-                max_num_qubits = max([circuit.num_qubits for circuit in circuits])
-                coupling_map = [list(pair) for pair in itertools.product(range(max_num_qubits), range(max_num_qubits))]
+            if target is None:
+                if coupling_map is None:
+                    # Create a fully-coupled map by default since we don't care about non-fully-coupled hardware modalities
+                    max_num_qubits = max([circuit.num_qubits for circuit in circuits])
+                    print(max_num_qubits)
+                    coupling_map = [list(pair) for pair in itertools.product(range(max_num_qubits), range(max_num_qubits))]
 
-            if basis_gates is not None:
-                backend = AerSimulator(method=method, noise_model=noise_model, basis_gates=basis_gates, coupling_map=coupling_map)
+                if basis_gates is not None:
+                    print("here right?")
+                    backend = AerSimulator(method=method, noise_model=noise_model, basis_gates=basis_gates, coupling_map=coupling_map)
+                else:
+                    backend = AerSimulator(method=method, noise_model=noise_model, coupling_map=coupling_map)
             else:
-                backend = AerSimulator(method=method, noise_model=noise_model, coupling_map=coupling_map)
+                if basis_gates is not None:
+                    raise ValueError("Cannot specify both target and basis_gates; target should be constructed based on basis gates")
+                if coupling_map is not None:
+                    raise ValueError("Cannot specify both target and coupling_map; target should be constructed based on coupling map")
+
+                # @TODO - is it fine to specify both target and noise model, given that target includes some gate errors?
+                #         at least, what is the expected behavior in such a scenario?
+
+                backend = AerSimulator(method=method, target=target, noise_model=noise_model)
         else:
             service = QiskitRuntimeService()
             backend = service.get_backend(backend)
@@ -74,10 +86,19 @@ def execute_circuits(circuits, backend=None, noise_model=None, noise_params=None
 
     # Transpile circuit
     # Method defaults to optimization off to preserve form of benchmarking circuit and full QEC
-    circuits_transpiled = transpile(circuits, backend=backend, optimization_level=optimization_level)
-    result = backend.run(circuits_transpiled, shots=shots).result()
+    if target is None or True:
+        circuits_transpiled = transpile(circuits, backend=backend, optimization_level=optimization_level)
+    else:
+        # @TODO - is it fine to specify both target and backend, given that target has parameters which backend specifies,
+        #         and backend is actually constructed with target? at least, what is the expected behavior in such a scenario?
+        circuits_transpiled = transpile(circuits, target=target, backend=backend, optimization_level=optimization_level)
 
-    return result
+    results = []
+    for circuit_transpiled in circuits_transpiled:
+        result = backend.run([circuit_transpiled], shots=shots, memory=memory).result()
+        results.append(result)
+
+    return results
 
 # Core experiment function useful for multiprocessing
 def _experiment_core(task_id, circuit, noise_model, backend, method, shots):
