@@ -872,7 +872,7 @@ class LogicalCircuit(QuantumCircuit):
                     self.cbit_not(self.output_creg[c])
 
     def measure_all(self, with_error_correction=True):
-        self.measure(range(self.n_logical_qubits), range(self.n_logical_qubits))
+        self.measure(range(self.n_logical_qubits), range(self.n_logical_qubits), with_error_correction=with_error_correction)
 
     def get_logical_output_counts(self, outputs, logical_qubit_indices=None):
         if logical_qubit_indices == None:
@@ -1165,7 +1165,7 @@ class LogicalCircuit(QuantumCircuit):
         else:
             targets = [_targets]
 
-        # @TODO - implement a better, more generalized CNOT gate
+        # @TODO - implement a better, more generalized CZ gate
         if method == "Ancilla_Assisted":
             for t in targets:
                 with self.box(label="logical.logicalop.cx.ancilla_assisted:$\\hat{CZ}_{L}$"):
@@ -1193,19 +1193,20 @@ class LogicalCircuit(QuantumCircuit):
         else:
             targets = [_targets]
 
-        # @TODO - implement a better, more generalized CNOT gate
+        # @TODO - implement a better, more generalized CY gate
         if method == "Ancilla_Assisted":
             for t in targets:
                 with self.box(label="logical.logicalop.cx.ancilla_assisted:$\\hat{CY}_{L}$"):
-                    self.sdg(t)
                     super().h(self.logical_op_qregs[t][0])
                     super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[control][:], inplace=True)
                     super().h(self.logical_op_qregs[t][0])
+                    super().s(self.logical_op_qregs[t][0])
+                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
                     super().compose(self.LogicalXCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
                     super().h(self.logical_op_qregs[t][0])
                     super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[control][:], inplace=True)
                     super().h(self.logical_op_qregs[t][0])
-                    self.s(t)
+
         elif method == "Transversal_Uniform":
             for t in targets:
                 with self.box(label="logical.logicalop.cx.transversal_uniform:$\\hat{CY}_{L}$"):
