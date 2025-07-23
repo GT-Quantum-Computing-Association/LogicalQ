@@ -6,6 +6,11 @@ from qiskit.circuit import Bit, Measure
 from qiskit.circuit.classical import expr
 from qiskit.quantum_info import Statevector, DensityMatrix, Pauli
 from qiskit_addon_utils.slicing import slice_by_depth
+from qiskit import _numpy_compat
+from qiskit.transpiler import PassManager
+
+from .Transpilation.ClearQEC import ClearQEC
+from .Transpilation.UnBox import UnBox
 
 class LogicalCircuit(QuantumCircuit):
     def __init__(
@@ -21,6 +26,7 @@ class LogicalCircuit(QuantumCircuit):
         self.stabilizer_tableau = stabilizer_tableau
         self.n_stabilizers = len(self.stabilizer_tableau)
 
+        self.label = label
         self.n, self.k, self.d = label
         if any([len(stabilizer) != self.n for stabilizer in self.stabilizer_tableau]):
             raise ValueError(f"Code label n ({self.n}) does not match individual stabilizer length ({self.n_physical_qubits})")
@@ -416,7 +422,9 @@ class LogicalCircuit(QuantumCircuit):
         if self.encoding_circuit is None:
             raise RuntimeError("LogicalCircuit code has not been properly constructed (missing encoding circuit)")
 
-        if qubits is None or (hasattr(qubits, "__iter__") and len(qubits) == 0):
+        if qubits is None:
+            qubits = list(range(self.n_logical_qubits))
+        elif (hasattr(qubits, "__iter__") and len(qubits) == 0):
             raise ValueError("No qubits specified for logical state encoding")
         else:
             if len(qubits) > 0 and hasattr(qubits[0], "__iter__"):
@@ -440,34 +448,35 @@ class LogicalCircuit(QuantumCircuit):
                 # Initial encoding
                 super().compose(self.encoding_circuit, self.logical_qregs[q], inplace=True)
 
-                # CNOT from physical qubits to ancilla(e)
-                super().cx(self.logical_qregs[q][1], self.ancilla_qregs[q][0])
-                super().cx(self.logical_qregs[q][3], self.ancilla_qregs[q][0])
-                super().cx(self.logical_qregs[q][5], self.ancilla_qregs[q][0])
+                with self.box(label="logical.qec.encoding_verification:$\\hat U_{enc,verif}$"):
+                    # CNOT from physical qubits to ancilla(e)
+                    super().cx(self.logical_qregs[q][1], self.ancilla_qregs[q][0])
+                    super().cx(self.logical_qregs[q][3], self.ancilla_qregs[q][0])
+                    super().cx(self.logical_qregs[q][5], self.ancilla_qregs[q][0])
 
-                # Measure ancilla(e)
-                # super().measure(self.ancilla_qregs[q][0], self.enc_verif_cregs[q][0])
-                super().append(Measure(), [self.ancilla_qregs[q][0]], [self.enc_verif_cregs[q][0]], copy=False)
+                    # Measure ancilla(e)
+                    # super().measure(self.ancilla_qregs[q][0], self.enc_verif_cregs[q][0])
+                    super().append(Measure(), [self.ancilla_qregs[q][0]], [self.enc_verif_cregs[q][0]], copy=False)
 
-                for _ in range(max_iterations - 1):
-                    # If the ancilla stores a 1, reset the entire logical qubit and redo
-                    with super().if_test((self.enc_verif_cregs[q][0], 1)):
-                        super().reset(self.logical_qregs[q])
+                    for _ in range(max_iterations - 1):
+                        # If the ancilla stores a 1, reset the entire logical qubit and redo
+                        with super().if_test((self.enc_verif_cregs[q][0], 1)):
+                            super().reset(self.logical_qregs[q])
 
-                        # Initial encoding
-                        super().compose(self.encoding_circuit, self.logical_qregs[q], inplace=True)
+                            # Initial encoding
+                            super().compose(self.encoding_circuit, self.logical_qregs[q], inplace=True)
 
-                        # CNOT from (Z1 Z3 Z5) to ancilla
-                        super().cx(self.logical_qregs[q][1], self.ancilla_qregs[q][0])
-                        super().cx(self.logical_qregs[q][3], self.ancilla_qregs[q][0])
-                        super().cx(self.logical_qregs[q][5], self.ancilla_qregs[q][0])
+                            # CNOT from (Z1 Z3 Z5) to ancilla
+                            super().cx(self.logical_qregs[q][1], self.ancilla_qregs[q][0])
+                            super().cx(self.logical_qregs[q][3], self.ancilla_qregs[q][0])
+                            super().cx(self.logical_qregs[q][5], self.ancilla_qregs[q][0])
 
-                        # Measure ancilla
-                        # super().measure(self.ancilla_qregs[q][0], self.enc_verif_cregs[q][0])
-                        super().append(Measure(), [self.ancilla_qregs[q][0]], [self.enc_verif_cregs[q][0]], copy=False)
+                            # Measure ancilla
+                            # super().measure(self.ancilla_qregs[q][0], self.enc_verif_cregs[q][0])
+                            super().append(Measure(), [self.ancilla_qregs[q][0]], [self.enc_verif_cregs[q][0]], copy=False)
 
-                # Reset ancilla qubit
-                super().reset(self.ancilla_qregs[q][0])
+                    # Reset ancilla qubit
+                    super().reset(self.ancilla_qregs[q][0])
 
                 # Flip qubits if necessary
                 if init_state == 1:
@@ -1433,10 +1442,84 @@ class LogicalCircuit(QuantumCircuit):
         )
 
 class LogicalStatevector(Statevector):
-    def __init__(self, data, dims=None):
-        super().__init__(data=data, dims=dims)
+    # @TODO - implement initialization from other datatypes - will require a qecc parameter
+    def __init__(self, data: LogicalCircuit, dims=None):
+        self.logical_circuit = copy.deepcopy(data)
+        self.n_logical_qubits = self.logical_circuit.n_logical_qubits
+        self.label = self.logical_circuit.label
+        self.stabilizer_tableau = self.logical_circuit.stabilizer_tableau
 
-        raise NotImplementedError("LogicalStatevector has not been fully implemented yet!")
+        if self.n_logical_qubits > 1:
+            raise NotImplementedError("LogicalStatevector does not yet support multi-qubit circuits")
+
+        # Circuit-to-instruction conversions can't handle QEC (due to ControlFlowOps and measurements),
+        # nor can it handle other BoxOp's that may appear in the circuit (such as logical gates)
+        pm_unbox = PassManager([ClearQEC(), UnBox()])
+        while "box" in self.logical_circuit.count_ops():
+            self.logical_circuit = pm_unbox.run(self.logical_circuit)
+
+        # Circuit-to-instruction conversions can't handle other measurements either
+        self.logical_circuit.remove_final_measurements()
+
+        super().__init__(data=self.logical_circuit, dims=dims)
+
+        # Defer computation until necessary
+        self._logical_decomposition = None
+
+    # @TODO - generalize to multi-qubit circuits
+    @property
+    def logical_decomposition(self, atol=1E-13):
+        if self._logical_decomposition is None:
+            lqc_0L = LogicalCircuit(self.n_logical_qubits, self.label, self.stabilizer_tableau)
+            lqc_1L = LogicalCircuit(self.n_logical_qubits, self.label, self.stabilizer_tableau)
+
+            lqc_0L.encode(range(self.n_logical_qubits), initial_states=[0])
+            lqc_1L.encode(range(self.n_logical_qubits), initial_states=[1])
+
+            lsv_0L = LogicalStatevector(lqc_0L)
+            lsv_1L = LogicalStatevector(lqc_1L)
+
+            alpha = np.vdot(self.data, lsv_0L.data)
+            beta = np.vdot(self.data, lsv_1L.data)
+            delta = 1 - np.sqrt(np.power(alpha,2) + np.power(beta,2))
+
+            self._logical_decomposition = np.array([alpha, beta, delta])
+            self._logical_decomposition[np.abs(self._logical_decomposition) < atol] = 0.0
+
+        return self._logical_decomposition
+
+    # @TODO - find a way to let basis="logical" by default but without causing a recursive loop during logical_decomposition computation
+    def __array__(self, basis="physical", dtype=None, copy=_numpy_compat.COPY_ONLY_IF_NEEDED):
+        dtype = self.data.dtype if dtype is None else dtype
+
+        if basis == "logical":
+            return np.array(self.logical_decomposition, dtype=dtype, copy=copy)
+        elif basis == "physical":
+            return np.array(self.data, dtype=dtype, copy=copy)
+        else:
+            raise ValueError(f"'{basis}' is not a valid basis for LogicalStatevector array representation")
+
+    def __repr__(self, basis="logical"):
+        if basis == "logical":
+            data = self.logical_decomposition
+        elif basis == "physical":
+            data = self.data
+        else:
+            raise ValueError(f"'{basis}' is not a valid basis for LogicalStatevector string representation")
+
+        prefix = "Statevector("
+        pad = len(prefix) * " "
+        return (
+            f"{prefix}{np.array2string(data, separator=', ', prefix=prefix)},\n{pad}"
+            f"dims={self._op_shape.dims_l()})"
+        )
+
+    def draw(self, output: str | None = None, **drawer_args):
+        raise NotImplementedError()
+
+    @classmethod
+    def from_label(cls, label: str):
+        raise NotImplementedError()
 
 class LogicalDensityMatrix(DensityMatrix):
     def __init__(self, data, dims=None):
