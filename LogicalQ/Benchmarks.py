@@ -1,5 +1,6 @@
 import random
 import numpy as np
+import warnings
 
 from qiskit import QuantumCircuit, ClassicalRegister
 from qiskit.circuit.library import HGate, XGate, YGate, ZGate, SGate, TGate, CXGate, CYGate, CZGate, RXGate, RYGate, RZGate
@@ -38,7 +39,7 @@ def mirror_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sampl
     # verify that all gates in sample are Clifford gates (necessary condition for MB to work)
     for gate in gate_sample:
         if gate not in clifford_gates:
-            raise ValueError(f"Gate {gate.__name__} is not a Clifford gate")
+            warnings.warn(f"Gate {gate.__name__} is not a Clifford gate", UserWarning)
         if gate().num_qubits > n_qubits:
             raise ValueError(f"Gate {gate.__name__} requires more qubits than available")
 
