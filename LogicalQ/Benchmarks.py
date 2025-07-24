@@ -1,7 +1,11 @@
 import random
 import numpy as np
 import warnings
+from typing import Optional, Sequence
 
+from qiskit.quantum_info import Operator
+from qiskit.quantum_info.random import random_clifford
+from qiskit.circuit.library import UnitaryGate
 from qiskit import QuantumCircuit, ClassicalRegister
 from qiskit.circuit.library import HGate, XGate, YGate, ZGate, SGate, TGate, CXGate, CYGate, CZGate, RXGate, RYGate, RZGate
 from qiskit_experiments.library import StandardRB, QuantumVolume
@@ -39,7 +43,7 @@ def mirror_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sampl
     # verify that all gates in sample are Clifford gates (necessary condition for MB to work)
     for gate in gate_sample:
         if gate not in clifford_gates:
-            warnings.warn(f"Gate {gate.__name__} is not a Clifford gate", UserWarning)
+            raise ValueError(f"Gate {gate.__name__} is not a Clifford gate")
         if gate().num_qubits > n_qubits:
             raise ValueError(f"Gate {gate.__name__} requires more qubits than available")
 
@@ -59,31 +63,60 @@ def mirror_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sampl
 
     return mb_circuit
 
-"""
-    Constructs circuits composed of various Clifford gates, such that the composite operation is the identity if no errors occur.
-
-    Parameters:
-        n_qubits (int): Number of qubits to benchmark. Defaults to 1.
-        qubits (list): Indices of qubits to benchmark.
-        circuit_lengths (list): List of RB sequence lengths. Defaults to [2, 16, 64, 256].
-        num_samples (int): Number of random samples to run. Defaults to 1.
-        seed (int): Random seed for reproducibility. Defaults to 1234.
-"""
-def randomized_benchmarking(n_qubits=None, qubits=None, circuit_lengths=None, num_samples=1, seed=1234):
+def randomized_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sample=None, measure=False):
     if qubits is None:
         if n_qubits is None:
-            raise ValueError("At least one of n_qubits or qubits must be specified.")
+            raise ValueError("Specify at least one of n_qubits or qubits.")
+        qubits = list(range(n_qubits))
+    else:
+        n_qubits = max(qubits) + 1
+
+    rb_circuit = QuantumCircuit(n_qubits)
+    rng = np.random.default_rng()
+    
+    if gate_sample is None:
+        if n_qubits == 1:
+            basis = clifford_sq_gates
+            if not basis:
+                raise ValueError("No Clifford basis defined for this qubit count.")
+            forward = list(rng.choice(basis, size=circuit_length, replace=True))
         else:
-            qubits = range(n_qubits)
+            # true n‑qubit Cliffords for >1 qubit
+            forward = [random_clifford(n_qubits) for _ in range(circuit_length)]
+    else:
+        for item in gate_sample:
+            # get a name for messages
+            name = item.__name__ if isinstance(item, type) else item.__class__.__name__
+            # warn if it’s not in your 1‑qubit basis
+            if item not in clifford_gates:
+                warnings.warn(f"Gate {name} is not a Clifford gate", UserWarning)
+            # figure out how many qubits it acts on
+            needed = item().num_qubits if isinstance(item, type) else item.num_qubits
+            if needed > n_qubits:
+                raise ValueError(f"Gate {name} requires more qubits than available")
 
-    if circuit_lengths is None:
-        circuit_lengths = [2, 16, 64, 256]
+        forward = [random.choice(gate_sample) for _ in range(circuit_length)]
 
-    raise NotImplementedError("Randomized benchmarking is currently not implemented; see mirror_benhmarking for an alternative.")
+    for gate in forward:
+        # if it's a Gate class, instantiate it
+        if isinstance(gate, type):
+            inst = gate()
+        else:
+            # otherwise assume it's already a Clifford object
+            inst = gate.to_instruction()
+            
+        rb_circuit.append(inst, qubits)
 
-    rb_circuits = []
+    # Compose single net inverse Clifford and append
+    matrix = Operator(rb_circuit).data
+    inv_matrix = np.linalg.inv(matrix)
+    inv_gate = UnitaryGate(inv_matrix, label="U_inv")
+    rb_circuit.append(inv_gate, qubits)
 
-    return rb_circuits
+    if measure:
+        rb_circuit.measure_all()
+
+    return rb_circuit
 
 """
     Generate quantum volume benchmark circuits.
