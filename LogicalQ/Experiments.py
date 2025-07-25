@@ -1,13 +1,11 @@
+import os
 import time
-import copy
+import atexit
+import pickle
 import itertools
 import numpy as np
-import multiprocessing as mp
-from concurrent.futures import ProcessPoolExecutor as Pool
-import pickle
-import atexit
 from datetime import datetime
-import os
+from concurrent.futures import ProcessPoolExecutor as Pool
 
 from .Logical import LogicalCircuit
 from .NoiseModel import construct_noise_model
@@ -25,7 +23,6 @@ from qiskit.transpiler import PassManager
 
 from qiskit.providers import Backend
 from pytket.extensions.qiskit.tket_backend import TketBackend
-from qbraid import QbraidProvider
 from qbraid.runtime.native.device import QbraidDevice
 
 # General function to benchmark a circuit using a noise model
@@ -46,29 +43,31 @@ def execute_circuits(circuits, target=None, backend=None, noise_model=None, nois
         while "box" in circuits[c].count_ops():
             circuits[c] = pm.run(circuits[c])
 
+    max_num_qubits = max([circuit.num_qubits for circuit in circuits])
+
     # Resolve backend
     if backend is None:
         # Resolve noise_model or noise_params
         if noise_model is None:
             if noise_params is not None:
                 # If noise_params are provided but not a noise_model or backend, then construct noise model based on the provided parameters
-                noise_model = construct_noise_model(basis_gates=basis_gates, n_qubits=circuit.num_qubits, **noise_params)
+                noise_model = construct_noise_model(basis_gates=basis_gates, n_qubits=max_num_qubits, **noise_params)
 
                 backend = "aer_simulator"
             else:
+                # @TODO - actually, this may not be necessary
                 raise ValueError("One of backend, noise_model, or noise_params must be provided")
+    elif coupling_map is not None:
+        print("WARNING - The Qiskit transpiler is likely to complain about the presence of both backend and coupling_map")
 
     if isinstance(backend, str):
         if backend == "aer_simulator":
             if target is None:
-                if coupling_map is None:
+                if coupling_map == "fully-coupled":
                     # Create a fully-coupled map by default since we don't care about non-fully-coupled hardware modalities
-                    max_num_qubits = max([circuit.num_qubits for circuit in circuits])
-                    print(max_num_qubits)
                     coupling_map = [list(pair) for pair in itertools.product(range(max_num_qubits), range(max_num_qubits))]
 
                 if basis_gates is not None:
-                    print("here right?")
                     backend = AerSimulator(method=method, noise_model=noise_model, basis_gates=basis_gates, coupling_map=coupling_map)
                 else:
                     backend = AerSimulator(method=method, noise_model=noise_model, coupling_map=coupling_map)
@@ -96,7 +95,7 @@ def execute_circuits(circuits, target=None, backend=None, noise_model=None, nois
 
     # Transpile circuit
     # Method defaults to optimization off to preserve form of benchmarking circuit and full QEC
-    if target is None or True:
+    if target is None:
         circuits_transpiled = transpile(circuits, backend=backend, optimization_level=optimization_level)
     else:
         # @TODO - is it fine to specify both target and backend, given that target has parameters which backend specifies,
