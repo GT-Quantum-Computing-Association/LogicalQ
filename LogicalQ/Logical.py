@@ -4,10 +4,11 @@ import numpy as np
 from qiskit import QuantumRegister, AncillaRegister, ClassicalRegister, QuantumCircuit
 from qiskit.circuit import Bit, Measure
 from qiskit.circuit.classical import expr
-from qiskit.quantum_info import Statevector, DensityMatrix, Pauli
+from qiskit.quantum_info import Statevector, DensityMatrix, Pauli, partial_trace
 from qiskit_addon_utils.slicing import slice_by_depth
 from qiskit import _numpy_compat
 from qiskit.transpiler import PassManager
+from qiskit.exceptions import QiskitError
 
 from .Transpilation.ClearQEC import ClearQEC
 from .Transpilation.UnBox import UnBox
@@ -132,7 +133,7 @@ class LogicalCircuit(QuantumCircuit):
             # Classical bits needed to track the Pauli Frame
             pauli_frame_creg_i = ClassicalRegister(2, name=f"cpauli_frame{i}")
             # Classical bits needed to take measurements of logical operation qubits
-            logical_op_meas_creg_i = ClassicalRegister(1, name=f"clogial_op_meas{i}")
+            logical_op_meas_creg_i = ClassicalRegister(1, name=f"clogical_op_meas{i}")
             # Classical bits needed to take measurements of the final state of the logical qubit
             final_measurement_creg_i = ClassicalRegister(self.n_physical_qubits, name=f"cfinal_meas{i}")
 
@@ -1442,29 +1443,122 @@ class LogicalCircuit(QuantumCircuit):
         )
 
 class LogicalStatevector(Statevector):
-    # @TODO - implement initialization from other datatypes - will require a qecc parameter
-    def __init__(self, data: LogicalCircuit, dims=None):
-        self.logical_circuit = copy.deepcopy(data)
-        self.n_logical_qubits = self.logical_circuit.n_logical_qubits
-        self.label = self.logical_circuit.label
-        self.stabilizer_tableau = self.logical_circuit.stabilizer_tableau
+    def __init__(self, data, n_logical_qubits=None, label=None, stabilizer_tableau=None, dims=None):
+        if isinstance(data, LogicalCircuit):
+            self.logical_circuit = copy.deepcopy(data)
+            self.n_logical_qubits = self.logical_circuit.n_logical_qubits
+            self.label = self.logical_circuit.label
+            self.stabilizer_tableau = self.logical_circuit.stabilizer_tableau
+
+            # Circuit-to-instruction conversions can't handle QEC (due to ControlFlowOps and measurements),
+            # nor can they handle other BoxOp's that may appear in the circuit (such as logical gates)
+            pm_unbox = PassManager([ClearQEC(), UnBox()])
+            while "box" in self.logical_circuit.count_ops():
+                self.logical_circuit = pm_unbox.run(self.logical_circuit)
+
+            # Circuit-to-instruction conversions can't handle other measurements either
+            self.logical_circuit.remove_final_measurements()
+
+            # First, construct a Statevector object for the full system
+            lsv_full = Statevector(data=self.logical_circuit, dims=dims)
+
+            # Then, partial trace over the non-data qubits to obtain a DensityMatrix
+            non_data_qubits = list(range(-1-self.label[0]-1))
+            non_data_qubits.append(self.logical_circuit.num_qubits-1)
+            ldm_partial = partial_trace(lsv_full, non_data_qubits)
+
+            # Finally, try to construct a LogicalStatevector from the DensityMatrix
+            try:
+                lsv_partial = ldm_partial.to_statevector()
+
+                # @TODO - determine how to correctly incorporate dims into this call
+                super().__init__(data=lsv_partial.data, dims=dims)
+            except QiskitError as e:
+                raise ValueError("Unable to construct LogicalStatevector from LogicalCircuit because data qubits are in a mixed state; a LogicalDensityMatrix may be the best alternative") from e
+            except Exception as e:
+                raise ValueError("Unable to construct LogicalStatevector from LogicalCircuit due to Qiskit error") from e
+        elif isinstance(data, QuantumCircuit):
+            # @TODO - determine a good way to handle one (or both) of the two possible cases:
+            #           1. QuantumCircuit was actually a LogicalCircuit that was casted at some point and thus should be treated like a LogicalCircuit
+            #           2. QuantumCircuit is a regular physical circuit and should first be converted into a LogicalCircuit
+
+            raise NotImplementedError("LogicalStatevector construction from QuantumCircuit is not yet supported; please provide a LogicalCircuit or an amplitude iterable")
+        elif hasattr(data, "__iter__"):
+            if n_logical_qubits and label and stabilizer_tableau:
+                self.logical_circuit = None
+                self.n_logical_qubits = n_logical_qubits
+                self.label = label
+                self.stabilizer_tableau = stabilizer_tableau
+
+                super().__init__(data=data, dims=dims)
+            else:
+                raise ValueError("LogicalStatevector construction from an amplitude iterable requires n_logical_qubits, label, and stabilizer_tableau to all be specified")
+        else:
+            raise TypeError(f"Object of type {type(data)} is not a valid data input for LogicalStatevector")
 
         if self.n_logical_qubits > 1:
-            raise NotImplementedError("LogicalStatevector does not yet support multi-qubit circuits")
-
-        # Circuit-to-instruction conversions can't handle QEC (due to ControlFlowOps and measurements),
-        # nor can it handle other BoxOp's that may appear in the circuit (such as logical gates)
-        pm_unbox = PassManager([ClearQEC(), UnBox()])
-        while "box" in self.logical_circuit.count_ops():
-            self.logical_circuit = pm_unbox.run(self.logical_circuit)
-
-        # Circuit-to-instruction conversions can't handle other measurements either
-        self.logical_circuit.remove_final_measurements()
-
-        super().__init__(data=self.logical_circuit, dims=dims)
+            raise NotImplementedError("LogicalStatevector does not yet support circuits with multiple logical qubits")
 
         # Defer computation until necessary
         self._logical_decomposition = None
+
+    @classmethod
+    def from_counts(cls, counts, n_logical_qubits, label, stabilizer_tableau, basis="physical"):
+        outcomes_raw = [key.replace(" ", "") for key in counts.keys()]
+        outcomes = []
+        if basis == "physical":
+            for outcome_raw in outcomes_raw:
+                # @TODO - find a more reliable method that does not rely on the current indexing
+                # Get substring corresponding to logical measurement result
+                outcomes.append(outcome_raw[-1-label[0]-1:-1])
+        elif basis == "logical":
+            # @TODO - make sure this is correct
+            for outcome_raw in outcomes_raw:
+                # No parsing required
+                outcomes.append(outcome_raw)
+        else:
+            raise ValueError(f"'{basis}' is not a valid basis for LogicalStatevector array representation")
+
+        counts = np.array(list(counts.values()))
+        probabilities = counts/np.sum(counts)
+        amplitudes = np.sqrt(probabilities)
+
+        lsv_unnormalized = None
+        for amplitude, outcome in zip(amplitudes, outcomes):
+            lsv_term = amplitude * LogicalStatevector.from_basis_str(basis_str=outcome, n_logical_qubits=n_logical_qubits, label=label, stabilizer_tableau=stabilizer_tableau)
+
+            if lsv_unnormalized is None:
+                lsv_unnormalized = lsv_term
+            else:
+                lsv_unnormalized += lsv_term
+
+        norm = np.linalg.norm(lsv_unnormalized)
+        if not np.isclose(norm, 0.0):
+            lsv_normalized = lsv_unnormalized / norm
+        else:
+            lsv_normalized = lsv_unnormalized
+
+        return lsv_normalized
+
+    @classmethod
+    def from_basis_str(cls, basis_str, n_logical_qubits, label, stabilizer_tableau, basis="physical"):
+        if all([char in ["0", "1"] for char in basis_str]):
+            d = 2**(len(basis_str))
+            basis_idx = int(basis_str, 2)
+        elif basis_str.startswith("0b"):
+            d = 2**len(basis_str-2)
+            basis_idx = int(basis_str[2:], 2)
+        elif basis_str.startswith("0x"):
+            d = 16**(len(basis_str)-2)
+            basis_idx = int(basis_str[2:], 16)
+        else:
+            raise ValueError("Could not resolve basis_str format")
+
+        lsv_vector = np.zeros((d,))
+        lsv_vector[basis_idx] = 1.0
+
+        lsv = cls(data=lsv_vector, n_logical_qubits=n_logical_qubits, label=label, stabilizer_tableau=stabilizer_tableau)
+        return lsv
 
     # @TODO - generalize to multi-qubit circuits
     @property
@@ -1515,10 +1609,6 @@ class LogicalStatevector(Statevector):
         )
 
     def draw(self, output: str | None = None, **drawer_args):
-        raise NotImplementedError()
-
-    @classmethod
-    def from_label(cls, label: str):
         raise NotImplementedError()
 
 class LogicalDensityMatrix(DensityMatrix):
