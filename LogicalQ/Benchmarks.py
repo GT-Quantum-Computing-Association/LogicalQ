@@ -27,8 +27,7 @@ sq_gates = [
 """
     Constructs circuits composed of various Clifford gates and the full inverse, such that the composite operation is the identity if no errors occur.
 """
-def mirror_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sample=None,
-                        measure=False):
+def mirror_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sample=None, measure=False):
     if n_qubits is None and qubits is None:
         qubits = [0]
         n_qubits = 1
