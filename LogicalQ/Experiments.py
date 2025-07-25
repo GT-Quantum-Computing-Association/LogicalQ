@@ -1,5 +1,6 @@
 import os
 import time
+import copy
 import atexit
 import pickle
 import itertools
@@ -26,16 +27,19 @@ from pytket.extensions.qiskit.tket_backend import TketBackend
 from qbraid.runtime.native.device import QbraidDevice
 
 # General function to benchmark a circuit using a noise model
-def execute_circuits(circuits, target=None, backend=None, noise_model=None, noise_params=None, coupling_map=None, basis_gates=None, method="statevector", optimization_level=0, shots=1024, memory=False):
+def execute_circuits(circuit_input, target=None, backend=None, noise_model=None, noise_params=None, coupling_map=None, basis_gates=None, method="statevector", optimization_level=0, shots=1024, memory=False):
     # Resolve circuits
-    if hasattr(circuits, "__iter__"):
-        for c, circuit in enumerate(circuits):
-            if not isinstance(circuit, QuantumCircuit):
+    circuits = []
+    if hasattr(circuit_input, "__iter__"):
+        for c, circuit in enumerate(circuit_input):
+            if isinstance(circuit, QuantumCircuit):
+                circuits.append(copy.deepcopy(circuit))
+            else:
                 raise TypeError(f"Iterable provided for circuits contains non-circuit object(s), first at index {c}: {circuit} (type: {type(circuit)})")
-    elif isinstance(circuits, QuantumCircuit):
-        circuits = [circuits]
+    elif isinstance(circuit_input, QuantumCircuit):
+        circuits = [copy.deepcopy(circuit_input)]
     else:
-        raise TypeError(f"Invalid type for circuits input: {type(circuits)}")
+        raise TypeError(f"Invalid type for circuits input: {type(circuit_input)}")
 
     # Patch to account for backends that do not yet recognize BoxOp's during transpilation
     pm = PassManager([UnBox()])
