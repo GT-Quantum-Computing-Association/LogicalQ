@@ -260,12 +260,6 @@ class LogicalCircuitGeneral(QuantumCircuit):
         self.LogicalYCircuit = self.LogicalXCircuit.compose(self.LogicalZCircuit)
         self.LogicalYGate = self.LogicalYCircuit.to_gate(label="$Y_L$")
 
-        #print(self.G)
-        #print()
-        #print(self.LogicalZVector)
-        #print()
-        #print(self.LogicalXVector)
-
         # Create Logical H circuit using Childs and Wiebe's linear combination of unitaries method
         self.LogicalHCircuit_LCU = QuantumCircuit(self.n + 1)
         self.LogicalHCircuit_LCU.h(self.n)
@@ -367,13 +361,14 @@ class LogicalCircuitGeneral(QuantumCircuit):
             self.encoding_circuit.h(i)
             for j in range(self.n):
                 if i != j:
-                    if self.G[0, i, j]:
+                    if self.G[0, i, j] and self.G[1, i, j]:
+                        self.encoding_circuit.cx(i, j)
+                        self.encoding_circuit.cz(i, j)
+                    elif self.G[0, i, j]:
                         self.encoding_circuit.cx(i, j)
                     elif self.G[1, i, j]:
                         self.encoding_circuit.cz(i, j)
-                    elif self.G[0, i, j] and self.G[1, i, j]:
-                        self.encoding_circuit.cx(i, j)
-                        self.encoding_circuit.cz(i, j)
+                    
 
         self.encoding_gate = self.encoding_circuit.to_gate(label="$U_{enc}$")
 
@@ -416,19 +411,19 @@ class LogicalCircuitGeneral(QuantumCircuit):
 
             #Measure Z_L on ancilla
             super().barrier()
-            # super().h(self.ancilla_qregs[q][0])
-            # # X part
-            # for i, bit in enumerate(self.LogicalZVector[0][0]):
-            #     if bit == 1:
-            #         super().cx(self.ancilla_qregs[q][0], self.logical_qregs[q][i])
-            # # Z part
-            # for i, bit in enumerate(self.LogicalZVector[1][0]):
-            #     if bit == 1:
-            #         super().cz(self.ancilla_qregs[q][0], self.logical_qregs[q][i])
-            # super().h(self.ancilla_qregs[q][0])
-            # super().barrier()
+            super().h(self.ancilla_qregs[q][0])
+            # X part
+            for i, bit in enumerate(self.LogicalZVector[0][0]):
+                if bit == 1:
+                    super().cx(self.ancilla_qregs[q][0], self.logical_qregs[q][i])
+            # Z part
+            for i, bit in enumerate(self.LogicalZVector[1][0]):
+                if bit == 1:
+                    super().cz(self.ancilla_qregs[q][0], self.logical_qregs[q][i])
+            super().h(self.ancilla_qregs[q][0])
+            super().barrier()
 
-            #super().append(Measure(), [self.ancilla_qregs[q][0]], [self.enc_verif_cregs[q][0]], copy=False)
+            super().append(Measure(), [self.ancilla_qregs[q][0]], [self.enc_verif_cregs[q][0]], copy=False)
 
             for _ in range(max_iterations - 1):
                 # If the ancilla stores a 1, reset the entire logical qubit and redo
