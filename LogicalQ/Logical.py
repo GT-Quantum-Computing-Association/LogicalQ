@@ -404,13 +404,13 @@ class LogicalCircuit(QuantumCircuit):
             self.encoding_circuit.h(i)
             for j in range(self.n):
                 if i != j:
-                    if self.G[0, i, j]:
+                    if self.G[0, i, j] and self.G[1, i, j]:
+                        self.encoding_circuit.cx(i, j)
+                        self.encoding_circuit.cz(i, j)
+                    elif self.G[0, i, j]:
                         self.encoding_circuit.cx(i, j)
                     elif self.G[1, i, j]:
-                        self.encoding_circuit.cz(i, j)
-                    elif self.G[0, i, j] and self.G[1, i, j]:
-                        self.encoding_circuit.cx(i, j)
-                        self.encoding_circuit.cz(i, j)
+                        self.encoding_circuit.cz(i, j)           
 
         self.encoding_gate = self.encoding_circuit.to_gate(label="$U_{enc}$")
 
