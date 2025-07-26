@@ -116,7 +116,7 @@ def _logical_matplotlib_circuit_drawer(
     )
     if fold is None:
         fold = 25
-    
+
     qcd = LogicalMatplotlibDrawer(
         qubits,
         clbits,
@@ -656,7 +656,7 @@ class LogicalMatplotlibDrawer:
                         qubits, clbits, flow_nodes = _get_layered_instructions(
                             circuit, wire_map=flow_wire_map
                         )
-                        flow_drawer = MatplotlibDrawer(
+                        flow_drawer = LogicalMatplotlibDrawer(
                             qubits,
                             clbits,
                             flow_nodes,
@@ -665,6 +665,8 @@ class LogicalMatplotlibDrawer:
                             plot_barriers=self._plot_barriers,
                             fold=self._fold,
                             cregbundle=self._cregbundle,
+                            fold_qec=self.fold_qec,
+                            fold_logicalop=self.fold_logicalop
                         )
 
                         # flow_parent is the parent of the new class instance

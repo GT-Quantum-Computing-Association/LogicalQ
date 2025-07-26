@@ -143,7 +143,7 @@ def logical_circuit_drawer(
         return True
 
     cregbundle = check_clbit_in_inst(circuit, cregbundle)
-    
+
     if output == "mpl":
         image = _logical_matplotlib_circuit_drawer(
             circuit,
