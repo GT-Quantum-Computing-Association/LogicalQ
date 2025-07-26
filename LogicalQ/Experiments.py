@@ -27,7 +27,7 @@ from pytket.extensions.qiskit.tket_backend import TketBackend
 from qbraid.runtime.native.device import QbraidDevice
 
 # General function to benchmark a circuit using a noise model
-def execute_circuits(circuit_input, target=None, backend=None, noise_model=None, noise_params=None, coupling_map=None, basis_gates=None, method="statevector", optimization_level=0, shots=1024, memory=False):
+def execute_circuits(circuit_input, target=None, backend=None, noise_model=None, noise_params=None, coupling_map=None, basis_gates=None, method="statevector", optimization_level=0, shots=1024, memory=False, return_circuits_transpiled=False):
     # Resolve circuits
     circuits = []
     if hasattr(circuit_input, "__iter__"):
@@ -111,7 +111,10 @@ def execute_circuits(circuit_input, target=None, backend=None, noise_model=None,
         result = backend.run([circuit_transpiled], shots=shots, memory=memory).result()
         results.append(result)
 
-    return results
+    if return_circuits_transpiled:
+        return results, circuits_transpiled
+    else:
+        return results
 
 # Core experiment function useful for multiprocessing
 def _experiment_core(task_id, circuit, noise_model, backend, method, shots):
