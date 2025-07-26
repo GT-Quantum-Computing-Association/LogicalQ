@@ -1502,8 +1502,9 @@ class LogicalStatevector(Statevector):
             ldm_trace = ldm_partial.trace()
             if np.isclose(ldm_trace, 1.0):
                 lsv_probs = ldm_partial.probabilities()
+                lsv_amplitudes = np.sqrt(lsv_probs)
 
-                super().__init__(data=lsv_probs, dims=dims)
+                super().__init__(data=lsv_amplitudes, dims=dims)
             else:
                 raise ValueError("Unable to construct LogicalStatevector from LogicalCircuit because data qubits are in a mixed state; a LogicalDensityMatrix may be the best alternative")
         elif isinstance(data, QuantumCircuit):
