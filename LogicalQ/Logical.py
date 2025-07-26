@@ -84,7 +84,7 @@ class LogicalCircuit(QuantumCircuit):
         self.add_logical_qubits(self.n_logical_qubits)
 
         # Also add a classical measurement output register at the end
-        self.output_creg = ClassicalRegister(self.n_logical_qubits, name="output")
+        self.output_creg = ClassicalRegister(self.n_logical_qubits, name="coutput")
         super().add_register(self.output_creg)
 
         # @TODO - find alternative, possibly by implementing upstream
@@ -110,9 +110,11 @@ class LogicalCircuit(QuantumCircuit):
 
         return logical_circuit
 
+    # Add logical qubit(s) to the LogicalCircuit
     def add_logical_qubits(self, logical_qubit_count):
         current_logical_qubit_count = len(self.logical_qregs)
 
+        # @TODO - refactor to use LogicalQubit
         for i in range(current_logical_qubit_count, current_logical_qubit_count + logical_qubit_count):
             # Physical qubits for logical qubit
             logical_qreg_i = QuantumRegister(self.n_physical_qubits, name=f"qlog{i}")
@@ -404,12 +406,12 @@ class LogicalCircuit(QuantumCircuit):
             self.encoding_circuit.h(i)
             for j in range(self.n):
                 if i != j:
-                    if self.G[0, i, j]:
+                    if self.G[0, i, j] and self.G[1, i, j]:
+                        self.encoding_circuit.cx(i, j)
+                        self.encoding_circuit.cz(i, j)
+                    elif self.G[0, i, j]:
                         self.encoding_circuit.cx(i, j)
                     elif self.G[1, i, j]:
-                        self.encoding_circuit.cz(i, j)
-                    elif self.G[0, i, j] and self.G[1, i, j]:
-                        self.encoding_circuit.cx(i, j)
                         self.encoding_circuit.cz(i, j)
 
         self.encoding_gate = self.encoding_circuit.to_gate(label="$U_{enc}$")
@@ -889,15 +891,10 @@ class LogicalCircuit(QuantumCircuit):
             logical_qubit_indices = range(self.n_logical_qubits)
 
         counts = {}
-        for n in range(len(outputs)):
-            output = ''
-            for l in logical_qubit_indices:
-                output = outputs[n][self.n_logical_qubits-1-l] + output
+        for output_n in outputs:
+            output = "".join([output_n[self.n_logical_qubits-1-l] for l in logical_qubit_indices])
 
-            if output not in counts:
-                counts[output] = 1
-            else:
-                counts[output] += 1
+            counts[output] = counts.get(output, 0) + 1
 
         return counts
 
@@ -1442,6 +1439,42 @@ class LogicalCircuit(QuantumCircuit):
             fold_logicalop=fold_logicalop,
         )
 
+class LogicalQubit(list):
+    def __init__(self, regs=None, qregs=None, cregs=None):
+        self._data = []
+        self.qregs = []
+        self.cregs = []
+        if regs is not None:
+            for reg in regs:
+                if isinstance(reg, QuantumRegister):
+                    self._data.append(reg)
+                    self.qregs.append(reg)
+                elif isinstance(reg, ClassicalRegister):
+                    self._data.append(reg)
+                    self.cregs.append(reg)
+                else:
+                    raise TypeError()
+        if qregs is not None:
+            for qreg in qregs:
+                if isinstance(qreg, QuantumRegister):
+                    self._data.append(qreg)
+                    self.qregs.append(qreg)
+                else:
+                    raise TypeError()
+        if cregs is not None:
+            for creg in cregs:
+                if isinstance(creg, ClassicalRegister):
+                    self._data.append(creg)
+                    self.cregs.append(creg)
+                else:
+                    raise TypeError()
+
+        raise NotImplementedError("LogicalQubit is not yet fully implemented")
+
+class LogicalRegister(list):
+    def __init__(self, qregs=None, cregs=None):
+        raise NotImplementedError("LogicalRegister is not yet fully implemented")
+
 class LogicalStatevector(Statevector):
     def __init__(self, data, n_logical_qubits=None, label=None, stabilizer_tableau=None, dims=None):
         if isinstance(data, LogicalCircuit):
@@ -1463,20 +1496,16 @@ class LogicalStatevector(Statevector):
             lsv_full = Statevector(data=self.logical_circuit, dims=dims)
 
             # Then, partial trace over the non-data qubits to obtain a DensityMatrix
-            non_data_qubits = list(range(-1-self.label[0]-1))
-            non_data_qubits.append(self.logical_circuit.num_qubits-1)
+            non_data_qubits = list(range(self.label[0], self.logical_circuit.num_qubits))
             ldm_partial = partial_trace(lsv_full, non_data_qubits)
 
-            # Finally, try to construct a LogicalStatevector from the DensityMatrix
-            try:
-                lsv_partial = ldm_partial.to_statevector()
+            ldm_trace = ldm_partial.trace()
+            if np.isclose(ldm_trace, 1.0):
+                lsv_probs = ldm_partial.probabilities()
 
-                # @TODO - determine how to correctly incorporate dims into this call
-                super().__init__(data=lsv_partial.data, dims=dims)
-            except QiskitError as e:
-                raise ValueError("Unable to construct LogicalStatevector from LogicalCircuit because data qubits are in a mixed state; a LogicalDensityMatrix may be the best alternative") from e
-            except Exception as e:
-                raise ValueError("Unable to construct LogicalStatevector from LogicalCircuit due to Qiskit error") from e
+                super().__init__(data=lsv_probs, dims=dims)
+            else:
+                raise ValueError("Unable to construct LogicalStatevector from LogicalCircuit because data qubits are in a mixed state; a LogicalDensityMatrix may be the best alternative")
         elif isinstance(data, QuantumCircuit):
             # @TODO - determine a good way to handle one (or both) of the two possible cases:
             #           1. QuantumCircuit was actually a LogicalCircuit that was casted at some point and thus should be treated like a LogicalCircuit
@@ -1510,7 +1539,7 @@ class LogicalStatevector(Statevector):
             for outcome_raw in outcomes_raw:
                 # @TODO - find a more reliable method that does not rely on the current indexing
                 # Get substring corresponding to logical measurement result
-                outcomes.append(outcome_raw[-1-label[0]-1:-1])
+                outcomes.append(outcome_raw[1:1+label[0]])
         elif basis == "logical":
             # @TODO - make sure this is correct
             for outcome_raw in outcomes_raw:
@@ -1554,10 +1583,10 @@ class LogicalStatevector(Statevector):
         else:
             raise ValueError("Could not resolve basis_str format")
 
-        lsv_vector = np.zeros((d,))
-        lsv_vector[basis_idx] = 1.0
+        basis_vector = np.zeros((d,))
+        basis_vector[basis_idx] = 1.0
 
-        lsv = cls(data=lsv_vector, n_logical_qubits=n_logical_qubits, label=label, stabilizer_tableau=stabilizer_tableau)
+        lsv = cls(data=basis_vector, n_logical_qubits=n_logical_qubits, label=label, stabilizer_tableau=stabilizer_tableau)
         return lsv
 
     # @TODO - generalize to multi-qubit circuits
@@ -1608,8 +1637,34 @@ class LogicalStatevector(Statevector):
             f"dims={self._op_shape.dims_l()})"
         )
 
-    def draw(self, output: str | None = None, **drawer_args):
-        raise NotImplementedError()
+    def draw(self, output=None):
+        if output is None: output = "text"
+
+        if output == "text":
+            text = f"{self.logical_decomposition[0]} |0>_L + {self.logical_decomposition[1]} |1>_L + {self.logical_decomposition[2]} |psi^perp>"
+            return text
+        elif output == "latex":
+            from IPython.display import Latex
+
+            latex = ""
+            latex += "$$"
+            latex += "\\begin{align}\n"
+            latex += f"{self.logical_decomposition[0]} \\ket{{0}}_L + {self.logical_decomposition[1]} \\ket{{1}}_L + {self.logical_decomposition[2]} \\ket{{\\psi^\\perp}}"
+            latex += "\\end{align}\n"
+            latex += "$$"
+
+            return Latex(latex)
+        elif output == "latex_source":
+            latex = ""
+            latex += "$$"
+            latex += "\\begin{align}\n"
+            latex += f"{self.logical_decomposition[0]} \\ket{{0}}_L + {self.logical_decomposition[1]} \\ket{{1}}_L + {self.logical_decomposition[2]} \\ket{{\\psi^\\perp}}"
+            latex += "\\end{align}\n"
+            latex += "$$"
+
+            return latex
+        else:
+            raise ValueError(f"'{output}' is not a valid LogicalStatevector draw method, please choose from 'text', 'latex', or 'latex_source'")
 
 class LogicalDensityMatrix(DensityMatrix):
     def __init__(self, data, dims=None):
