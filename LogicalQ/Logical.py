@@ -6,12 +6,13 @@ from qiskit.circuit import Bit, Measure
 from qiskit.circuit.classical import expr
 from qiskit.quantum_info import Statevector, DensityMatrix, Pauli, partial_trace
 from qiskit_addon_utils.slicing import slice_by_depth
-from qiskit import _numpy_compat
-from qiskit.transpiler import PassManager
-from qiskit.exceptions import QiskitError
 
+from qiskit.transpiler import PassManager
 from .Transpilation.ClearQEC import ClearQEC
 from .Transpilation.UnBox import UnBox
+
+from qiskit import _numpy_compat
+from qiskit.exceptions import QiskitError
 
 class LogicalCircuit(QuantumCircuit):
     def __init__(
@@ -855,38 +856,44 @@ class LogicalCircuit(QuantumCircuit):
                 # super().measure(self.logical_qregs[q][n], self.final_measurement_cregs[q][n])
                 super().append(Measure(), [self.logical_qregs[q][n]], [self.final_measurement_cregs[q][n]], copy=False)
 
-            # @TODO - use LogicalXVector instead
-            with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][x] for x in [4,5,6]])):
-                self.set_cbit(self.output_creg[c], 1)
+            with self.box(label="logical.qec.measure:QEC Measurement"):
+                # @TODO - use LogicalXVector instead
+                with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][x] for x in [4,5,6]])):
+                    self.set_cbit(self.output_creg[c], 1)
 
-            if with_error_correction:
-                # Final syndrome
-                for n in range(self.n_ancilla_qubits):
-                    stabilizer = self.stabilizer_tableau[self.z_stabilizers[n]]
-                    s_indices = []
-                    for i in range(len(stabilizer)):
-                        if stabilizer[i] == 'Z':
-                            s_indices.append(i)
+                if with_error_correction:
+                    # Final syndrome
+                    for n in range(self.n_ancilla_qubits):
+                        stabilizer = self.stabilizer_tableau[self.z_stabilizers[n]]
+                        s_indices = []
+                        for i in range(len(stabilizer)):
+                            if stabilizer[i] == 'Z':
+                                s_indices.append(i)
 
-                    with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][z] for z in s_indices])):
-                        self.set_cbit(self.curr_syndrome_cregs[q][n], 1)
+                        with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][z] for z in s_indices])):
+                            self.set_cbit(self.curr_syndrome_cregs[q][n], 1)
 
-                # Final syndrome diff
-                for n in range(self.n_ancilla_qubits):
-                    with super().if_test(self.cbit_xor([self.curr_syndrome_cregs[q][n], self.prev_syndrome_cregs[q][self.z_stabilizers[n]]])) as _else:
-                        self.set_cbit(self.unflagged_syndrome_diff_cregs[q][self.z_stabilizers[n]], 1)
-                    with _else:
-                        self.set_cbit(self.unflagged_syndrome_diff_cregs[q][self.z_stabilizers[n]], 0)
+                    # Final syndrome diff
+                    for n in range(self.n_ancilla_qubits):
+                        with super().if_test(self.cbit_xor([self.curr_syndrome_cregs[q][n], self.prev_syndrome_cregs[q][self.z_stabilizers[n]]])) as _else:
+                            self.set_cbit(self.unflagged_syndrome_diff_cregs[q][self.z_stabilizers[n]], 1)
+                        with _else:
+                            self.set_cbit(self.unflagged_syndrome_diff_cregs[q][self.z_stabilizers[n]], 0)
 
-                # Final correction
-                self.apply_decoding([q], self.z_stabilizers, with_flagged=False)
-                with super().if_test(expr.lift(self.pauli_frame_cregs[q][1])):
-                    self.cbit_not(self.output_creg[c])
+                    # Final correction
+                    self.apply_decoding([q], self.z_stabilizers, with_flagged=False)
+                    with super().if_test(expr.lift(self.pauli_frame_cregs[q][1])):
+                        self.cbit_not(self.output_creg[c])
 
-    def measure_all(self, with_error_correction=True):
-        self.measure(range(self.n_logical_qubits), range(self.n_logical_qubits), with_error_correction=with_error_correction)
+    def measure_all(self, inplace=True, with_error_correction=True):
+        if inplace:
+            self.measure(range(self.n_logical_qubits), range(self.n_logical_qubits), with_error_correction=with_error_correction)
+        else:
+            _lqc = copy.deepcopy(self)
+            _lqc.measure_all(inplace=True, with_error_correction=True)
+            return _lqc
 
-    def get_logical_output_counts(self, outputs, logical_qubit_indices=None):
+    def get_logical_counts(self, outputs, logical_qubit_indices=None):
         if logical_qubit_indices == None:
             logical_qubit_indices = range(self.n_logical_qubits)
 
@@ -1499,14 +1506,13 @@ class LogicalStatevector(Statevector):
             non_data_qubits = list(range(self.label[0], self.logical_circuit.num_qubits))
             ldm_partial = partial_trace(lsv_full, non_data_qubits)
 
-            ldm_trace = ldm_partial.trace()
-            if np.isclose(ldm_trace, 1.0):
-                lsv_probs = ldm_partial.probabilities()
-                lsv_amplitudes = np.sqrt(lsv_probs)
-
-                super().__init__(data=lsv_amplitudes, dims=dims)
-            else:
-                raise ValueError("Unable to construct LogicalStatevector from LogicalCircuit because data qubits are in a mixed state; a LogicalDensityMatrix may be the best alternative")
+            try:
+                lsv_partial = ldm_partial.to_statevector()
+                super().__init__(data=lsv_partial.data, dims=dims)
+            except QiskitError as e:
+                raise ValueError("Unable to construct LogicalStatevector from LogicalCircuit because data qubits are in a mixed state; a LogicalDensityMatrix may be the best alternative") from e
+            except Exception as e:
+                raise ValueError("Unable to construct LogicalStatevector from LogicalCircuit") from e
         elif isinstance(data, QuantumCircuit):
             # @TODO - determine a good way to handle one (or both) of the two possible cases:
             #           1. QuantumCircuit was actually a LogicalCircuit that was casted at some point and thus should be treated like a LogicalCircuit

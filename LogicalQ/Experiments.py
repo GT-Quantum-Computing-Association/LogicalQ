@@ -8,9 +8,8 @@ import numpy as np
 from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor as Pool
 
-from .Logical import LogicalCircuit
+from .Logical import LogicalCircuit, LogicalStatevector
 from .NoiseModel import construct_noise_model
-
 from .Transpilation.UnBox import UnBox
 
 from qiskit import QuantumCircuit
@@ -118,7 +117,9 @@ def execute_circuits(circuit_input, target=None, backend=None, noise_model=None,
 
 # Core experiment function useful for multiprocessing
 def _experiment_core(task_id, circuit, noise_model, backend, method, shots):
+    print(os.getpid(), "starting")
     result = execute_circuits(circuit, noise_model=noise_model, backend=backend, method=method, shots=shots)
+    print(os.getpid(), "stopping")
 
     return task_id, result
 
@@ -171,13 +172,8 @@ def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1,
             )
             for (n_qubits, circuit_length) in itertools.product(range(min_n_qubits, max_n_qubits+1), range(min_circuit_length, max_circuit_length+1))
         ]
-        
-        try:
-            # Linux: precise list of CPUs available to the process
-            cpu_count = len(os.sched_getaffinity(0))
-        except AttributeError:
-            # macOS / Windows fallback
-            cpu_count = os.cpu_count() or 1 
+
+        cpu_count = os.process_cpu_count() or 1
 
         batch_size = max(int(np.ceil((max_n_qubits+1-min_n_qubits)*(max_circuit_length+1-min_circuit_length)/cpu_count)), 1)
         print(f"Applying mulitprocessing to {len(exp_inputs_list)} samples in batches of maximum size {batch_size} across {cpu_count} CPUs")
@@ -208,7 +204,7 @@ def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1,
             for circuit_length in range(min_circuit_length, max_circuit_length+1):
                 # Construct circuit and benchmark noise
                 circuit_nl = circuit_factory(n_qubits=n_qubits, circuit_length=circuit_length)
-                result = execute_circuits(circuit_nl, noise_model=noise_model_n, backend=backend, method=method, shots=shots)
+                result = execute_circuits(circuit_nl, noise_model=noise_model_n, backend=backend, method=method, shots=shots)[0]
 
                 # Save expectation values
                 sub_data[circuit_length] = result
@@ -257,7 +253,7 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
             return noise_model
     elif hasattr(noise_model_input, "__iter__") and all([isinstance(noise_model, NoiseModel) for noise_model in noise_model_input]):
         noise_model_input = noise_model_input
-    elif callable(noise_model):
+    elif callable(noise_model_input):
         raise NotImplementedError("NoiseModel callables are not accepted as inputs, please provide a constant NoiseModel object or a list of such.")
     else:
         print("No base NoiseModel inputted, using an ideal NoiseModel as a base.")
@@ -317,11 +313,10 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
                     print(f"Failed to compute exact density matrix for circuit input at index {c}, attempting to compute exact statevector...")
                     try:
                         # Compute exact statevector
-                        statevector_exact = Statevector.from_instruction(circuit)
-                    except:
+                        statevector_exact = LogicalStatevector(circuit)
+                    except Exception as e:
                         # Fail since we don't have any exact reference now
-                        print(f"Failed to compute exact statevector, exiting.")
-                        raise
+                        raise Exception("Failed to compute exact statevector, exiting...") from e
 
             # @TODO - determine whether this is a better data structure for this, including a better way to distinguish the data by circuit
             sub_data = {
@@ -341,13 +336,8 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
                 for nm, noise_model in enumerate(noise_models)
             ]
 
-            try:
-                # Linux: precise list of CPUs available to the process
-                cpu_count = len(os.sched_getaffinity(0))
-            except AttributeError:
-                # macOS / Windows fallback
-                cpu_count = os.cpu_count() or 1 
-                
+            cpu_count = os.process_cpu_count() or 1
+
             batch_size = max(int(np.ceil(len(circuit_input)*len(error_dicts)/cpu_count)), 1)
             print(f"Applying mulitprocessing to {len(exp_inputs_list)} samples in batches of maximum size {batch_size} across {cpu_count} CPUs")
 
@@ -394,7 +384,7 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
                 "results": []
             }
 
-            for error_dict, noise_model in zip(error_dict, noise_models):
+            for error_dict, noise_model in zip(error_dicts, noise_models):
                 result = execute_circuits(circuit_input, noise_model=noise_model, backend=backend, method=method, shots=shots)
 
                 sub_data["results"].append({
@@ -402,7 +392,7 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
                     "result": result
                 })
 
-            all_data[nm] = sub_data
+            all_data[c] = sub_data
 
         stop = time.perf_counter()
 
@@ -476,7 +466,7 @@ def qec_cycle_efficiency_experiment(circuit_input, noise_model_input, qecc, cons
     atexit.register(save_progress)
 
     for circuit_physical in circuit_input:
-        density_matrix_exact = None#DensityMatrix(circuit_physical)
+        density_matrix_exact = DensityMatrix(circuit_physical)
 
         circuit_logical = LogicalCircuit.from_physical_circuit(circuit_physical, **qecc)
 
@@ -497,7 +487,7 @@ def qec_cycle_efficiency_experiment(circuit_input, noise_model_input, qecc, cons
 
             sub_data["results"].append({
                 "constraint_model": constraint_model,
-                "qec_layer_indices": qec_layer_indices,
+                "qec_cycle_indices": qec_cycle_indices,
                 "result": result
             })
 
@@ -524,17 +514,7 @@ def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, qecc, c
     if isinstance(noise_model_input, NoiseModel):
         noise_model_factory = lambda c : noise_model_input
     elif hasattr(noise_model_input, "__iter__"):
-        if len(noise_model_input) == len(configs):
-            noise_model_callable_list = []
-            for noise_model_input_element in noise_model_input:
-                if isinstance(noise_model_input_element, NoiseModel):
-                    noise_model_callable_list.append(noise_model_input_element)
-                else:
-                    raise ValueError("List provided for noise_model_input does not match length of configs list input; noise_model_input must either be constant, a callable, or a list.")
-
-            noise_model_factory = lambda c : noise_model_callable_list[c]
-        else:
-            raise ValueError("List provided for noise_model_input does not match length of configs list - noise_model_input must either be constant, a callable, or a list with length matching that of configs list.")
+        raise NotImplementedError("Please provide a single noise model")
     elif callable(noise_model_input):
         noise_model_factory = noise_model_input
     else:

@@ -2,7 +2,10 @@ import time
 import numpy as np
 from matplotlib import pyplot as plt
 
-from qiskit.visualization import plot_distribution, plot_histogram
+from qiskit.quantum_info import state_fidelity
+
+from LogicalQ.Logical import LogicalStatevector
+from LogicalQ.Utilities import sanitize_save_parameters
 
 """
     Plot a three-dimensional bar chart comparing qubit count and circuit length to expectation value.
@@ -18,10 +21,10 @@ from qiskit.visualization import plot_distribution, plot_histogram
 """
 def circuit_scaling_bar3d(data, title=None, save=False, filename=None, save_dir=None, show=False):
     if not isinstance(data, dict):
-        raise ValueError("The 'data' parameter should be a dictionary of the form dict[n_qubits, dict[circuit_length, (result, counts)]].")
+        raise TypeError("Invalid type for data input: must be a dictionary of the form dict[n_qubits, dict[circuit_length, result]].")
 
     if title == None:
-        title = "Circuit scaling bar chart"
+        title = "Circuit scaling bar plot"
 
     if save:
         filename, save_dir = sanitize_save_parameters(filename, save_dir, default_filename="circuit_scaling_bar3d")
@@ -32,14 +35,15 @@ def circuit_scaling_bar3d(data, title=None, save=False, filename=None, save_dir=
 
     for n_qubits, sub_data in data.items():
         # @TODO - make this work better for data where not every qubit count has the same range of circuit lengths
-        for circuit_length, (result, counts) in sub_data.items():
+        for circuit_length, result in sub_data.items():
             n_qubits_vals.append(n_qubits)
             circuit_length_vals.append(circuit_length)
 
-            exp_val = calculate_exp_val(counts)
+            # @TODO - if the circuit is an instance of LogicalCircuit, use get_logical_counts instead
+            exp_val = calculate_exp_val(result.get_counts())
             exp_vals.append(exp_val)
 
-    ax = plt.figure().add_subplot(projection='3d')
+    ax = plt.figure().add_subplot(projection="3d")
 
     top = np.array(exp_vals)
     bottom = np.zeros_like(top)
@@ -60,69 +64,70 @@ def circuit_scaling_bar3d(data, title=None, save=False, filename=None, save_dir=
 
     return plt
 
-def noise_model_scaling_bar(all_data, scan_keys=None, separate_plots=False):
-    for entry in all_data:
-        qc = entry["qc"]
+def noise_model_scaling_bar(all_data, scan_keys=None, separate_plots=False, save=False, filename=None, save_dir=None, show=False):
+    # @TODO - sanitize save inputs
 
-        if "density_matrix_exact" in entry and entry["density_matrix_exact"] is not None:
-            ideal_ref = entry["density_matrix_exact"]
-        elif "statevector_exact" in entry and entry["statevector_exact"] is not None:
-            ideal_ref = entry["statevector_exact"]
+    for c, circuit_sub_data in all_data.items():
+        qc = circuit_sub_data["circuit"]
+
+        if "density_matrix_exact" in circuit_sub_data and circuit_sub_data["density_matrix_exact"] is not None:
+            ideal_ref = circuit_sub_data["density_matrix_exact"]
+        elif "statevector_exact" in circuit_sub_data and circuit_sub_data["statevector_exact"] is not None:
+            ideal_ref = circuit_sub_data["statevector_exact"]
         else:
-            raise ValueError("No ideal reference found. 'density_matrix_exact' or 'statevector_exact'")
+            raise ValueError("No ideal reference found in data, either 'density_matrix_exact' or 'statevector_exact' are necessary for this analysis function.")
 
-        results = entry["results"]
+        circuit_results = circuit_sub_data["results"]
 
-        if scan_keys is not None:
-            keys = scan_keys
-        else:
-            keys = list(results[0]["error_dict"].keys())
+        # If scan_keys subset is not provided, plot all available
+        if scan_keys is None:
+            scan_keys = list(circuit_results[0]["error_dict"].keys())
 
-        for key in keys:
-            xs = [] #x-Axis
-            ys = [] #y-Axis
+        i = 0
+        fig, ax = plt.subplots()
 
-            for res in results:
-                err_dict = res["error_dict"]
-                ret = res["result"]
+        xdata = []
+        ydata = []
+        for scan_key in scan_keys:
+            for results in circuit_results:
+                error_dict = results["error_dict"]
+                result = results["result"]
 
-                # Convert ret to an object accepted by state_fidelity
-                # Handles different ways return object data is formatted in the experiment function
-                # @TODO change accordingly based on the data structure in noise_scaling_experiment
-                if isinstance(ret, (DensityMatrix, Statevector)):
-                    noisy_state = ret
-                elif hasattr(ret, "data"):                               # raw Result object
-                    noisy_state = DensityMatrix(ret.data(0))
-                elif isinstance(ret, tuple):                             # (Result, counts)
-                    result_obj = ret[0]
-                    noisy_state = DensityMatrix(result_obj.data(0)) 
+                # Construct a logical state representation object for fidelity computation
+                if hasattr(result, "data"):
+                    noisy_state = LogicalStatevector(result.get_counts())
                 else:
-                    raise TypeError("res['result'] type is not right.")
+                    raise TypeError(f"Invalid type for data result: {type(result)}.")
 
-                fidelity = state_fidelity(ideal_ref, noisy_dm)
+                fidelity = state_fidelity(ideal_ref, noisy_state)
 
-                xs.append(err_dict[key])
+                xs.append(error_dict[scan_key])
                 ys.append(fidelity)
 
-            if separate_plots:                     # one plot per key
-                plt.figure(figsize=(max(6, 0.8 * len(xs)), 4))
-                plt.bar(xs, ys)
-                plt.xlabel(key)
-                plt.ylabel("Fidelity")
-                title = getattr(qc, "name", "Circuit")
-                plt.title(f"{title}: Fidelity vs {key}")
-                plt.tight_layout()
-                plt.show()
+            if separate_plots:
+                plt.hist(xdata, ydata)
 
+                plt.title(f"Circuit {c}: Fidelity vs {scan_key}")
+
+                plt.xlabel(scan_key)
+                plt.ylabel("Fidelity")
+
+                # @TODO - format filename with index i
+                filename_i = filename
+                if save:
+                    plt.savefig(f"{save_dir}{filename_i}", dpi=500)
+                    i += 1
+                if show: plt.show()
 
         if not separate_plots:
-            title = getattr(qc, "name", "Circuit")
-            ax.set_xlabel("Noise-parameter value")
+            ax.set_xlabel("Noise parameter value")
             ax.set_ylabel("Fidelity")
-            ax.set_title(f"{title}: Fidelity vs noise parameters")
-            ax.legend(title="scan key")
-            plt.tight_layout()
-            plt.show()
+            ax.set_title(f"Circuit {c}: Fidelity vs. noise parameters")
+
+            if save: plt.savefig(f"{save_dir}{filename}", dpi=500)
+            if show: plt.show()
+
+    return plt
 
 def qec_cycle_efficiency_bar(all_data, scan_keys=None):
     for entry in all_data:
@@ -191,14 +196,3 @@ def calculate_exp_val(counts):
 
     return exp_val
 
-# @TODO - use the one in Utilities.py
-def sanitize_save_parameters(filename, save_dir, default_filename="plot", default_save_dir="./"):
-    if filename == None:
-        filename = default_filename + str(int(time.time())) + ".png"
-    elif "." not in filename:
-        filename += ".png"
-
-    if save_dir == None and filename[:2] != "./" and filename[0] != "/":
-        save_dir = default_save_dir
-    elif save_dir[-1] != "/":
-        save_dir += "/"
