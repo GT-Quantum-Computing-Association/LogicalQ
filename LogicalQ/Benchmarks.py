@@ -1,62 +1,61 @@
-import random
 import numpy as np
-import warnings
-from typing import Optional, Sequence
 
-from qiskit.quantum_info import Operator
-from qiskit.quantum_info.random import random_clifford
-from qiskit.circuit.library import UnitaryGate
+from LogicalQ.Library.Gates import clifford_gates, clifford_gates_1q, string_to_gate_class, string_to_gate_set
+
 from qiskit import QuantumCircuit, ClassicalRegister
-from qiskit.circuit.library import HGate, XGate, YGate, ZGate, SGate, TGate, CXGate, CYGate, CZGate, RXGate, RYGate, RZGate
-from qiskit_experiments.library import StandardRB, QuantumVolume
-
-# Gate sub-populations for benchmarking circuit generation
-clifford_gates = [
-    HGate, XGate, YGate, ZGate, SGate, CXGate, CYGate, CZGate
-]
-clifford_sq_gates = [
-    HGate, XGate, YGate, ZGate, SGate
-]
-pauli_gates = [
-    XGate, YGate, ZGate
-]
-sq_gates = [
-    HGate, XGate, YGate, ZGate, SGate, TGate, RXGate, RYGate, RZGate
-]
+from qiskit.circuit import Gate
+from qiskit.circuit.library import UnitaryGate
+from qiskit.quantum_info import Operator
+from qiskit_experiments.library import QuantumVolume
 
 """
     Constructs circuits composed of various Clifford gates and the full inverse, such that the composite operation is the identity if no errors occur.
 """
 def mirror_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sample=None, measure=False):
-    if n_qubits is None and qubits is None:
-        qubits = [0]
-        n_qubits = 1
-    if n_qubits is not None and qubits is None:
-        qubits = range(n_qubits)
+    if qubits is None:
+        if n_qubits is None:
+            qubits = [0]
+            n_qubits = 1
+        else:
+            qubits = list(range(n_qubits))
+    elif not hasattr(qubits, "__iter__"):
+        raise TypeError(f"Invalid type for qubits input; must either be None (if n_qubits is specified) or iterable, not {type(qubits)}.")
+    else:
+        n_qubits = len(list(qubits))
 
     if gate_sample is None:
-        gate_sample = clifford_sq_gates if n_qubits == 1 else clifford_gates
+        gate_sample = clifford_gates_1q["classes"] if n_qubits == 1 else clifford_gates["classes"]
+    else:
+        if hasattr(gate_sample, "__iter__"):
+            for g, gate in enumerate(gate_sample):
+                if isinstance(gate, str):
+                    gate = string_to_gate_class(gate)
+                elif not issubclass(gate, Gate):
+                    raise TypeError(f"Invalid type for gate input at index {g}: {gate}; must be subclass Gate")
+
+                if gate().num_qubits > n_qubits:
+                    raise ValueError(f"Gate {gate.__name__} requires more qubits than are available")
+        elif isinstance(gate_sample, str):
+            gate_sample = string_to_gate_set(gate_sample)["classes"]
+        else:
+            raise TypeError(f"Invalid type for gate_sample input: {type(gate_sample)}; must either be None (default, samples from Clifford gates), an iterable containing gate names or classes, or a string corresponding to a gate set.")
+
+    # @TODO - use custom logging
+    # if any([gate.__name__ not in clifford_gates["strings"] for gate in gate_sample]):
+    #     print(f"WARNING - gate_sample contains non-Clifford gate(s)")
 
     mb_circuit = QuantumCircuit(n_qubits)
 
-    # verify that all gates in sample are Clifford gates (necessary condition for MB to work)
-    for gate in gate_sample:
-        if gate not in clifford_gates:
-            raise ValueError(f"Gate {gate.__name__} is not a Clifford gate")
-        if gate().num_qubits > n_qubits:
-            raise ValueError(f"Gate {gate.__name__} requires more qubits than available")
+    # Random shuffled sample of gates used for circuit
+    gate_selection = np.random.choice(gate_sample, circuit_length//2)
 
-    # random shuffled sample of gates used for circuit
-    gate_sample = np.random.choice(gate_sample, circuit_length//2)
-    shuffled_gates = np.random.permutation(gate_sample)
+    # Append original gates to circuit, targeting random qubits
+    for gate in gate_selection:
+        target_qubits = list(np.random.choice(qubits, gate().num_qubits, replace=False))
+        mb_circuit.append(gate(), target_qubits)
 
-    # append original gates to circuit, targeting random qubits
-    for gate in shuffled_gates:
-        target_qubits = np.random.choice(qubits, size=gate().num_qubits, replace=False)
-        mb_circuit.append(gate(), list(target_qubits))
-
-    # append inverse of current circuit so that final state is left unchanged under no errors
-    mb_circuit = mb_circuit.compose(mb_circuit.inverse())
+    # Append inverse of current circuit so that final state is left unchanged under no errors
+    mb_circuit.compose(mb_circuit.inverse(), inplace=True)
 
     if measure: mb_circuit.measure_all()
 
@@ -65,55 +64,54 @@ def mirror_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sampl
 def randomized_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sample=None, measure=False):
     if qubits is None:
         if n_qubits is None:
-            raise ValueError("Specify at least one of n_qubits or qubits.")
-        qubits = list(range(n_qubits))
+            qubits = [0]
+            n_qubits = 1
+        else:
+            qubits = list(range(n_qubits))
+    elif not hasattr(qubits, "__iter__"):
+        raise TypeError(f"Parameter qubits must either be None (if n_qubits is specified) or iterable, not {type(qubits)}")
     else:
-        n_qubits = max(qubits) + 1
+        n_qubits = len(list(qubits))
+
+    if gate_sample is None:
+        gate_sample = clifford_gates_1q["classes"] if n_qubits == 1 else clifford_gates["classes"]
+    else:
+        if hasattr(gate_sample, "__iter__"):
+            for g, gate in enumerate(gate_sample):
+                if isinstance(gate, str):
+                    gate = string_to_gate_class(gate)
+                elif not issubclass(gate, Gate):
+                    raise TypeError(f"Invalid type for gate input at index {g}: {gate}; must be subclass of Gate")
+
+                if gate().num_qubits > n_qubits:
+                    raise ValueError(f"Gate {gate.__name__} requires more qubits than are available")
+        elif isinstance(gate_sample, str):
+            gate_sample = string_to_gate_set(gate_sample)["classes"]
+        else:
+            raise TypeError(f"Invalid type for gate_sample input: {type(gate_sample)}; must either be None (default, samples from Clifford gates), an iterable containing gate names or classes, or a string corresponding to a gate set.")
+
+    # @TODO - use custom logging
+    # if any([gate.__name__ not in clifford_gates["strings"] for gate in gate_sample]):
+    #     print(f"WARNING - gate_sample contains non-Clifford gate(s)")
 
     rb_circuit = QuantumCircuit(n_qubits)
-    rng = np.random.default_rng()
-    
-    if gate_sample is None:
-        if n_qubits == 1:
-            basis = clifford_sq_gates
-            if not basis:
-                raise ValueError("No Clifford basis defined for this qubit count.")
-            forward = list(rng.choice(basis, size=circuit_length, replace=True))
-        else:
-            # true n‑qubit Cliffords for >1 qubit
-            forward = [random_clifford(n_qubits) for _ in range(circuit_length)]
-    else:
-        for item in gate_sample:
-            # get a name for messages
-            name = item.__name__ if isinstance(item, type) else item.__class__.__name__
-            # warn if it’s not in your 1‑qubit basis
-            if item not in clifford_gates:
-                warnings.warn(f"Gate {name} is not a Clifford gate", UserWarning)
-            # figure out how many qubits it acts on
-            needed = item().num_qubits if isinstance(item, type) else item.num_qubits
-            if needed > n_qubits:
-                raise ValueError(f"Gate {name} requires more qubits than available")
 
-        forward = [random.choice(gate_sample) for _ in range(circuit_length)]
+    # Random shuffled sample of gates used for circuit
+    gate_selection = np.random.choice(gate_sample, circuit_length-1)
 
-    for gate in forward:
-        # if it's a Gate class, instantiate it
-        if isinstance(gate, type):
-            inst = gate()
-        else:
-            # otherwise assume it's already a Clifford object
-            inst = gate.to_instruction()
-            
-        rb_circuit.append(inst, qubits)
+    # Append original gates to circuit, targeting random qubits
+    for gate in gate_selection:
+        gate_obj = gate()
+        target_qubits = list(np.random.choice(qubits, gate_obj.num_qubits, replace=False))
+        rb_circuit.append(gate_obj, target_qubits)
 
-    # Compose single net inverse Clifford and append
-    matrix = Operator(rb_circuit).data
-    inv_matrix = np.linalg.inv(matrix)
-    inv_gate = UnitaryGate(inv_matrix, label="U_inv")
-    rb_circuit.append(inv_gate, qubits)
+    # @TODO - find a better way of doing this
+    # Construct a single inverse gate and append (really only works if the inverse gate is a basis gate)
+    rb_circuit_inverse_matrix = Operator(rb_circuit.inverse()).data
+    rb_circuit_inverse_gate = UnitaryGate(rb_circuit_inverse_matrix)
+    rb_circuit.append(rb_circuit_inverse_gate, qubits)
 
-    if measure:
-        rb_circuit.measure_all()
+    if measure: rb_circuit.measure_all()
 
     return rb_circuit
 
@@ -126,8 +124,9 @@ def randomized_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_s
         seed (int): Random seed for reproducibility. Defaults to 1234.
         backend: Backend to be used for simulation.
 """
-def quantum_volume(n_qubits=1, trials=100, seed=1234, backend=None):
-    qv_experiment = QuantumVolume(num_qubits=n_qubits, trials=1, seed=seed, simulation_backend=backend)
+def quantum_volume(n_qubits=1, trials=100, seed=1234):
+    qubits = list(range(n_qubits))
+    qv_experiment = QuantumVolume(physical_qubits=qubits, trials=1, seed=seed)
 
     qv_circuits = qv_experiment.circuits()
 
@@ -139,7 +138,7 @@ def quantum_volume(n_qubits=1, trials=100, seed=1234, backend=None):
     Parameters:
         statevector: Arbitrary input state
 """
-def generate_quantum_teleportation_circuit(statevector, barriers=False):
+def quantum_teleportation(statevector, barriers=False):
     creg0 = ClassicalRegister(1, 'cr0')
     creg1 = ClassicalRegister(1, 'cr1')
     creg2 = ClassicalRegister(1, 'cr2')
@@ -147,7 +146,7 @@ def generate_quantum_teleportation_circuit(statevector, barriers=False):
     qc = QuantumCircuit(3, creg0, creg1, creg2)
 
     # Initialize state to be teleported
-    qc.initialize(statevector, 0)
+    qc.initialize(statevector, [0])
     if barriers: qc.barrier()
 
     # Entangled pair between qubits 1 and 2
@@ -201,3 +200,4 @@ def n_qubit_ghz_generation(n_qubits=3, barriers=False):
 
 # @TODO - implement other methods of benchmarking
 #       - implement methods as described in https://github.com/CQCL/quantinuum-hardware-specifications/blob/main/notebooks/Loading%20Experimental%20Data.ipynb
+
