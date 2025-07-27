@@ -549,7 +549,7 @@ class LogicalCircuitGeneral(QuantumCircuit):
                     self.cbit_not(self.pauli_frame_cregs[q][1])
 
 
-    def measure(self, logical_qubit_indices, cbit_indices, with_error_correction=True):
+    def measure(self, logical_qubit_indices, cbit_indices, with_error_correction=True, meas_basis='Z'):
         if not hasattr(logical_qubit_indices, "__iter__"):
             raise ValueError("Logical qubit indices must be an iterable!")
 
@@ -560,42 +560,55 @@ class LogicalCircuitGeneral(QuantumCircuit):
             raise ValueError("Number of qubits should equal number of classical bits")
 
         for q, c in zip(logical_qubit_indices, cbit_indices):
+
+            meas_inds = []
+
+            #Prepares logical qreg for measurement and collects indices that will determine the logical state
+            if meas_basis == 'X':
+                for i in range(self.n_physical_qubits):
+                    if self.LogicalXVector[0][0][i] == 1.:
+                        super().h(self.logical_qregs[q][i])
+                        meas_inds.append(i)
+                    if self.LogicalXVector[1][0][i] == 1.:
+                        meas_inds.append(i)
+            
+            elif meas_basis == 'Z':
+                for i in range(self.n_physical_qubits):
+                    if self.LogicalZVector[1][0][i] == 1.:
+                        meas_inds.append(i)
+
+            elif meas_basis == 'Y':
+                for i in range(self.n_physical_qubits):
+                    if self.LogicalXVector[0][0][i] == 1. and self.LogicalZVector[1][0][i] == 1.:
+                        super().sdg(self.logical_qregs[q][i])
+                        super().h(self.logical_qregs[q][i])
+                        meas_inds.append(i)
+                    elif self.LogicalXVector[0][0][i] == 1.:
+                        super().h(self.logical_qregs[q][i])
+                        meas_inds.append(i)
+                    elif int(self.LogicalXVector[1][0][i]) ^ int(self.LogicalZVector[1][0][i]):
+                        meas_inds.append(i)
+
+
             # Measurement of state
             for n in range(self.n_physical_qubits):
-                # super().measure(self.logical_qregs[q][n], self.final_measurement_cregs[q][n])
                 super().append(Measure(), [self.logical_qregs[q][n]], [self.final_measurement_cregs[q][n]], copy=False)
 
-            # @TODO - use LogicalXVector instead
-            z_vec_inds = []
-            for i, bit in enumerate(self.LogicalZVector[1][0]):
-                if bit == 1.:
-                    z_vec_inds.append(i)
-            with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][x] for x in z_vec_inds])):
+            #Determining logical state
+            with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][m] for m in meas_inds])):
                 self.set_cbit(self.output_creg[c], 1)
 
+            #Apply pauli frame correction
             if with_error_correction:
-                # Final syndrome
-                # for n in range(self.n_ancilla_qubits):
-                #     stabilizer = self.stabilizer_tableau[self.z_stabilizers[n]]
-                #     s_indices = []
-                #     for i in range(len(stabilizer)):
-                #         if stabilizer[i] == 'Z':
-                #             s_indices.append(i)
-
-                #     with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][z] for z in s_indices])):
-                #         self.set_cbit(self.curr_syndrome_cregs[q][n], 1)
-
-                # # Final syndrome diff
-                # for n in range(self.n_ancilla_qubits):
-                #     with super().if_test(self.cbit_xor([self.curr_syndrome_cregs[q][n], self.prev_syndrome_cregs[q][self.z_stabilizers[n]]])) as _else:
-                #         self.set_cbit(self.unflagged_syndrome_diff_cregs[q][self.z_stabilizers[n]], 1)
-                #     with _else:
-                #         self.set_cbit(self.unflagged_syndrome_diff_cregs[q][self.z_stabilizers[n]], 0)
-
-                # Final correction
-                #self.apply_decoding([q], self.z_stabilizers, with_flagged=False)
-                with super().if_test(expr.lift(self.pauli_frame_cregs[q][1])):
-                    self.cbit_not(self.output_creg[c])
+                if meas_basis == 'X':
+                    with super().if_test(expr.lift(self.pauli_frame_cregs[q][0])):
+                        self.cbit_not(self.output_creg[c])
+                elif meas_basis == 'Z':
+                    with super().if_test(expr.lift(self.pauli_frame_cregs[q][1])):
+                        self.cbit_not(self.output_creg[c])
+                elif meas_basis == 'Y':
+                    with super().if_test(expr.bit_xor(self.pauli_frame_cregs[q][0], self.pauli_frame_cregs[q][1])):
+                        self.cbit_not(self.output_creg[c])
 
     def measure_all(self, with_error_correction=True):
         self.measure(range(self.n_logical_qubits), range(self.n_logical_qubits), with_error_correction=with_error_correction)
