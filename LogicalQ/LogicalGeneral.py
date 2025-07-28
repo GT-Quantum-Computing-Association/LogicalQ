@@ -610,8 +610,8 @@ class LogicalCircuitGeneral(QuantumCircuit):
                     with super().if_test(expr.bit_xor(self.pauli_frame_cregs[q][0], self.pauli_frame_cregs[q][1])):
                         self.cbit_not(self.output_creg[c])
 
-    def measure_all(self, with_error_correction=True):
-        self.measure(range(self.n_logical_qubits), range(self.n_logical_qubits), with_error_correction=with_error_correction)
+    def measure_all(self, with_error_correction=True, meas_basis='Z'):
+        self.measure(range(self.n_logical_qubits), range(self.n_logical_qubits), with_error_correction=with_error_correction, meas_basis=meas_basis)
 
     def get_logical_output_counts(self, outputs, logical_qubit_indices=None):
         if logical_qubit_indices == None:
@@ -621,7 +621,7 @@ class LogicalCircuitGeneral(QuantumCircuit):
         for n in range(len(outputs)):
             output = ''
             for l in logical_qubit_indices:
-                output = outputs[n][self.n_logical_qubits-1-l] + output
+                output += outputs[n][self.n_logical_qubits-1-l]
 
             if output not in counts:
                 counts[output] = 1
@@ -682,6 +682,22 @@ class LogicalCircuitGeneral(QuantumCircuit):
                 super().h(self.logical_qregs[t][:])
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical Hadamard gate")
+        
+
+        #Switch X and Z bits in Pauli frame
+        for t in targets:
+            with super().if_test(expr.bit_xor(self.pauli_frame_cregs[t][0], self.pauli_frame_cregs[t][1])) as _else:
+                self.set_cbit(self.pauli_frame_cregs[t][0], 1)
+            with _else:
+                self.set_cbit(self.pauli_frame_cregs[t][0], 0)
+            with super().if_test(expr.bit_xor(self.pauli_frame_cregs[t][0], self.pauli_frame_cregs[t][1])) as _else:
+                self.set_cbit(self.pauli_frame_cregs[t][1], 1)
+            with _else:
+                self.set_cbit(self.pauli_frame_cregs[t][1], 0)
+            with super().if_test(expr.bit_xor(self.pauli_frame_cregs[t][0], self.pauli_frame_cregs[t][1])) as _else:
+                self.set_cbit(self.pauli_frame_cregs[t][0], 1)
+            with _else:
+                self.set_cbit(self.pauli_frame_cregs[t][0], 0)
 
     def x(self, *targets):
         """
@@ -756,6 +772,10 @@ class LogicalCircuitGeneral(QuantumCircuit):
 
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical S gate")
+        
+        for t in targets:
+            with super().if_test(expr.lift(self.pauli_frame_cregs[t][1])):
+                self.cbit_not(self.pauli_frame_cregs[t][0])
 
     def sdg(self, *targets, method="Coherent_Feedback"):
         """
@@ -795,6 +815,10 @@ class LogicalCircuitGeneral(QuantumCircuit):
 
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical S^dagger gate")
+        
+        for t in targets:
+            with super().if_test(expr.lift(self.pauli_frame_cregs[t][1])):
+                self.cbit_not(self.pauli_frame_cregs[t][0])
 
     def t(self, *targets, method="Coherent_Feedback"):
         """
