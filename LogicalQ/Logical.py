@@ -1674,8 +1674,79 @@ class LogicalStatevector(Statevector):
             raise ValueError(f"'{output}' is not a valid LogicalStatevector draw method, please choose from 'text', 'latex', or 'latex_source'")
 
 class LogicalDensityMatrix(DensityMatrix):
-    def __init__(self, data, dims=None):
-        super().__init__(data=data, dims=dims)
+    def __init__(self, data, n_logical_qubits=None, label=None, stabilizer_tableau=None, dims=None):
+        if isinstance(data, LogicalCircuit):
+            self.logical_circuit = copy.deepcopy(data)
+            self.n_logical_qubits = self.logical_circuit.n_logical_qubits
+            self.label = self.logical_circuit.label
+            self.stabilizer_tableau = self.logical_circuit.stabilizer_tableau
 
-        raise NotImplementedError("LogicalDensityMatrix has not been fully implemented yet!")
+            # Circuit-to-instruction conversions can't handle QEC (due to ControlFlowOps and measurements),
+            # nor can they handle other BoxOp's that may appear in the circuit (such as logical gates)
+            pm_unbox = PassManager([ClearQEC(), UnBox()])
+            while "box" in self.logical_circuit.count_ops():
+                self.logical_circuit = pm_unbox.run(self.logical_circuit)
+
+            # Circuit-to-instruction conversions can't handle other measurements either
+            self.logical_circuit.remove_final_measurements()
+
+            # First, construct a DensityMatrix object for the full system
+            ldm_full = DensityMatrix(data=self.logical_circuit, dims=dims)
+
+            # Then, partial trace over the non-data qubits to obtain a new DensityMatrix
+            non_data_qubits = list(range(self.label[0], self.logical_circuit.num_qubits))
+            ldm_partial = partial_trace(ldm_full, non_data_qubits)
+
+            super().__init__(data=ldm_partial.data, dims=dims)
+        elif isinstance(data, QuantumCircuit):
+            # @TODO - determine a good way to handle one (or both) of the two possible cases:
+            #           1. QuantumCircuit was actually a LogicalCircuit that was casted at some point and thus should be treated like a LogicalCircuit
+            #           2. QuantumCircuit is a regular physical circuit and should first be converted into a LogicalCircuit
+
+            raise NotImplementedError("LogicalDensityMatrix construction from QuantumCircuit is not yet supported; please provide a LogicalCircuit or an amplitude iterable")
+        elif hasattr(data, "__iter__"):
+            if n_logical_qubits and label and stabilizer_tableau:
+                self.logical_circuit = None
+                self.n_logical_qubits = n_logical_qubits
+                self.label = label
+                self.stabilizer_tableau = stabilizer_tableau
+
+                super().__init__(data=data, dims=dims)
+            else:
+                raise ValueError("LogicalDensityMatrix construction from an amplitude iterable requires n_logical_qubits, label, and stabilizer_tableau to all be specified")
+        else:
+            raise TypeError(f"Object of type {type(data)} is not a valid data input for LogicalDensityMatrix")
+
+        # @TODO
+        if self.n_logical_qubits > 1:
+            raise NotImplementedError("LogicalDensityMatrix does not yet support circuits with multiple logical qubits")
+
+        # @TODO - how will this be obtained for a logical density matrix?
+        # Defer computation until necessary
+        self._logical_decomposition = None
+
+        print("WARNING - LogicalDensityMatrix has not been fully implemented yet!")
+
+    # @TODO - implement
+    @property
+    def logical_decomposition(self, atol=1E-13):
+        raise NotImplementedError()
+
+    def __repr__(self, basis="logical"):
+        if basis == "logical":
+            print("WARNING - Logical basis representation is not yet implemented, using physical representation instead")
+            data = self.data
+
+            # data = self.logical_decomposition
+        elif basis == "physical":
+            data = self.data
+        else:
+            raise ValueError(f"'{basis}' is not a valid basis for LogicalDensityMatrix string representation")
+
+        prefix = "DensityMatrix("
+        pad = len(prefix) * " "
+        return (
+            f"{prefix}{np.array2string(data, separator=', ', prefix=prefix)},\n"
+            f"{pad}dims={self._op_shape.dims_l()})"
+        )
 
