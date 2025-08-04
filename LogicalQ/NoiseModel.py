@@ -1,7 +1,8 @@
-from qiskit_aer.noise import NoiseModel, depolarizing_error, thermal_relaxation_error, ReadoutError
+from qiskit_aer.noise import NoiseModel, depolarizing_error, ReadoutError
 
-gates_1q = ["x", "y", "z", "h", "s", "t", "rx", "ry", "rz"]
-gates_2q = ["cx", "cy", "cz", "ch"]
+from qiskit.circuit.library import Measure
+
+from LogicalQ.Library.Gates import gates_1q, gates_2q
 
 # General function for constructing a Qiskit NoiseModel
 def construct_noise_model(basis_gates, n_qubits=None, qubits=None, ignore_qubits=None, **noise_params):
@@ -33,14 +34,14 @@ def construct_noise_model(basis_gates, n_qubits=None, qubits=None, ignore_qubits
     if "depolarizing_error_1q" in noise_params:
         depolarizing_error_1q = depolarizing_error(noise_params[f"depolarizing_error_1q"], 1)
         for q in used_qubits:
-            noise_model.add_quantum_error(depolarizing_error_1q, gates_1q, [q], warnings=False)
+            noise_model.add_quantum_error(depolarizing_error_1q, [gate for gate in basis_gates if type(gate) in gates_1q], [q], warnings=False)
 
     if "depolarizing_error_2q" in noise_params:
         depolarizing_error_2q = depolarizing_error(noise_params[f"depolarizing_error_2q"], 2)
         for q1 in used_qubits:
             for q2 in used_qubits:
                 if q1 != q2:
-                    noise_model.add_quantum_error(depolarizing_error_2q, gates_2q, [q1, q2], warnings=False)
+                    noise_model.add_quantum_error(depolarizing_error_2q, [gate for gate in basis_gates if type(gate) in gates_2q], [q1, q2], warnings=False)
 
     # Readout errors: models errors in qubit measurement.
     if "readout_error_01" in noise_params:
@@ -49,7 +50,7 @@ def construct_noise_model(basis_gates, n_qubits=None, qubits=None, ignore_qubits
 
         readout_error = ReadoutError([[1 - p1given0, p1given0], [p0given1, 1 - p0given1]])
         for q in used_qubits:
-            noise_model.add_quantum_error(readout_error, [q], warnings=False)
+            noise_model.add_quantum_error(readout_error, [Measure], [q], warnings=False)
 
     # Thermal relaxation error: Error from releasing energy and settling back to the ground state
     if "thermal_relaxation_error" in noise_params:
@@ -117,8 +118,8 @@ def construct_noise_model_QuantinuumH1_1(n_qubits=None, qubits=None, ignore_qubi
     basis_gates = ["u", "rz", "zz", "rzz"] # @TODO - missing RXXYYZZ, not sure if ZZ is valid, and need to verify that angle conventions are correct
 
     noise_params = {
-        "depolarizing_error_1q": 1.80e-5, # single-qubit fault probability
-        "depolarizing_error_2q": 9.73e-4, # two-qubit fault probability
+        "depolarizing_error_1q": 0.46 * 1.80e-5, # single-qubit fault probability
+        "depolarizing_error_2q": 0.57 * 9.73e-4, # two-qubit fault probability
         "readout_error_0|1": 1.22e-3,
         "readout_error_1|0": 3.43e-3,
         "crosstalk_measure": 1.45e-5,
@@ -138,8 +139,8 @@ def construct_noise_model_QuantinuumH2_1(n_qubits=None, qubits=None, ignore_qubi
     basis_gates = ["u", "rz", "zz", "rzz"]
 
     noise_params = {
-        "depolarizing_error_1q": 1.89e-5, # single-qubit fault probability
-        "depolarizing_error_2q": 1.05e-3, # two-qubit fault probability
+        "depolarizing_error_1q": 0.46 * 1.89e-5, # single-qubit fault probability
+        "depolarizing_error_2q": 0.57 * 1.05e-3, # two-qubit fault probability
         "readout_error_0|1": 6.00e-4,
         "readout_error_1|0": 1.39e-3,
         "crosstalk_measure": 6.65e-6,
@@ -159,8 +160,8 @@ def construct_noise_model_QuantinuumH2_2(n_qubits=None, qubits=None, ignore_qubi
     basis_gates = ["u", "rz", "zz", "rzz"]
 
     noise_params = {
-        "depolarizing_error_1q": 7.30e-5, # single-qubit fault probability
-        "depolarizing_error_2q": 1.29e-3, # two-qubit fault probability
+        "depolarizing_error_1q": 0.46 * 7.30e-5, # single-qubit fault probability
+        "depolarizing_error_2q": 0.47 * 1.29e-3, # two-qubit fault probability
         "readout_error_0|1": 9.00e-4,
         "readout_error_1|0": 1.80e-3,
         "crosstalk_measure": 8.80e-6,
