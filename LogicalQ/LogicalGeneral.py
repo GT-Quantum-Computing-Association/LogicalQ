@@ -49,6 +49,7 @@ class LogicalCircuitGeneral(QuantumCircuit):
         self.prev_syndrome_cregs = []
         self.unflagged_syndrome_diff_cregs = []
         self.pauli_frame_cregs = []
+        self.logical_op_meas_cregs = []
         self.final_measurement_cregs = []
 
         self.qreg_lists = [
@@ -62,6 +63,7 @@ class LogicalCircuitGeneral(QuantumCircuit):
             self.prev_syndrome_cregs,
             self.unflagged_syndrome_diff_cregs,
             self.pauli_frame_cregs,
+            self.logical_op_meas_cregs,
             self.final_measurement_cregs,
         ]
 
@@ -102,6 +104,8 @@ class LogicalCircuitGeneral(QuantumCircuit):
             # Classical bits needed to track the Pauli Frame
             pauli_frame_creg_i = ClassicalRegister(2, name=f"cpauli_frame{i}")
             # Classical bits needed to take measurements of logical operation qubits
+            logical_op_meas_creg_i = ClassicalRegister(2, name=f"clogical_op_meas{i}")
+            # Classical bits needed to take measurements of logical operation qubits
             final_measurement_creg_i = ClassicalRegister(self.n_physical_qubits, name=f"cfinal_meas{i}")
 
             # Add new registers to storage lists
@@ -113,6 +117,7 @@ class LogicalCircuitGeneral(QuantumCircuit):
             self.prev_syndrome_cregs.append(prev_syndrome_creg_i)
             self.unflagged_syndrome_diff_cregs.append(unflagged_syndrome_diff_creg_i)
             self.pauli_frame_cregs.append(pauli_frame_creg_i)
+            self.logical_op_meas_cregs.append(logical_op_meas_creg_i)
             self.final_measurement_cregs.append(final_measurement_creg_i)
 
             # Add new registers to quantum circuit
@@ -124,6 +129,7 @@ class LogicalCircuitGeneral(QuantumCircuit):
             super().add_register(prev_syndrome_creg_i)
             super().add_register(unflagged_syndrome_diff_creg_i)
             super().add_register(pauli_frame_creg_i)
+            super().add_register(logical_op_meas_creg_i)
             super().add_register(final_measurement_creg_i)
 
     ####################################
@@ -684,7 +690,7 @@ class LogicalCircuitGeneral(QuantumCircuit):
             raise ValueError(f"'{method}' is not a valid method for the logical Hadamard gate")
         
 
-        #Switch X and Z bits in Pauli frame
+        #Pauli frame update
         for t in targets:
             with super().if_test(expr.bit_xor(self.pauli_frame_cregs[t][0], self.pauli_frame_cregs[t][1])) as _else:
                 self.set_cbit(self.pauli_frame_cregs[t][0], 1)
@@ -747,7 +753,7 @@ class LogicalCircuitGeneral(QuantumCircuit):
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
             targets = targets[0]
 
-        if method == "LCU_Corrected":
+        if method == "LCU_Corrected" or method == "T_Utility":
             for t in targets:
 
                 super().h(self.logical_op_qregs[t][0])
@@ -773,9 +779,11 @@ class LogicalCircuitGeneral(QuantumCircuit):
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical S gate")
         
-        for t in targets:
-            with super().if_test(expr.lift(self.pauli_frame_cregs[t][1])):
-                self.cbit_not(self.pauli_frame_cregs[t][0])
+        #Pauli frame update
+        if method != "T_Utility":
+            for t in targets:
+                with super().if_test(expr.lift(self.pauli_frame_cregs[t][1])):
+                    self.cbit_not(self.pauli_frame_cregs[t][0])
 
     def sdg(self, *targets, method="Coherent_Feedback"):
         """
@@ -789,7 +797,7 @@ class LogicalCircuitGeneral(QuantumCircuit):
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
             targets = targets[0]
 
-        if method == "LCU_Corrected":
+        if method == "LCU_Corrected" or method == "T_Utility":
             for t in targets:
 
                 super().h(self.logical_op_qregs[t][0])
@@ -816,9 +824,11 @@ class LogicalCircuitGeneral(QuantumCircuit):
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical S^dagger gate")
         
-        for t in targets:
-            with super().if_test(expr.lift(self.pauli_frame_cregs[t][1])):
-                self.cbit_not(self.pauli_frame_cregs[t][0])
+        #Pauli frame update
+        if method != "T_Utility":
+            for t in targets:
+                with super().if_test(expr.lift(self.pauli_frame_cregs[t][1])):
+                    self.cbit_not(self.pauli_frame_cregs[t][0])
 
     def t(self, *targets, method="Coherent_Feedback"):
         """
@@ -836,7 +846,12 @@ class LogicalCircuitGeneral(QuantumCircuit):
             for t in targets:
 
                 super().h(self.logical_op_qregs[t][0])
-                super().t(self.logical_op_qregs[t][0])
+
+                with super().if_test((self.pauli_frame_cregs[t][1], 1)) as _else:
+                    super().tdg(self.logical_op_qregs[t][0])
+                with _else:
+                    super().t(self.logical_op_qregs[t][0])
+                
                 super().h(self.logical_op_qregs[t][0])
                 super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
                 super().h(self.logical_op_qregs[t][0])
@@ -845,12 +860,21 @@ class LogicalCircuitGeneral(QuantumCircuit):
                 super().reset(self.logical_op_qregs[t][0])
 
                 with super().if_test((self.logical_op_meas_cregs[t][0], 1)):
-                    self.s(t, method='LCU_corrected')
+                    #T Utility method performs the gate without Pauli frame updates in order to match the T gate protocol
+                    with super().if_test((self.pauli_frame_cregs[t][1], 1)) as _else:
+                        self.sdg(t, method='T_Utility')
+                    with _else:
+                        self.s(t, method='T_Utility')
+                    
 
         elif method == "Coherent_Feedback":
             for t in targets:
 
-                super().compose(self.LogicalTCircuit_CF, self.logical_qregs[t][:] + self.logical_op_qregs[t][:], inplace=True)
+                #If the Z Pauli frame bit is 1, perform T^dagger instead of T
+                with super().if_test(expr.lift(self.pauli_frame_cregs[t][1])) as _else:
+                    super().compose(self.LogicalTdgCircuit_CF, self.logical_qregs[t][:] + self.logical_op_qregs[t][:], inplace=True)
+                with _else:
+                    super().compose(self.LogicalTCircuit_CF, self.logical_qregs[t][:] + self.logical_op_qregs[t][:], inplace=True)
 
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical T gate")
@@ -871,7 +895,12 @@ class LogicalCircuitGeneral(QuantumCircuit):
                 for t in targets:
 
                     super().h(self.logical_op_qregs[t][0])
-                    super().tdg(self.logical_op_qregs[t][0])
+
+                    with super().if_test((self.pauli_frame_cregs[t][1], 1)) as _else:
+                        super().t(self.logical_op_qregs[t][0])
+                    with _else:
+                        super().tdg(self.logical_op_qregs[t][0])
+                    
                     super().h(self.logical_op_qregs[t][0])
                     super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
                     super().h(self.logical_op_qregs[t][0])
@@ -880,12 +909,21 @@ class LogicalCircuitGeneral(QuantumCircuit):
                     super().reset(self.logical_op_qregs[t][0])
 
                     with super().if_test((self.logical_op_meas_cregs[t][0], 1)):
-                        self.sdg(t, method='LCU_corrected')
+                        #T Utility method performs the gate without Pauli frame updates in order to match the T^dagger gate protocol
+                        with super().if_test((self.pauli_frame_cregs[t][1], 1)) as _else:
+                            self.s(t, method='T_Utility')
+                        with _else:
+                            self.sdg(t, method='T_Utility')
 
             elif method == "Coherent_Feedback":
                 for t in targets:
 
-                    super().compose(self.LogicalTdgCircuit_CF, self.logical_qregs[t][:] + self.logical_op_qregs[t][:], inplace=True)
+                    #If the Z Pauli frame bit is 1, perform T instead of T^dagger
+                    with super().if_test(expr.lift(self.pauli_frame_cregs[t][1])) as _else:
+                        super().compose(self.LogicalTCircuit_CF, self.logical_qregs[t][:] + self.logical_op_qregs[t][:], inplace=True)
+                    with _else:
+                        super().compose(self.LogicalTdgCircuit_CF, self.logical_qregs[t][:] + self.logical_op_qregs[t][:], inplace=True)
+
 
             else:
                 raise ValueError(f"'{method}' is not a valid method for the logical T^dagger gate")
@@ -917,6 +955,13 @@ class LogicalCircuitGeneral(QuantumCircuit):
                 super().cx(self.logical_qregs[control][:], self.logical_qregs[t][:])
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical CX gate")
+        
+        #Pauli frame update
+        for t in targets:
+            with super().if_test(expr.lift(self.pauli_frame_cregs[t][0])):
+                self.cbit_not(self.pauli_frame_cregs[control][0])
+            with super().if_test(expr.lift(self.pauli_frame_cregs[control][1])):
+                self.cbit_not(self.pauli_frame_cregs[t][1])
 
     def cz(self, control, *_targets, method="Ancilla_Assisted"):
         """
@@ -946,6 +991,13 @@ class LogicalCircuitGeneral(QuantumCircuit):
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical CZ gate")
         
+        #Pauli frame update
+        for t in targets:
+            with super().if_test(expr.lift(self.pauli_frame_cregs[t][1])):
+                self.cbit_not(self.pauli_frame_cregs[control][0])
+            with super().if_test(expr.lift(self.pauli_frame_cregs[control][1])):
+                self.cbit_not(self.pauli_frame_cregs[t][0])
+        
     def cy(self, control, *_targets, method="Ancilla_Assisted"):
         """
         Logical Controlled-PauliY gate
@@ -973,9 +1025,19 @@ class LogicalCircuitGeneral(QuantumCircuit):
         elif method == "Transversal_Uniform":
             for t in targets:
 
-                super().cx(self.logical_qregs[control][:], self.logical_qregs[t][:])
+                super().cy(self.logical_qregs[control][:], self.logical_qregs[t][:])
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical CY gate")
+
+        #Pauli frame update
+        for t in targets:
+            with super().if_test(expr.lift(self.pauli_frame_cregs[control][1])):
+                self.cbit_not(self.pauli_frame_cregs[t][0])
+                self.cbit_not(self.pauli_frame_cregs[t][1])
+            with super().if_test(self.cbit_xor(self.pauli_frame_cregs[control][:] + self.pauli_frame_cregs[t][:])) as _else:
+                self.set_cbit(self.pauli_frame_cregs[control][0], 1)
+            with _else:
+                self.set_cbit(self.pauli_frame_cregs[control][0], 0)
 
     def mcmt(self, gate, controls, targets):
         """
