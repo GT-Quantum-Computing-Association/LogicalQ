@@ -22,6 +22,7 @@ from qiskit import transpile
 from qiskit.transpiler import PassManager
 
 from qiskit.providers import Backend
+from qiskit_ibm_runtime import QiskitRuntimeService
 from pytket.extensions.qiskit.tket_backend import TketBackend
 from qbraid.runtime.native.device import QbraidDevice
 
@@ -61,12 +62,12 @@ def execute_circuits(circuit_input, target=None, backend=None, noise_model=None,
                 # @TODO - actually, this may not be necessary
                 raise ValueError("One of backend, noise_model, or noise_params must be provided")
     elif coupling_map is not None:
-        print("WARNING - The Qiskit transpiler is likely to complain about the presence of both backend and coupling_map")
+        print("WARNING - The Qiskit transpiler is likely to complain about the presence of both backend and coupling_map; this should only be done if the backend is a simulator")
 
     if isinstance(backend, str):
         if backend == "aer_simulator":
             if target is None:
-                if coupling_map == "fully-coupled":
+                if coupling_map == "fully_coupled":
                     # Create a fully-coupled map by default since we don't care about non-fully-coupled hardware modalities
                     coupling_map = [list(pair) for pair in itertools.product(range(max_num_qubits), range(max_num_qubits))]
 
@@ -89,17 +90,18 @@ def execute_circuits(circuit_input, target=None, backend=None, noise_model=None,
             #         Tket or Qbraid, not just IBM
 
             service = QiskitRuntimeService()
-            backend = service.get_backend(backend)
+            backend = service.backend(backend)
     elif isinstance(backend, (AerSimulator, Backend, TketBackend, QbraidDevice)):
         # @TODO - handle this case better
         backend = backend
     else:
         raise TypeError(f"backend must be None, 'aer_simulator', the name of a backend, or an instance of AerSimulator or Backend, not type {type(backend)}")
 
+    # @TODO - non-Qiskit backend instances may require another AerSimulator backend to be used for transpilation
     # Transpile circuit
     # Method defaults to optimization off to preserve form of benchmarking circuit and full QEC
     if target is None:
-        circuits_transpiled = transpile(circuits, backend=backend, optimization_level=optimization_level)
+        circuits_transpiled = transpile(circuits, backend=backend, optimization_level=optimization_level, coupling_map=coupling_map)
     else:
         # @TODO - is it fine to specify both target and backend, given that target has parameters which backend specifies,
         #         and backend is actually constructed with target? at least, what is the expected behavior in such a scenario?
@@ -358,7 +360,7 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
     else:
         start = time.perf_counter()
 
-        for c, circuit in circuit_input:
+        for c, circuit in enumerate(circuit_input):
             density_matrix_exact = None # Default exact reference
             statevector_exact = None # Alternative exact reference, only used if exact DensityMatrix computation fails
             if compute_exact:
