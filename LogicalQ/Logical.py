@@ -1519,6 +1519,19 @@ class LogicalStatevector(Statevector):
             #           2. QuantumCircuit is a regular physical circuit and should first be converted into a LogicalCircuit
 
             raise NotImplementedError("LogicalStatevector construction from QuantumCircuit is not yet supported; please provide a LogicalCircuit or an amplitude iterable")
+        elif isinstance(data, LogicalStatevector):
+            raise TypeError("Cannot construct a LogicalStatevector from another LogicalStatevector in this way; a deepcopy may be more appropriate for this purpose")
+        elif isinstance(data, Statevector):
+            if n_logical_qubits and label and stabilizer_tableau:
+                self.logical_circuit = None
+                self.n_logical_qubits = n_logical_qubits
+                self.label = label
+                self.stabilizer_tableau = stabilizer_tableau
+
+                # @TODO - there's probably a smarter way of doing this
+                super().__init__(data=data._data, dims=dims)
+            else:
+                raise ValueError("LogicalStatevector construction from a Statevector requires n_logical_qubits, label, and stabilizer_tableau to all be specified")
         elif hasattr(data, "__iter__"):
             if n_logical_qubits and label and stabilizer_tableau:
                 self.logical_circuit = None
