@@ -8,7 +8,7 @@ import numpy as np
 from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor as Pool
 
-from .Logical import LogicalCircuit, LogicalStatevector
+from .Logical import LogicalCircuit, LogicalStatevector, LogicalDensityMatrix
 from .NoiseModel import construct_noise_model
 from .Transpilation.UnBox import UnBox
 
@@ -48,6 +48,8 @@ def execute_circuits(circuit_input, target=None, backend=None, noise_model=None,
             circuits[c] = pm.run(circuits[c])
 
     max_num_qubits = max([circuit.num_qubits for circuit in circuits])
+    if coupling_map is None:
+        coupling_map = "fully_coupled"
 
     # Resolve backend
     if backend is None:
@@ -64,6 +66,7 @@ def execute_circuits(circuit_input, target=None, backend=None, noise_model=None,
     elif coupling_map is not None:
         print("WARNING - The Qiskit transpiler is likely to complain about the presence of both backend and coupling_map; this should only be done if the backend is a simulator")
 
+    print("target:", target)
     if isinstance(backend, str):
         if backend == "aer_simulator":
             if target is None:
@@ -83,7 +86,6 @@ def execute_circuits(circuit_input, target=None, backend=None, noise_model=None,
 
                 # @TODO - is it fine to specify both target and noise model, given that target includes some gate errors?
                 #         at least, what is the expected behavior in such a scenario?
-
                 backend = AerSimulator(method=method, target=target, noise_model=noise_model)
         else:
             # @TODO - handle this case better, e.g. by checking whether access to the device exists through
@@ -97,10 +99,13 @@ def execute_circuits(circuit_input, target=None, backend=None, noise_model=None,
     else:
         raise TypeError(f"backend must be None, 'aer_simulator', the name of a backend, or an instance of AerSimulator or Backend, not type {type(backend)}")
 
+    print(circuits[0].num_qubits)
+
     # @TODO - non-Qiskit backend instances may require another AerSimulator backend to be used for transpilation
     # Transpile circuit
     # Method defaults to optimization off to preserve form of benchmarking circuit and full QEC
     if target is None:
+        # circuits_transpiled = transpile(circuits, optimization_level=optimization_level, coupling_map=coupling_map)
         circuits_transpiled = transpile(circuits, backend=backend, optimization_level=optimization_level, coupling_map=coupling_map)
     else:
         # @TODO - is it fine to specify both target and backend, given that target has parameters which backend specifies,
@@ -110,6 +115,12 @@ def execute_circuits(circuit_input, target=None, backend=None, noise_model=None,
     results = []
     for circuit_transpiled in circuits_transpiled:
         result = backend.run([circuit_transpiled], shots=shots, memory=memory).result()
+
+        # sampler = SamplerV2(mode=backend)
+        # job = sampler.run([circuit_transpiled], shots=1024)
+        # result = job.result()
+        # print(result)
+
         results.append(result)
 
     if return_circuits_transpiled:
@@ -227,7 +238,7 @@ def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1,
 
     return all_data
 
-def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, error_scan_val_lists, noise_qubits=None, basis_gates=None, backend="aer_simulator", method="density_matrix", compute_exact=False, shots=1024, with_mp=False, save_dir=None, save_filename=None):
+def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, error_scan_val_lists, noise_qubits=None, basis_gates=None, target=None, backend="aer_simulator", method="density_matrix", compute_exact=False, shots=1024, with_mp=False, save_dir=None, save_filename=None):
     if isinstance(circuit_input, QuantumCircuit):
         circuit_input = [circuit_input]
     elif hasattr(circuit_input, "__iter__") and all([isinstance(circuit, QuantumCircuit) for circuit in circuit_input]):
@@ -310,12 +321,18 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
                 # @TODO - have better checks in place to proactively avoid exceptions, such as checking qubit counts and memory constraints
                 try:
                     # Compute exact density matrix
-                    density_matrix_exact = DensityMatrix.from_instruction(circuit)
+                    if isinstance(circuit, LogicalCircuit):
+                        density_matrix_exact = LogicalDensityMatrix(circuit)
+                    else:
+                        density_matrix_exact = DensityMatrix(circuit)
                 except:
                     print(f"Failed to compute exact density matrix for circuit input at index {c}, attempting to compute exact statevector...")
                     try:
                         # Compute exact statevector
-                        statevector_exact = LogicalStatevector(circuit)
+                        if isinstance(circuit, LogicalCircuit):
+                            statevector_exact = LogicalStatevector(circuit)
+                        else:
+                            statevector_exact = Statevector(circuit)
                     except Exception as e:
                         # Fail since we don't have any exact reference now
                         raise Exception("Failed to compute exact statevector, exiting...") from e
@@ -367,16 +384,21 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
                 # @TODO - have better checks in place to proactively avoid exceptions, such as checking qubit counts and memory constraints
                 try:
                     # Compute exact density matrix
-                    density_matrix_exact = DensityMatrix(circuit_input)
+                    if isinstance(circuit, LogicalCircuit):
+                        density_matrix_exact = LogicalDensityMatrix(circuit)
+                    else:
+                        density_matrix_exact = DensityMatrix(circuit)
                 except:
                     print(f"Failed to compute exact density matrix for circuit input at index {c}, attempting to compute exact statevector...")
                     try:
                         # Compute exact statevector
-                        statevector_exact = Statevector(circuit_input)
-                    except:
+                        if isinstance(circuit, LogicalCircuit):
+                            statevector_exact = LogicalStatevector(circuit)
+                        else:
+                            statevector_exact = Statevector(circuit)
+                    except Exception as e:
                         # Fail since we don't have any exact reference now
-                        print(f"Failed to compute exact statevector, exiting.")
-                        raise
+                        raise Exception("Failed to compute exact statevector, exiting...") from e
 
             # @TODO - determine whether this is a better data structure for this, including a better way to distinguish the data by circuit
             sub_data = {
@@ -387,7 +409,7 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
             }
 
             for error_dict, noise_model in zip(error_dicts, noise_models):
-                result = execute_circuits(circuit_input, noise_model=noise_model, backend=backend, method=method, shots=shots)
+                result = execute_circuits(circuit, target=target, backend=backend, noise_model=noise_model, method=method, shots=shots)
 
                 sub_data["results"].append({
                     "error_dict": error_dict,
@@ -501,7 +523,7 @@ def qec_cycle_efficiency_experiment(circuit_input, noise_model_input, qecc, cons
 
     return all_data
 
-def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, qecc, constraint_scan_keys, constraint_scan_val_lists, error_scan_keys, error_scan_val_lists, backend="aer_simulator", method="density_matrix", compute_exact=False, shots=1024, save_dir=None, save_filename=None):
+def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, qecc, constraint_scan_keys, constraint_scan_val_lists, error_scan_keys, error_scan_val_lists, backend="aer_simulator", method="density_matrix", compute_exact=False, shots=1024, with_mp=False, save_dir=None, save_filename=None):
     if isinstance(circuit_input, LogicalCircuit):
         raise NotImplementedError("LogicalCircuit inputs are not accepted because the original physical circuit(s) are also necessary for this experiment.")
     elif isinstance(circuit_input, QuantumCircuit):

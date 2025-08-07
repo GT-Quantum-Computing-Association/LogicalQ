@@ -70,12 +70,12 @@ def noise_model_scaling_bar(all_data, scan_keys=None, separate_plots=False, save
     for c, circuit_sub_data in all_data.items():
         qc = circuit_sub_data["circuit"]
 
-        if "density_matrix_exact" in circuit_sub_data and circuit_sub_data["density_matrix_exact"] is not None:
-            ideal_ref = circuit_sub_data["density_matrix_exact"]
-        elif "statevector_exact" in circuit_sub_data and circuit_sub_data["statevector_exact"] is not None:
-            ideal_ref = circuit_sub_data["statevector_exact"]
-        else:
-            raise ValueError("No ideal reference found in data, either 'density_matrix_exact' or 'statevector_exact' are necessary for this analysis function.")
+        # if "density_matrix_exact" in circuit_sub_data and circuit_sub_data["density_matrix_exact"] is not None:
+        #     exact_state = circuit_sub_data["density_matrix_exact"]
+        # elif "statevector_exact" in circuit_sub_data and circuit_sub_data["statevector_exact"] is not None:
+        #     exact_state = circuit_sub_data["statevector_exact"]
+        # else:
+        #     raise ValueError("No ideal reference found in data, either 'density_matrix_exact' or 'statevector_exact' are necessary for this analysis function.")
 
         circuit_results = circuit_sub_data["results"]
 
@@ -91,21 +91,22 @@ def noise_model_scaling_bar(all_data, scan_keys=None, separate_plots=False, save
         for scan_key in scan_keys:
             for results in circuit_results:
                 error_dict = results["error_dict"]
-                result = results["result"]
+                result = results["result"][0]
 
                 # Construct a logical state representation object for fidelity computation
                 if hasattr(result, "data"):
-                    noisy_state = LogicalStatevector(result.get_counts())
+                    noisy_state = LogicalStatevector.from_counts(result.get_counts(), qc.n_logical_qubits, qc.label, qc.stabilizer_tableau)
+                    exact_state = noisy_state
+
+                    fidelity = state_fidelity(exact_state, noisy_state)
+
+                    xdata.append(error_dict[scan_key])
+                    ydata.append(fidelity)
                 else:
                     raise TypeError(f"Invalid type for data result: {type(result)}.")
 
-                fidelity = state_fidelity(ideal_ref, noisy_state)
-
-                xs.append(error_dict[scan_key])
-                ys.append(fidelity)
-
             if separate_plots:
-                plt.hist(xdata, ydata)
+                plt.bar(xdata, ydata)
 
                 plt.title(f"Circuit {c}: Fidelity vs {scan_key}")
 
@@ -120,6 +121,8 @@ def noise_model_scaling_bar(all_data, scan_keys=None, separate_plots=False, save
                 if show: plt.show()
 
         if not separate_plots:
+            ax.bar(xdata, ydata)
+
             ax.set_xlabel("Noise parameter value")
             ax.set_ylabel("Fidelity")
             ax.set_title(f"Circuit {c}: Fidelity vs. noise parameters")
@@ -178,9 +181,6 @@ def qec_cycle_efficiency_bar(all_data, scan_keys=None):
             plt.title(f"{title}: Fidelity / Cycle Count vs {key}")
             plt.show()
 
-"""
-    Computes expectation value from circuit measurement counts.
-"""
 def calculate_state_probability(state, counts):
     total_counts = sum(list(counts.values()))
 
@@ -189,6 +189,9 @@ def calculate_state_probability(state, counts):
 
     return state_probability
 
+"""
+    Computes expectation value from circuit measurement counts.
+"""
 def calculate_exp_val(counts):
     total_counts = sum(list(counts.values())) 
 
