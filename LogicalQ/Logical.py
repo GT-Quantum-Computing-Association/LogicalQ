@@ -896,11 +896,11 @@ class LogicalCircuit(QuantumCircuit):
         if inplace:
             raise NotImplementedError("Inplace measurement removal is not supported")
 
-        lqc_no_meas = cls(self.n_logical_qubits, self.label, self.stabilizer_tableau, self.name + "_no_meas")
+        lqc_no_meas = LogicalCircuit(self.n_logical_qubits, self.label, self.stabilizer_tableau, self.name + "_no_meas")
 
         for circuit_instruction in self.data:
             if circuit_instruction.name != "measure":
-                lqc_no_meas.append(circuit_instruction)
+                lqc_no_meas._append(circuit_instruction)
 
         return lqc_no_meas
 
@@ -919,8 +919,6 @@ class LogicalCircuit(QuantumCircuit):
     ######################################
     ##### Logical quantum operations #####
     ######################################
-
-    # @TODO - generalize logical quantum operations using stabilizers
 
     def h(self, *targets, method="Coherent_Feedback"):
         """
