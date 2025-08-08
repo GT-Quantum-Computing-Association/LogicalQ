@@ -4,7 +4,7 @@ import numpy as np
 from qiskit import QuantumRegister, AncillaRegister, ClassicalRegister, QuantumCircuit
 from qiskit.circuit import Bit, Measure
 from qiskit.circuit.classical import expr
-from qiskit.quantum_info import Statevector, DensityMatrix, Pauli, partial_trace
+from qiskit.quantum_info import Statevector, DensityMatrix, Pauli, partial_trace, state_fidelity
 from qiskit_addon_utils.slicing import slice_by_depth
 
 from qiskit.transpiler import PassManager
@@ -1771,4 +1771,32 @@ class LogicalDensityMatrix(DensityMatrix):
             f"{prefix}{np.array2string(data, separator=', ', prefix=prefix)},\n"
             f"{pad}dims={self._op_shape.dims_l()})"
         )
+
+def logical_state_fidelity(state1, state2):
+    states = []
+
+    if (
+        (isinstance(state1, LogicalStatevector) and isinstance(state2, LogicalStatevector)) or
+        (isinstance(state1, LogicalDensityMatrix) and isinstance(state2, LogicalDensityMatrix))
+    ):
+        # Special cases
+        states.append(state1)
+        states.append(state2)
+    else:
+        # Other cases
+        for s, _state in enumerate([state1, state2]):
+            if isinstance(_state, LogicalStatevector):
+                # @TODO - determine whether this is the best thing to do in this case
+                state = Statevector(_state.logical_decomposition[:2])
+            elif isinstance(_state, LogicalDensityMatrix):
+                # @TODO - determine the best thing to do in this case
+                raise NotImplementedError("state_fidelity computation for LogicalDensityMatrix instances is not yet implemented")
+            elif isinstance(_state, Statevector) or isinstance(_state, DensityMatrix):
+                state = _state
+            else:
+                raise TypeError(f"Invalid type for state at index {s}: {type(_state)}")
+
+            states.append(state)
+
+    return state_fidelity(states[0], states[1], validate=False)
 
