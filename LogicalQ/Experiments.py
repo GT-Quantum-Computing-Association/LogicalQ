@@ -66,7 +66,6 @@ def execute_circuits(circuit_input, target=None, backend=None, noise_model=None,
     elif coupling_map is not None:
         print("WARNING - The Qiskit transpiler is likely to complain about the presence of both backend and coupling_map; this should only be done if the backend is a simulator")
 
-    print("target:", target)
     if isinstance(backend, str):
         if backend == "aer_simulator":
             if target is None:
@@ -99,8 +98,6 @@ def execute_circuits(circuit_input, target=None, backend=None, noise_model=None,
     else:
         raise TypeError(f"backend must be None, 'aer_simulator', the name of a backend, or an instance of AerSimulator or Backend, not type {type(backend)}")
 
-    print(circuits[0].num_qubits)
-
     # @TODO - non-Qiskit backend instances may require another AerSimulator backend to be used for transpilation
     # Transpile circuit
     # Method defaults to optimization off to preserve form of benchmarking circuit and full QEC
@@ -115,12 +112,6 @@ def execute_circuits(circuit_input, target=None, backend=None, noise_model=None,
     results = []
     for circuit_transpiled in circuits_transpiled:
         result = backend.run([circuit_transpiled], shots=shots, memory=memory).result()
-
-        # sampler = SamplerV2(mode=backend)
-        # job = sampler.run([circuit_transpiled], shots=1024)
-        # result = job.result()
-        # print(result)
-
         results.append(result)
 
     if return_circuits_transpiled:

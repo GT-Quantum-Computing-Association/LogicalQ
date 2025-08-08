@@ -98,11 +98,10 @@ class LogicalCircuit(QuantumCircuit):
 
     # @TODO - this completely ignores QEC (besides encoding), do we want to have some sort of default QEC behavior?
     @classmethod
-    def from_physical_circuit(cls, physical_circuit, label, stabilizer_tableau, name=None):
+    def from_physical_circuit(cls, physical_circuit, label, stabilizer_tableau, name=None, max_iterations=1):
         logical_circuit = cls(physical_circuit.num_qubits, label, stabilizer_tableau, name)
 
-        # @TODO - expose the options that encode takes to the user of from_physical_circuit
-        logical_circuit.encode(range(physical_circuit.num_qubits), max_iterations=3)
+        logical_circuit.encode(range(physical_circuit.num_qubits), max_iterations=max_iterations)
 
         for i in range(len(physical_circuit.data)):
             circuit_instruction = physical_circuit.data[i]
@@ -892,6 +891,18 @@ class LogicalCircuit(QuantumCircuit):
             _lqc = copy.deepcopy(self)
             _lqc.measure_all(inplace=True, with_error_correction=True)
             return _lqc
+
+    def remove_final_measurements(self, inplace=False):
+        if inplace:
+            raise NotImplementedError("Inplace measurement removal is not supported")
+
+        lqc_no_meas = cls(self.n_logical_qubits, self.label, self.stabilizer_tableau, self.name + "_no_meas")
+
+        for circuit_instruction in self.data:
+            if circuit_instruction.name != "measure":
+                lqc_no_meas.append(circuit_instruction)
+
+        return lqc_no_meas
 
     def get_logical_counts(self, outputs, logical_qubit_indices=None):
         if logical_qubit_indices == None:
