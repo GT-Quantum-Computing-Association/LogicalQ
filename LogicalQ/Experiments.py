@@ -308,22 +308,25 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
         for c, circuit in enumerate(circuit_input):
             density_matrix_exact = None # Default exact reference
             statevector_exact = None # Alternative exact reference, only used if exact DensityMatrix computation fails
+
+            # @TODO - have better checks in place to proactively avoid exceptions, such as checking qubit counts and memory constraints
             if compute_exact:
-                # @TODO - have better checks in place to proactively avoid exceptions, such as checking qubit counts and memory constraints
+                circuit_no_meas = circuit.remove_final_measurements(inplace=False)
+
                 try:
                     # Compute exact density matrix
                     if isinstance(circuit, LogicalCircuit):
-                        density_matrix_exact = LogicalDensityMatrix(circuit)
+                        density_matrix_exact = LogicalDensityMatrix(circuit_no_meas)
                     else:
-                        density_matrix_exact = DensityMatrix(circuit)
+                        density_matrix_exact = DensityMatrix(circuit_no_meas)
                 except:
                     print(f"Failed to compute exact density matrix for circuit input at index {c}, attempting to compute exact statevector...")
                     try:
                         # Compute exact statevector
                         if isinstance(circuit, LogicalCircuit):
-                            statevector_exact = LogicalStatevector(circuit)
+                            statevector_exact = LogicalStatevector(circuit_no_meas)
                         else:
-                            statevector_exact = Statevector(circuit)
+                            statevector_exact = Statevector(circuit_no_meas)
                     except Exception as e:
                         # Fail since we don't have any exact reference now
                         raise Exception("Failed to compute exact statevector, exiting...") from e
@@ -333,7 +336,7 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
                 "circuit": circuit,
                 "density_matrix_exact": density_matrix_exact,
                 "statevector_exact": statevector_exact,
-                "results": [{}]*len(noise_models)
+                "results": [{ "error_dict": error_dict } for error_dict in error_dicts]
             }
 
             exp_inputs_list = [
@@ -360,7 +363,7 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
 
             # Unzip results
             for (task_id, result) in mp_result:
-                sub_data["results"][task_id] = result
+                sub_data["results"][task_id]["result"] = result
 
             all_data[c] = sub_data
 
@@ -371,22 +374,25 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
         for c, circuit in enumerate(circuit_input):
             density_matrix_exact = None # Default exact reference
             statevector_exact = None # Alternative exact reference, only used if exact DensityMatrix computation fails
+
+            # @TODO - have better checks in place to proactively avoid exceptions, such as checking qubit counts and memory constraints
             if compute_exact:
-                # @TODO - have better checks in place to proactively avoid exceptions, such as checking qubit counts and memory constraints
+                circuit_no_meas = circuit.remove_final_measurements(inplace=False)
+
                 try:
                     # Compute exact density matrix
-                    if isinstance(circuit, LogicalCircuit):
-                        density_matrix_exact = LogicalDensityMatrix(circuit)
+                    if isinstance(circuit_no_meas, LogicalCircuit):
+                        density_matrix_exact = LogicalDensityMatrix(circuit_no_meas)
                     else:
-                        density_matrix_exact = DensityMatrix(circuit)
+                        density_matrix_exact = DensityMatrix(circuit_no_meas)
                 except:
                     print(f"Failed to compute exact density matrix for circuit input at index {c}, attempting to compute exact statevector...")
                     try:
                         # Compute exact statevector
-                        if isinstance(circuit, LogicalCircuit):
-                            statevector_exact = LogicalStatevector(circuit)
+                        if isinstance(circuit_no_meas, LogicalCircuit):
+                            statevector_exact = LogicalStatevector(circuit_no_meas)
                         else:
-                            statevector_exact = Statevector(circuit)
+                            statevector_exact = Statevector(circuit_no_meas)
                     except Exception as e:
                         # Fail since we don't have any exact reference now
                         raise Exception("Failed to compute exact statevector, exiting...") from e
@@ -481,9 +487,11 @@ def qec_cycle_efficiency_experiment(circuit_input, noise_model_input, qecc, cons
     atexit.register(save_progress)
 
     for circuit_physical in circuit_input:
-        density_matrix_exact = DensityMatrix(circuit_physical)
+        circuit_physical_no_meas = circuit_physical.remove_final_measurements(inplace=False)
 
-        circuit_logical = LogicalCircuit.from_physical_circuit(circuit_physical, **qecc)
+        density_matrix_exact = DensityMatrix(circuit_physical_no_meas)
+
+        circuit_logical = LogicalCircuit.from_physical_circuit(circuit_physical_no_meas, **qecc)
 
         # @TODO - determine whether this is a better data structure for this, including a better way to distinguish the data by circuit
         sub_data = {
@@ -518,20 +526,20 @@ def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, qecc, c
     if isinstance(circuit_input, LogicalCircuit):
         raise NotImplementedError("LogicalCircuit inputs are not accepted because the original physical circuit(s) are also necessary for this experiment.")
     elif isinstance(circuit_input, QuantumCircuit):
-        circuit_input = [circuit_input]
+        circuit_input = circuit_input
     elif hasattr(circuit_input, "__iter__"):
         raise NotImplementedError("Please provide a single circuit")
     elif callable(circuit_input):
-        raise NotImplementedError("QuantumCircuit/LogicalCircuit callables are not accepted as inputs, please provide a constant QuantumCircuit/LogicalCircuit object or a list of such.")
+        raise NotImplementedError("QuantumCircuit/LogicalCircuit callables are not accepted as inputs, please provide a constant QuantumCircuit/LogicalCircuit object.")
     else:
         raise ValueError("Please provide a QuantumCircuit/LogicalCircuit input.")
 
     if isinstance(noise_model_input, NoiseModel):
-        noise_model_factory = lambda c : noise_model_input
+        noise_model_input = noise_model_input
     elif hasattr(noise_model_input, "__iter__"):
         raise NotImplementedError("Please provide a single noise model")
     elif callable(noise_model_input):
-        noise_model_factory = noise_model_input
+        raise NotImplementedError("NoiseModel callables are not accepted as inputs, please provide a constant NoiseModel object.")
     else:
         raise ValueError("Please provide a NoiseModel object, a method for constructing NoiseModels, or a list of either.")
 
@@ -568,13 +576,13 @@ def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, qecc, c
         sub_data = {
             "circuit": circuit_input,
             "constraint_model": constraint_model,
-            "results_physical": results_physical,
-            "results_logical": results_logical,
+            "results_physical": None,
+            "results_logical": None,
         }
 
         # Benchmark physical circuit
         results_physical = noise_scaling_experiment(
-            circuit_input=[circuit_input],
+            circuit_input=circuit_input,
             noise_model_input=noise_model_input,
             error_scan_keys=error_scan_keys,
             error_scan_val_lists=error_scan_val_lists,
@@ -590,7 +598,7 @@ def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, qecc, c
 
         # Benchmark logical circuit
         results_logical = noise_scaling_experiment(
-            circuit_input=[circuit_logical],
+            circuit_input=circuit_logical,
             noise_model_input=noise_model_input,
             error_scan_keys=error_scan_keys,
             error_scan_val_lists=error_scan_val_lists,

@@ -1,10 +1,10 @@
-import time
 import numpy as np
 from matplotlib import pyplot as plt
 
-from qiskit.quantum_info import state_fidelity
+from qiskit import QuantumCircuit
+from qiskit.quantum_info import Statevector, state_fidelity
 
-from LogicalQ.Logical import LogicalStatevector
+from LogicalQ.Logical import LogicalCircuit, LogicalStatevector, LogicalDensityMatrix, logical_state_fidelity
 from LogicalQ.Utilities import sanitize_save_parameters
 
 """
@@ -79,9 +79,15 @@ def noise_model_scaling_bar(all_data, scan_keys=None, separate_plots=False, save
 
         circuit_results = circuit_sub_data["results"]
 
-        # If scan_keys subset is not provided, plot all available
+        all_keys = list(circuit_results[0]["error_dict"].keys())
         if scan_keys is None:
-            scan_keys = list(circuit_results[0]["error_dict"].keys())
+            # If scan_keys subset is not provided, plot all available
+            scan_keys = all_keys
+        else:
+            # If scan_keys subset contains elements not in all_keys, error out
+            invalid_keys = set(scan_keys)-set(all_keys)
+            if len(invalid_keys) > 0:
+                raise ValueError(f"scan_keys input contains invalid keys not present in experiment data: {invalid_keys}.")
 
         i = 0
         fig, ax = plt.subplots()
@@ -89,20 +95,27 @@ def noise_model_scaling_bar(all_data, scan_keys=None, separate_plots=False, save
         xdata = []
         ydata = []
         for scan_key in scan_keys:
-            for results in circuit_results:
+            for r, results in enumerate(circuit_results):
                 error_dict = results["error_dict"]
                 result = results["result"][0]
+                counts = result.get_counts()
 
+                # @TODO - use density matrices instead once LogicalDensityMatrix is fully implemented
                 # Construct a logical state representation object for fidelity computation
                 if hasattr(result, "data"):
-                    noisy_state = LogicalStatevector.from_counts(result.get_counts(), qc.n_logical_qubits, qc.label, qc.stabilizer_tableau)
+                    if isinstance(qc, LogicalCircuit):
+                        noisy_state = LogicalStatevector.from_counts(counts, qc.n_logical_qubits, qc.label, qc.stabilizer_tableau)
+                    elif isinstance(qc, QuantumCircuit):
+                        noisy_state = counts_to_statevector(counts)
+                    else:
+                        raise TypeError(f"Invaild type for circuit at index {c}: {type(qc)}; must be an instance of QuantumCircuit or LogicalCircuit.")
 
                     fidelity = state_fidelity(exact_state, noisy_state)
 
                     xdata.append(error_dict[scan_key])
                     ydata.append(fidelity)
                 else:
-                    raise TypeError(f"Invalid type for data result: {type(result)}.")
+                    raise TypeError(f"Invalid type for data result at index {r}: {type(result)}.")
 
             if separate_plots:
                 plt.bar(xdata, ydata)
@@ -122,63 +135,104 @@ def noise_model_scaling_bar(all_data, scan_keys=None, separate_plots=False, save
         if not separate_plots:
             ax.bar(xdata, ydata)
 
+            title = getattr(qc, "name", f"Circuit {c}")
+            ax.set_title(f"{title}: Fidelity vs. noise parameters")
+
             ax.set_xlabel("Noise parameter value")
             ax.set_ylabel("Fidelity")
-            ax.set_title(f"Circuit {c}: Fidelity vs. noise parameters")
 
             if save: plt.savefig(f"{save_dir}{filename}", dpi=500)
             if show: plt.show()
 
     return plt
 
-def qec_cycle_efficiency_bar(all_data, scan_keys=None):
-    for entry in all_data:
-        qc = entry["qc"]
-        exact_dm = entry["density_matrix_exact"]
-        results = entry.get("results", entry.get("data", []))
+# @TODO - add save functionality
+def qec_cycle_efficiency_bar(all_data, scan_keys=None, plot_metric=None, show=False):
+    if plot_metric is None:
+        plot_metric = "fidelity"
 
-        if scan_keys is not None:
-            keys = scan_keys
+    for c, circuit_sub_data in enumerate(all_data):
+        qc = circuit_sub_data["physical_circuit"]
+        lqc = circuit_sub_data["logical_circuit"]
+        exact_state = circuit_sub_data["density_matrix_exact"]
+        circuit_results = circuit_sub_data["results"]
+
+        all_keys = list(circuit_results[0]["constraint_model"].keys())
+        if scan_keys is None:
+            # If scan_keys subset is not provided, plot all available
+            scan_keys = all_keys
         else:
-            keys = list(results[0]["config"].keys())
+            # If scan_keys subset contains elements not in all_keys, error out
+            invalid_keys = set(scan_keys)-set(all_keys)
+            if len(invalid_keys) > 0:
+                raise ValueError(f"scan_keys input contains invalid keys not present in experiment data: {invalid_keys}.")
 
-        for key in keys:
-            x_axis = []
-            y_axis = []
+        for scan_key in scan_keys:
+            xdata = []
+            ydata = []
 
-            for res in results:
-                cfg = res["config"]
-                num_QEC = cfg.get("cycles")
-                if num_QEC is None or num_QEC == 0:
-                    raise ValueError("You didn't experiment with any QEC cycles injected.")
+            for circuit_result in circuit_results:
+                constraint_model = circuit_result["constraint_model"]
 
-                return_obj = res["result"]
+                result = circuit_result["result"][0]
 
-                # Converts the the execute_circuits function return object to a DensityMatrix
-                # @TODO change accordingly based on the data structure in qec_cycle_efficiency_experiment
-                if isinstance(return_obj, DensityMatrix):
-                    noisy_dm = return_obj
-                elif isinstance(return_obj, tuple):
-                    result_obj = return_obj[0]
-                    noisy_dm = DensityMatrix(result_obj.data(0))
-                elif hasattr(return_obj, "data"):
-                    noisy_dm = DensityMatrix(ret.data(0))
+                # @TODO - use density matrices instead once LogicalDensityMatrix is fully implemented
+                # Construct a LogicalDensityMatrix estimate from experiment counts
+                noisy_state = LogicalStatevector.from_counts(result.get_counts(), n_logical_qubits=lqc.n_logical_qubits, label=lqc.label, stabilizer_tableau=lqc.stabilizer_tableau)
+
+                fidelity = logical_state_fidelity(exact_state, noisy_state)
+
+                if plot_metric is None or plot_metric == "fidelity":
+                    metric = fidelity
+                elif plot_metric == "fidelity_per_qec_cycle":
+                    # @TODO - currently assumes one logical qubit, add support for multi-qubit data
+                    qec_cycle_indices = circuit_result["qec_cycle_indices"]
+                    if qec_cycle_indices:
+                        n_qec_cycles = len(list(qec_cycle_indices.values())[0])
+
+                        metric = fidelity/n_qec_cycles
+                    else:
+                        raise ValueError("No QEC cycles inserted")
                 else:
-                    raise TypeError("res['result'] type is not right")
+                    raise ValueError(f"Unrecognized input for plot_metric: {plot_metric}; please choose from 'fidelity' or 'fidelity_per_qec_cycle'")
 
-                fidelity = state_fidelity(exact_dm, noisy_dm)
-                metric = fidelity / num_QEC
-
-                x_Axis.append(cfg[key])
-                y_Axis.append(metric)
+                xdata.append(constraint_model[scan_key])
+                ydata.append(metric)
 
             plt.figure()
-            plt.bar(x_axis, y_axis)
-            plt.xlabel(key)
-            plt.ylabel("Fidelity / Cycle Count")
-            title = getattr(qc, "name", "Circuit")
-            plt.title(f"{title}: Fidelity / Cycle Count vs {key}")
-            plt.show()
+
+            plt.bar(xdata, ydata)
+
+            title = getattr(qc, "name", f"Circuit {c}")
+            plt.title(f"{title}: Fidelity vs {scan_key}")
+
+            plt.xlabel(scan_key)
+            plt.ylabel("Fidelity")
+
+            if show: plt.show()
+
+def counts_to_statevector(counts):
+    result_key_0 = list(counts.keys())[0]
+    if all([char in ["0", "1"] for char in result_key_0]):
+        d = 2**(len(result_key_0))
+        fmt_outcome = lambda outcome : bin(outcome)[2:]
+    elif result_key_0.startswith("0b"):
+        d = 2**len(result_key_0-2)
+        fmt_outcome = lambda outcome : bin(outcome)
+    elif result_key_0.startswith("0x"):
+        d = 16**(len(result_key_0)-2)
+        fmt_outcome = lambda outcome : hex(outcome)
+    else:
+        raise ValueError("Could not resolve result key format")
+
+    outcomes = [fmt_outcome(i) for i in range(d)]
+
+    probabilities = np.array([counts.get(outcome, 0.0) for outcome in outcomes])/np.sum(list(counts.values()))
+    amplitudes = np.sqrt(probabilities)
+
+    statevector = Statevector(amplitudes)
+
+    return statevector
 
 def calculate_state_probability(state, counts):
     total_counts = sum(list(counts.values()))
@@ -192,7 +246,7 @@ def calculate_state_probability(state, counts):
     Computes expectation value from circuit measurement counts.
 """
 def calculate_exp_val(counts):
-    total_counts = sum(list(counts.values())) 
+    total_counts = sum(list(counts.values()))
 
     exp_val = sum([key.count("1") for key in counts])/total_counts
 
