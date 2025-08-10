@@ -63,8 +63,8 @@ def execute_circuits(circuit_input, target=None, backend=None, noise_model=None,
             else:
                 # @TODO - actually, this may not be necessary
                 raise ValueError("One of backend, noise_model, or noise_params must be provided")
-    elif coupling_map is not None:
-        print("WARNING - The Qiskit transpiler is likely to complain about the presence of both backend and coupling_map; this should only be done if the backend is a simulator")
+    # elif coupling_map is not None:
+    #     print("WARNING - The Qiskit transpiler is likely to complain about the presence of both backend and coupling_map; this should only be done if the backend is a simulator")
 
     if isinstance(backend, str):
         if backend == "aer_simulator":
