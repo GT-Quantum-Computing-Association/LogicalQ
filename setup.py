@@ -15,6 +15,8 @@ setup(
         "matplotlib",
         "qiskit>=2.1.0",
         "qiskit-aer",
+        "qiskit_addon_utils",
+        "qiskit_ibm_runtime",
         "pytket",
         "qbraid",
     ],
