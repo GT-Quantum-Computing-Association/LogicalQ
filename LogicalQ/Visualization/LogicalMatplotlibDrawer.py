@@ -1169,7 +1169,7 @@ class LogicalMatplotlibDrawer:
 
                 if verbose:
                     print(op)
-                
+
                 # add conditional
                 if getattr(op, "condition", None) or isinstance(op, SwitchCaseOp):
                     cond_xy = [
@@ -1618,7 +1618,7 @@ class LogicalMatplotlibDrawer:
                     clip_on=True,
                     zorder=PORDER_TEXT,
                 )
-        
+
         if node_data[node].gate_text:
             gate_ypos = ypos + 0.5 * qubit_span
             if node_data[node].param_text:

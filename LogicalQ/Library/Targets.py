@@ -29,13 +29,13 @@ def construct_target_generic_iontrap(n_qubits=32):
             "duration": 25E-6,
             "error": 1E-4,
         },
-        "if_else": {
-            "n_qubits": -1,
-            "instruction": IfElseOp,
-            "parameters": ["condition", "true_body", "false_body"],
-            "duration": 0.00,
-            "error": 0.00,
-        },
+        # "if_else": {
+        #     "n_qubits": -1,
+        #     "instruction": IfElseOp,
+        #     "parameters": ["condition", "true_body", "false_body"],
+        #     "duration": 0.00,
+        #     "error": 0.00,
+        # },
         "u": {
             "n_qubits": 1,
             "instruction": UGate,

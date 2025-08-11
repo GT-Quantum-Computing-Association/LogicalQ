@@ -51,8 +51,9 @@ def mirror_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sampl
 
     # Append original gates to circuit, targeting random qubits
     for gate in gate_selection:
-        target_qubits = list(np.random.choice(qubits, gate().num_qubits, replace=False))
-        mb_circuit.append(gate(), target_qubits)
+        gate_obj = gate()
+        target_qubits = list(np.random.choice(qubits, gate_obj.num_qubits, replace=False))
+        mb_circuit.append(gate_obj, target_qubits)
 
     # Append inverse of current circuit so that final state is left unchanged under no errors
     mb_circuit.compose(mb_circuit.inverse(), inplace=True)
@@ -105,8 +106,8 @@ def randomized_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_s
         target_qubits = list(np.random.choice(qubits, gate_obj.num_qubits, replace=False))
         rb_circuit.append(gate_obj, target_qubits)
 
-    # @TODO - find a better way of doing this
     # Construct a single inverse gate and append (really only works if the inverse gate is a basis gate)
+    # @TODO - find a better way of doing this
     rb_circuit_inverse_matrix = Operator(rb_circuit.inverse()).data
     rb_circuit_inverse_gate = UnitaryGate(rb_circuit_inverse_matrix)
     rb_circuit.append(rb_circuit_inverse_gate, qubits)

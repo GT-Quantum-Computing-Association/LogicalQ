@@ -100,8 +100,8 @@ def noise_model_scaling_bar(all_data, scan_keys=None, separate_plots=False, save
                 result = results["result"][0]
                 counts = result.get_counts()
 
-                # @TODO - use density matrices instead once LogicalDensityMatrix is fully implemented
                 # Construct a logical state representation object for fidelity computation
+                # @TODO - use density matrices instead once LogicalDensityMatrix is fully implemented
                 if hasattr(result, "data"):
                     if isinstance(qc, LogicalCircuit):
                         noisy_state = LogicalStatevector.from_counts(counts, qc.n_logical_qubits, qc.label, qc.stabilizer_tableau)
@@ -176,8 +176,8 @@ def qec_cycle_efficiency_bar(all_data, scan_keys=None, plot_metric=None, show=Fa
 
                 result = circuit_result["result"][0]
 
-                # @TODO - use density matrices instead once LogicalDensityMatrix is fully implemented
                 # Construct a LogicalDensityMatrix estimate from experiment counts
+                # @TODO - use density matrices instead once LogicalDensityMatrix is fully implemented
                 noisy_state = LogicalStatevector.from_counts(result.get_counts(), n_logical_qubits=lqc.n_logical_qubits, label=lqc.label, stabilizer_tableau=lqc.stabilizer_tableau)
 
                 fidelity = logical_state_fidelity(exact_state, noisy_state)
