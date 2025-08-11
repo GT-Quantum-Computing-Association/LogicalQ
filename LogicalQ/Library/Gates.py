@@ -1,19 +1,13 @@
 import numpy as np
 
-from qiskit.circuit.library import UGate as IBMUGate
-from qiskit.circuit.library import HGate, XGate, YGate, ZGate, SGate, TGate, CXGate, CYGate, CZGate, RXGate, RYGate, RZGate, RXXGate, RYYGate, RZZGate
+from qiskit import QuantumCircuit
+from qiskit.circuit import Parameter
+from qiskit.circuit.library import HGate, XGate, YGate, ZGate, SGate, TGate, CXGate, CYGate, CZGate, RGate, RXGate, RYGate, RZGate, RXXGate, RYYGate, RZZGate
+from qiskit.circuit.library.standard_gates.equivalence_library import StandardEquivalenceLibrary
 
 # Gates
 
-class UGate(IBMUGate):
-    def __init__(self, theta, phi, label=None):
-        """Create new U gate dependent on theta and phi, following Quantinuum standard."""
-        super().__init__(theta=theta, phi=phi-np.pi/2, lam=np.pi/2-phi, label=label)
-
-    def __eq__(self, other):
-        if isinstance(other, UGate):
-            return self._compare_parameters(other)
-        return False
+UGate = RGate
 
 class ZZGate(RZZGate):
     _standard_gate = None
@@ -30,10 +24,18 @@ class ZZGate(RZZGate):
             return self._compare_parameters(other)
         return False
 
+# Add custom gates to the Standard Equivalence Library (SEL)
+
+# ZZGate
+zzgate = ZZGate()
+ZZGate_def = QuantumCircuit(2)
+ZZGate_def.append(zzgate, range(2))
+StandardEquivalenceLibrary.add_equivalence(zzgate, ZZGate_def)
+
 # Mapping from gate names to classes
 # NOTE - Use the robust string_to_gate_class function in code
 gates = {
-    "h": UGate,
+    "r": RGate,
     "h": HGate,
     "x": XGate,
     "y": YGate,
@@ -62,23 +64,29 @@ def string_to_gate_class(_gate_string):
 
 clifford_gates = {
     "strings": ["h", "x", "y", "z", "s", "cx", "cy", "cz"],
-    "classes": [HGate, XGate, YGate, ZGate, SGate, CXGate, CYGate, CZGate]
+    "classes": [HGate, XGate, YGate, ZGate, SGate, CXGate, CYGate, CZGate],
+    "num_params": [0, 0, 0, 0, 0, 0, 0, 0],
 }
 clifford_gates_1q = {
     "strings": ["h", "x", "y", "z", "s"],
-    "classes": [HGate, XGate, YGate, ZGate, SGate]
+    "classes": [HGate, XGate, YGate, ZGate, SGate],
+    "num_params": [0, 0, 0, 0, 0],
 }
 pauli_gates = {
     "strings": ["x", "y", "z"],
-    "classes": [XGate, YGate, ZGate]
+    "classes": [XGate, YGate, ZGate],
+    "num_params": [0, 0, 0],
 }
 gates_1q = {
-    "strings": ["u", "h", "x", "y", "z", "s", "rx", "ry", "rz"],
-    "classes": [UGate, HGate, XGate, YGate, ZGate, SGate, TGate, RXGate, RYGate, RZGate]
+    "strings": ["r", "h", "x", "y", "z", "s", "rx", "ry", "rz"],
+    "classes": [RGate, HGate, XGate, YGate, ZGate, SGate, TGate, RXGate, RYGate, RZGate],
+    "num_params": [1, 0, 0, 0, 0, 0, 0, 1, 1, 1]
 }
+
 gates_2q = {
     "strings": ["cx", "cy", "cz", "rxx", "ryy", "rzz", "zz"],
-    "classes": [CXGate, CYGate, CZGate, RXXGate, RYYGate, RZZGate, ZZGate]
+    "classes": [CXGate, CYGate, CZGate, RXXGate, RYYGate, RZZGate, ZZGate],
+    "num_params": [0, 0, 0, 1, 1, 1, 0]
 }
 
 # Mapping from gate set names to objects
@@ -97,4 +105,12 @@ def string_to_gate_set(_gate_set_string):
         return gate_sets[gate_set_string]
     else:
         raise KeyError(f"Input {_gate_set_string} is not a valid gate set name.")
+
+def get_num_params(gate_class):
+    if gate_class in [RXGate, RYGate, RZGate, RXXGate, RYYGate, RZZGate]:
+        return 1
+    elif gate_class in [RGate]:
+        return 2
+    else:
+        return 0
 

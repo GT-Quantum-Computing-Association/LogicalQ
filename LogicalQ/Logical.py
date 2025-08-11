@@ -88,8 +88,8 @@ class LogicalCircuit(QuantumCircuit):
         self.output_creg = ClassicalRegister(self.n_logical_qubits, name="coutput")
         super().add_register(self.output_creg)
 
-        # @TODO - find alternative, possibly by implementing upstream
         # Create setter qreg for purpose of setting classical bits dynamically
+        # @TODO - find alternative, possibly by implementing upstream
         self.cbit_setter_qreg = QuantumRegister(2, name="qsetter")
         self.add_register(self.cbit_setter_qreg)
         super().x(self.cbit_setter_qreg[1])
@@ -327,7 +327,6 @@ class LogicalCircuit(QuantumCircuit):
         self.LogicalHCircuit_CF.h(self.n)
         self.LogicalHGate_CF = self.LogicalHCircuit_CF.to_gate(label="$H_{CF}$")
 
-        # @TODO - Logical S
         # Creates Logical S circuit using coherent feedback
         self.LogicalSCircuit_CF = QuantumCircuit(self.n + 1)
         self.LogicalSCircuit_CF.h(self.n)
@@ -340,8 +339,7 @@ class LogicalCircuit(QuantumCircuit):
         self.LogicalSCircuit_CF.h(self.n)
         self.LogicalSGate_CF = self.LogicalSCircuit_CF.to_gate(label="$S_{CF}$")
 
-        # @TODO - Logical S†
-        # Creates Logical S† circuit using coherent feedback
+        # Creates Logical S^dagger circuit using coherent feedback
         self.LogicalSdgCircuit_CF = QuantumCircuit(self.n + 1)
         self.LogicalSdgCircuit_CF.h(self.n)
         self.LogicalSdgCircuit_CF.sdg(self.n)
@@ -353,7 +351,6 @@ class LogicalCircuit(QuantumCircuit):
         self.LogicalSdgCircuit_CF.h(self.n)
         self.LogicalSdgGate_CF = self.LogicalSdgCircuit_CF.to_gate(label="$S†_{CF}$")
 
-        # @TODO - Logical T
         # Creates Logical T circuit using coherent feedback
         self.LogicalTCircuit_CF = QuantumCircuit(self.n + 2)
         self.LogicalTCircuit_CF.h(self.n)
@@ -373,8 +370,7 @@ class LogicalCircuit(QuantumCircuit):
         self.LogicalTCircuit_CF.h(self.n + 1)
         self.LogicalTGate_CF = self.LogicalTCircuit_CF.to_gate(label="$T_{CF}$")
 
-        # @TODO - Logical T†
-        # Creates Logical T† circuit using coherent feedback
+        # Creates Logical T^dagger circuit using coherent feedback
         self.LogicalTdgCircuit_CF = QuantumCircuit(self.n + 2)
         self.LogicalTdgCircuit_CF.h(self.n)
         self.LogicalTdgCircuit_CF.h(self.n + 1)

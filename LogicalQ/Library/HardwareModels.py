@@ -1,3 +1,7 @@
+import numpy as np
+
+from .Gates import RGate, RZGate, RZZGate, ZZGate
+
 # @TODO - construct pre-made noise models for specific hardware
 #       - wishlist:
 #           - Harvard/MIT/QuEra neutral atom collaboration (e.g. papers by Vuletic, Lukin, Bluvstein, Evered, Levine, Kalinowski, Li)
@@ -7,8 +11,9 @@
 hardware_model_Quantinuum_H1_1 = {
     "device_info": {
         "n_qubits": 20,
-        "coupling_map": "fully-coupled",
-        "basis_gates": ["u", "rz", "zz", "rzz"],
+        "coupling_map": "fully_coupled",
+        # "basis_gates": dict(zip(["u", "rz", "rzz", "zz"], [UGate, RZGate, RZZGate, ZZGate])),
+        "basis_gates": dict(zip(["r", "rz", "rzz"], [RGate, RZGate, RZZGate])), # @TODO - TEMPORARY WORKAROUND
     },
     "noise_params": {
         "all_qubit": {
@@ -23,8 +28,10 @@ hardware_model_Quantinuum_H1_1 = {
                 },
             },
             "readout_error": {
-                ("0","1"): 1.22E-3,
-                ("1","0"): 3.43E-3,
+                1: {
+                    ("0","1"): 1.22E-3,
+                    ("1","0"): 3.43E-3,
+                },
             },
             "depolarizing_error": {
                 1: {
@@ -38,11 +45,16 @@ hardware_model_Quantinuum_H1_1 = {
                 1: {
                     "all": (0.747) * 1.80E-5,
                 },
-                2: {
-                    "all": (0.421) * 9.73E-4,
-                },
+                # 2: {
+                #     "all": (0.421) * 9.73E-4, # @TODO - not supported by Qiskit
+                # },
             },
-            "phase_damping": 0.122, # @TODO - temporary proxy for true dephasing error
+            "dephasing_error": {
+                1: {
+                    # @TODO - verify angle convention (i.e. theta vs. theta/2)
+                    "id": np.sin(0.122 * 10E-6**2)**2, # Using a single-qubit gate time approximation
+                }
+            }
         },
     },
 }
@@ -51,8 +63,9 @@ hardware_model_Quantinuum_H1_1 = {
 hardware_model_Quantinuum_H2_1 = {
     "device_info": {
         "n_qubits": 56,
-        "coupling_map": "fully-coupled",
-        "basis_gates": ["u", "rz", "zz", "rzz"],
+        "coupling_map": "fully_coupled",
+        # "basis_gates": dict(zip(["u", "rz", "rzz", "zz"], [UGate, RZGate, RZZGate, ZZGate])),
+        "basis_gates": dict(zip(["r", "rz", "rzz"], [RGate, RZGate, RZZGate])), # @TODO - TEMPORARY WORKAROUND
     },
     "noise_params": {
         "all_qubit": {
@@ -67,26 +80,33 @@ hardware_model_Quantinuum_H2_1 = {
                 },
             },
             "readout_error": {
-                ("0","1"): 6E-4,
-                ("1","0"): 1.39E-3,
+                1: {
+                    ("0","1"): 6E-4,
+                    ("1","0"): 1.39E-3,
+                },
             },
             "depolarizing_error": {
                 1: {
-                    "all": (1-0.54) * 1.89E-5,
+                    "all": (1-0.54) * 1.89E-5*1E2,
                 },
                 2: {
-                    "all": (1-0.255) * 1.05E-3,
+                    "all": (1-0.255) * 1.05E-3*1E2,
                 },
             },
             "amplitude_damping_error": {
                 1: {
-                    "all": (0.54) * 1.89E-5,
+                    "all": (0.54) * 1.89E-5*1E2,
                 },
-                2: {
-                    "all": (0.255) * 1.05E-3,
-                },
+                # 2: {
+                #     "all": (0.255) * 1.05E-3, # @TODO - not supported by Qiskit
+                # },
             },
-            "phase_damping": 0.043, # @TODO - temporary proxy for true dephasing error
+            "dephasing_error": {
+                1: {
+                    # @TODO - verify angle convention (i.e. theta vs. theta/2)
+                    "id": np.sin(0.0028 * 10E-6 + 0.43 * 10E-6**2)**2, # Using a single-qubit gate time approximation
+                }
+            }
         },
     },
 }
@@ -95,8 +115,9 @@ hardware_model_Quantinuum_H2_1 = {
 hardware_model_Quantinuum_H2_2 = {
     "device_info": {
         "n_qubits": 56,
-        "coupling_map": "fully-coupled",
-        "basis_gates": ["u", "rz", "zz", "rzz"],
+        "coupling_map": "fully_coupled",
+        # "basis_gates": dict(zip(["u", "rz", "rzz", "zz"], [UGate, RZGate, RZZGate, ZZGate])),
+        "basis_gates": dict(zip(["r", "rz", "rzz"], [RGate, RZGate, RZZGate])), # @TODO - TEMPORARY WORKAROUND
     },
     "noise_params": {
         "all_qubit": {
@@ -111,8 +132,10 @@ hardware_model_Quantinuum_H2_2 = {
                 },
             },
             "readout_error": {
-                ("0","1"): 9E-4,
-                ("1","0"): 1.8E-3,
+                1: {
+                    ("0","1"): 9E-4,
+                    ("1","0"): 1.8E-3,
+                },
             },
             "depolarizing_error": {
                 1: {
@@ -126,11 +149,16 @@ hardware_model_Quantinuum_H2_2 = {
                 1: {
                     "all": (0.32) * 7.3E-5,
                 },
-                2: {
-                    "all": (0.59) * 1.29E-3,
-                },
+                # 2: {
+                #     "all": (0.59) * 1.29E-3, # @TODO - not supported by Qiskit
+                # },
             },
-            "phase_damping": 0.043, # @TODO - temporary proxy for true dephasing error
+            "dephasing_error": {
+                1: {
+                    # @TODO - verify angle convention (i.e. theta vs. theta/2)
+                    "id": np.sin(0.0028 * 10E-6 + 0.43 * 10E-6**2)**2, # Using a single-qubit gate time approximation
+                }
+            }
         },
     },
 }

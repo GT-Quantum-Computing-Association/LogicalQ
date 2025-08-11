@@ -9,7 +9,7 @@ from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor as Pool
 
 from .Logical import LogicalCircuit, LogicalStatevector, LogicalDensityMatrix
-from .NoiseModel import construct_noise_model
+from .NoiseModel import construct_noise_model, construct_noise_model_from_hardware_model
 from .Transpilation.UnBox import UnBox
 
 from qiskit import QuantumCircuit
@@ -26,8 +26,12 @@ from qiskit_ibm_runtime import QiskitRuntimeService
 from pytket.extensions.qiskit.tket_backend import TketBackend
 from qbraid.runtime.native.device import QbraidDevice
 
-# General function to benchmark a circuit using a noise model
-def execute_circuits(circuit_input, target=None, backend=None, noise_model=None, noise_params=None, coupling_map=None, basis_gates=None, method="statevector", optimization_level=0, shots=1024, memory=False, return_circuits_transpiled=False):
+"""
+    General function to execute a circuit with smart handling of parameters, especially for circuits with QEC.
+
+    The parameters target, backend, and hardware_model are the preferred input type to this function. If specified, noise_model, noise_params, coupling_map, and basis_gates will try to override anything specified in target, backend, or hardware_model.
+"""
+def execute_circuits(circuit_input, target=None, backend=None, hardware_model=None, noise_model=None, noise_params=None, coupling_map=None, basis_gates=None, method="statevector", optimization_level=0, shots=1024, memory=False, return_circuits_transpiled=False):
     # Resolve circuits
     circuits = []
     if hasattr(circuit_input, "__iter__"):
@@ -47,25 +51,31 @@ def execute_circuits(circuit_input, target=None, backend=None, noise_model=None,
         while "box" in circuits[c].count_ops():
             circuits[c] = pm.run(circuits[c])
 
+    # Resolve noise model
+    if noise_model is None:
+        if hardware_model is not None and "noise_params" in hardware_model:
+            # If noise_params are provided but not a noise_model or backend, then construct noise model based on the provided parameters
+            noise_model = construct_noise_model_from_hardware_model(hardware_model)
+        elif noise_params is not None:
+            # If noise_params are provided but not a noise_model or backend, then construct noise model based on the provided parameters
+            noise_model = construct_noise_model(basis_gates=basis_gates, n_qubits=max_num_qubits, **noise_params)
+
+            backend = "aer_simulator"
+
+    # Resolve coupling_map
     max_num_qubits = max([circuit.num_qubits for circuit in circuits])
     if coupling_map is None:
-        coupling_map = "fully_coupled"
+        if hardware_model is None:
+            coupling_map = hardware_model["device_info"].get("coupling_map", None)
+        else:
+            # Default to fully-coupled map
+            coupling_map = "fully_coupled"
+
+    # Resolve basis_gates
+    if hardware_model is not None:
+        basis_gates = list(hardware_model["device_info"].get("basis_gates", None).keys())
 
     # Resolve backend
-    if backend is None:
-        # Resolve noise_model or noise_params
-        if noise_model is None:
-            if noise_params is not None:
-                # If noise_params are provided but not a noise_model or backend, then construct noise model based on the provided parameters
-                noise_model = construct_noise_model(basis_gates=basis_gates, n_qubits=max_num_qubits, **noise_params)
-
-                backend = "aer_simulator"
-            else:
-                # @TODO - actually, this may not be necessary
-                raise ValueError("One of backend, noise_model, or noise_params must be provided")
-    # elif coupling_map is not None:
-    #     print("WARNING - The Qiskit transpiler is likely to complain about the presence of both backend and coupling_map; this should only be done if the backend is a simulator")
-
     if isinstance(backend, str):
         if backend == "aer_simulator":
             if target is None:
@@ -98,16 +108,15 @@ def execute_circuits(circuit_input, target=None, backend=None, noise_model=None,
     else:
         raise TypeError(f"backend must be None, 'aer_simulator', the name of a backend, or an instance of AerSimulator or Backend, not type {type(backend)}")
 
-    # @TODO - non-Qiskit backend instances may require another AerSimulator backend to be used for transpilation
     # Transpile circuit
     # Method defaults to optimization off to preserve form of benchmarking circuit and full QEC
+    # @TODO - non-Qiskit backend instances may require another AerSimulator backend to be used for transpilation
     if target is None:
-        # circuits_transpiled = transpile(circuits, optimization_level=optimization_level, coupling_map=coupling_map)
-        circuits_transpiled = transpile(circuits, backend=backend, optimization_level=optimization_level, coupling_map=coupling_map)
+        circuits_transpiled = transpile(circuits, backend=backend, optimization_level=optimization_level, coupling_map=coupling_map, translation_method="translator")
     else:
         # @TODO - is it fine to specify both target and backend, given that target has parameters which backend specifies,
         #         and backend is actually constructed with target? at least, what is the expected behavior in such a scenario?
-        circuits_transpiled = transpile(circuits, target=target, backend=backend, optimization_level=optimization_level)
+        circuits_transpiled = transpile(circuits, target=target, backend=backend, optimization_level=optimization_level, translation_method="translator")
 
     results = []
     for circuit_transpiled in circuits_transpiled:
