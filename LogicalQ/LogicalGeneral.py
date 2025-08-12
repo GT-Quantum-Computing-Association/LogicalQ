@@ -619,6 +619,18 @@ class LogicalCircuitGeneral(QuantumCircuit):
     def measure_all(self, with_error_correction=True, meas_basis='Z'):
         self.measure(range(self.n_logical_qubits), range(self.n_logical_qubits), with_error_correction=with_error_correction, meas_basis=meas_basis)
 
+    def remove_final_measurements(self, inplace=False):
+        if inplace:
+            raise NotImplementedError("Inplace measurement removal is not supported")
+
+        lqc_no_meas = LogicalCircuitGeneral(self.n_logical_qubits, self.label, self.stabilizer_tableau, self.name + "_no_meas")
+
+        for circuit_instruction in self.data:
+            if circuit_instruction.name != "measure":
+                lqc_no_meas._append(circuit_instruction)
+
+        return lqc_no_meas
+
     def get_logical_output_counts(self, outputs, logical_qubit_indices=None):
         if logical_qubit_indices == None:
             logical_qubit_indices = range(self.n_logical_qubits)
