@@ -588,7 +588,7 @@ class LogicalCircuit(QuantumCircuit):
 
         self.reset_ancillas(logical_qubit_indices=logical_qubit_indices)
 
-    # Compute optimal QEC cycle indices and perform insertion (unless specified otherwise)
+    # Compute optimal QEC cycle indices
     def optimize_qec_cycle_indices(self, logical_qubit_indices=None, constraint_model=None, ignore_existing_qec=False, clear_existing_qec=False):
         if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
             logical_qubit_indices = list(range(self.n_logical_qubits))
