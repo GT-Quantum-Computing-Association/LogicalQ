@@ -8,6 +8,7 @@ from qiskit.quantum_info import Statevector, DensityMatrix, Pauli, partial_trace
 from qiskit_addon_utils.slicing import slice_by_depth
 
 from qiskit.transpiler import PassManager
+
 from .Transpilation.ClearQEC import ClearQEC
 from .Transpilation.UnBox import UnBox
 
@@ -596,6 +597,9 @@ class LogicalCircuit(QuantumCircuit):
         if clear_existing_qec and not ignore_existing_qec:
             raise ValueError("Clear existing QEC requested but not ignore existing QEC, which is likely to result in index errors because existing QEC cycles are cleared before new ones are inserted at the computed indices")
 
+        if constraint_model is None:
+            raise ValueError("A valid constraint_model input is required by optimize_qec_cycle_indices")
+
         # @TODO - if the user has requested that QEC be ignored, check whether there are any QEC-related parameters in the constraint_model
 
         slices = slice_by_depth(self, 1)
@@ -625,7 +629,7 @@ class LogicalCircuit(QuantumCircuit):
             # @TODO - handle controlled gates
             if instruction.is_controlled_gate():
                 if not instruction.is_standard_gate():
-                    print(f"WARNING - Non-Qiskit standard controlled gate with name '{instruction.name}' and label '{instruction.label}' identified, costs may not be accurate")
+                    print(f"WARNING - Non-Qiskit-standard controlled gate with name '{instruction.name}' and label '{instruction.label}' identified, costs may not be accurate")
 
             # @TODO - unsure whether this is implemented correctly
             if "circuit_depth_logical_qubit" in constraint_model.keys():
@@ -644,6 +648,20 @@ class LogicalCircuit(QuantumCircuit):
                 met = met or counters[f"num_ops_{len(instruction.qubits)}q"] >= constraint_model[f"num_ops_{len(instruction.qubits)}q"]
             if f"cost_ops_{len(instruction.qubits)}q" in constraint_model.keys():
                 running_cost[-1] += constraint_model[f"cost_ops_{len(instruction.qubits)}q"]
+
+            if instruction.name in ["x", "y", "z", "h", "s", "cx", "cy", "cz"]:
+                if f"cost_ops_clifford_{len(instruction.qubits)}q" in constraint_model.keys():
+                    running_cost[-1] += constraint_model[f"cost_ops_clifford_{len(instruction.qubits)}q"]
+
+                if instruction.name in ["x", "y", "z"]:
+                    if f"cost_ops_pauli_{len(instruction.qubits)}q" in constraint_model.keys():
+                        running_cost[-1] += constraint_model[f"cost_ops_pauli_{len(instruction.qubits)}q"]
+                else:
+                    if f"cost_ops_nonpauli_{len(instruction.qubits)}q" in constraint_model.keys():
+                        running_cost[-1] += constraint_model[f"cost_ops_nonpauli_{len(instruction.qubits)}q"]
+            else:
+                if f"cost_ops_nonclifford_{len(instruction.qubits)}q" in constraint_model.keys():
+                    running_cost[-1] += constraint_model[f"cost_ops_nonclifford_{len(instruction.qubits)}q"]
 
             # @TODO - check key "num_ops_clifford"
             # @TODO - check key "cost_ops_clifford"
@@ -681,9 +699,9 @@ class LogicalCircuit(QuantumCircuit):
 
                 met = compute_instruction_contributions(q, i, d, instruction, counters, running_cost)
 
-                # print(counters, running_cost[-1])
+                # print(counters, running_cost[-1], constraint_model["effective_threshold"])
 
-                met = met or np.isclose(running_cost[-1], constraint_model["effective_threshold"])
+                met = met or running_cost[-1] >= constraint_model["effective_threshold"]
                 if met:
                     # print(f"Inserting QEC cycle at index {i}, depth {d}")
                     new_qec_cycle_indices_initial[q] = new_qec_cycle_indices_initial.get(q, []) + [i]
@@ -1485,6 +1503,8 @@ class LogicalQubit(list):
 
 class LogicalRegister(list):
     def __init__(self, qregs=None, cregs=None):
+        self.qregs = qregs
+        self.cregs = cregs
         raise NotImplementedError("LogicalRegister is not yet fully implemented")
 
 class LogicalStatevector(Statevector):
