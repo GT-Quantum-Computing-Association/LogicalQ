@@ -13,9 +13,11 @@ from .NoiseModel import construct_noise_model, construct_noise_model_from_hardwa
 from .Transpilation.UnBox import UnBox
 
 from qiskit import QuantumCircuit
+from qiskit.circuit import Operation
+from qiskit.circuit.library import CXGate
 from qiskit.quantum_info import Statevector, DensityMatrix
 
-from qiskit_aer import AerSimulator
+from qiskit_aer import AerSimulator, noise
 from qiskit_aer.noise import NoiseModel
 
 from qiskit import transpile
@@ -26,12 +28,14 @@ from qiskit_ibm_runtime import QiskitRuntimeService
 from pytket.extensions.qiskit.tket_backend import TketBackend
 from qbraid.runtime.native.device import QbraidDevice
 
+DEFAULT = object()
+
 """
     General function to execute a circuit with smart handling of parameters, especially for circuits with QEC.
 
     The parameters target, backend, and hardware_model are the preferred input type to this function. If specified, noise_model, noise_params, coupling_map, and basis_gates will try to override anything specified in target, backend, or hardware_model.
 """
-def execute_circuits(circuit_input, target=None, backend=None, hardware_model=None, noise_model=None, noise_params=None, coupling_map=None, basis_gates=None, method="statevector", optimization_level=0, shots=1024, memory=False, return_circuits_transpiled=False):
+def execute_circuits(circuit_input, target=None, backend=None, hardware_model=None, noise_model=DEFAULT, noise_params=DEFAULT, coupling_map=DEFAULT, basis_gates=DEFAULT, method="statevector", optimization_level=0, shots=1024, memory=False, return_circuits_transpiled=False):
     # Resolve circuits
     circuits = []
     if hasattr(circuit_input, "__iter__"):
@@ -51,25 +55,38 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
         while "box" in circuits[c].count_ops():
             circuits[c] = pm.run(circuits[c])
 
+    max_num_qubits = max([circuit.num_qubits for circuit in circuits])
+
     # Resolve noise model
-    if noise_model is None:
+    if noise_model is DEFAULT:
         if hardware_model is not None and "noise_params" in hardware_model:
             # If noise_params are provided but not a noise_model or backend, then construct noise model based on the provided parameters
             noise_model = construct_noise_model_from_hardware_model(hardware_model)
-        elif noise_params is not None:
+        elif isinstance(noise_params, dict):
             # If noise_params are provided but not a noise_model or backend, then construct noise model based on the provided parameters
             noise_model = construct_noise_model(basis_gates=basis_gates, n_qubits=max_num_qubits, **noise_params)
 
             backend = "aer_simulator"
+        else:
+            # Default to no noise model
+            noise_model = None
+    elif noise_model is not None:
+        raise TypeError(f"Invalid type for noise_model input: {type(noise_model)}")
 
     # Resolve coupling_map
-    max_num_qubits = max([circuit.num_qubits for circuit in circuits])
-    if coupling_map is None:
+    if coupling_map is DEFAULT:
         if hardware_model is None:
-            coupling_map = hardware_model["device_info"].get("coupling_map", None)
-        else:
-            # Default to fully-coupled map
+            # # Default to fully-coupled map
+            # @TODO - pick a better default (like None) if the backend is a real backend
             coupling_map = "fully_coupled"
+        else:
+            coupling_map = hardware_model["device_info"].get("coupling_map", None)
+    elif coupling_map is not None:
+        raise TypeError(f"Invalid type for coupling_map input: {type(coupling_map)}")
+
+    if coupling_map == "fully_coupled":
+        # Create a fully-coupled map
+        coupling_map = [list(pair) for pair in itertools.product(range(max_num_qubits), range(max_num_qubits))]
 
     # Resolve basis_gates
     if hardware_model is not None:
@@ -79,10 +96,6 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
     if isinstance(backend, str):
         if backend == "aer_simulator":
             if target is None:
-                if coupling_map == "fully_coupled":
-                    # Create a fully-coupled map by default since we don't care about non-fully-coupled hardware modalities
-                    coupling_map = [list(pair) for pair in itertools.product(range(max_num_qubits), range(max_num_qubits))]
-
                 if basis_gates is not None:
                     backend = AerSimulator(method=method, noise_model=noise_model, basis_gates=basis_gates, coupling_map=coupling_map)
                 else:
@@ -112,11 +125,24 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
     # Method defaults to optimization off to preserve form of benchmarking circuit and full QEC
     # @TODO - non-Qiskit backend instances may require another AerSimulator backend to be used for transpilation
     if target is None:
-        circuits_transpiled = transpile(circuits, backend=backend, optimization_level=optimization_level, coupling_map=coupling_map, translation_method="translator")
+        circuits_transpiled = transpile(
+            circuits,
+            backend=backend,
+            coupling_map=coupling_map,
+            optimization_level=optimization_level,
+            translation_method="translator",
+        )
     else:
         # @TODO - is it fine to specify both target and backend, given that target has parameters which backend specifies,
         #         and backend is actually constructed with target? at least, what is the expected behavior in such a scenario?
-        circuits_transpiled = transpile(circuits, target=target, backend=backend, optimization_level=optimization_level, translation_method="translator")
+        circuits_transpiled = transpile(
+            circuits,
+            target=target,
+            backend=backend,
+            coupling_map=coupling_map,
+            optimization_level=optimization_level,
+            translation_method="translator",
+        )
 
     results = []
     for circuit_transpiled in circuits_transpiled:
@@ -136,7 +162,8 @@ def _experiment_core(task_id, circuit, noise_model, backend, method, shots):
 
     return task_id, result
 
-# @TODO - implement experiments
+# @TODO - implement more experiments
+
 def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1, max_n_qubits=16, min_circuit_length=1, max_circuit_length=16, backend="aer_simulator", method="statevector", shots=1024, with_mp=True, save_dir=None, save_filename=None):
     if isinstance(circuit_input, QuantumCircuit):
         if max_n_qubits != min_n_qubits:
@@ -238,7 +265,7 @@ def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1,
 
     return all_data
 
-def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, error_scan_val_lists, noise_qubits=None, basis_gates=None, target=None, backend="aer_simulator", method="density_matrix", compute_exact=False, shots=1024, with_mp=False, save_dir=None, save_filename=None):
+def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, error_scan_val_lists, basis_gates=None, target=None, backend="aer_simulator", method="density_matrix", compute_exact=False, shots=1024, with_mp=False, save_dir=None, save_filename=None):
     if isinstance(circuit_input, QuantumCircuit):
         circuit_input = [circuit_input]
     elif hasattr(circuit_input, "__iter__") and all([isinstance(circuit, QuantumCircuit) for circuit in circuit_input]):
@@ -434,7 +461,7 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
 
     return all_data
 
-def qec_cycle_efficiency_experiment(circuit_input, noise_model_input, qecc, constraint_scan_keys, constraint_scan_val_lists, backend="aer_simulator", method="density_matrix", shots=1024, with_mp=False, save_dir=None, save_filename=None):
+def qec_cycle_efficiency_experiment(circuit_input, qecc, constraint_scan_keys, constraint_scan_val_lists, with_mp=False, save_dir=None, save_filename=None, **kwargs):
     if isinstance(circuit_input, LogicalCircuit):
         raise NotImplementedError("LogicalCircuit inputs are not accepted because the original physical circuit(s) are also necessary for this experiment.")
     elif isinstance(circuit_input, QuantumCircuit):
@@ -446,25 +473,6 @@ def qec_cycle_efficiency_experiment(circuit_input, noise_model_input, qecc, cons
         raise NotImplementedError("QuantumCircuit/LogicalCircuit callables are not accepted as inputs, please provide a constant QuantumCircuit/LogicalCircuit object or a list of such.")
     else:
         raise ValueError("Please provide a QuantumCircuit/LogicalCircuit input.")
-
-    if isinstance(noise_model_input, NoiseModel):
-        noise_model_factory = lambda c : noise_model_input
-    elif hasattr(noise_model_input, "__iter__"):
-        if len(noise_model_input) == len(constraint_models):
-            noise_model_callable_list = []
-            for noise_model_input_element in noise_model_input:
-                if isinstance(noise_model_input_element, NoiseModel):
-                    noise_model_callable_list.append(noise_model_input_element)
-                else:
-                    raise ValueError("List provided for noise_model_input does not match length of constraint_models list input; noise_model_input must either be constant, a callable, or a list.")
-
-            noise_model_factory = lambda c : noise_model_callable_list[c]
-        else:
-            raise ValueError("List provided for noise_model_input does not match length of constraint_models list - noise_model_input must either be constant, a callable, or a list with length matching that of constraint_models list.")
-    elif callable(noise_model_input):
-        raise NotImplementedError("NoiseModel callables are not accepted as inputs, please provide a constant NoiseModel object or a list of such.")
-    else:
-        raise ValueError("Please provide a NoiseModel input.")
 
     num_constraint_scan_keys = len(constraint_scan_keys)
     num_constraint_scan_val_lists = len(constraint_scan_val_lists)
@@ -515,7 +523,7 @@ def qec_cycle_efficiency_experiment(circuit_input, noise_model_input, qecc, cons
             qec_cycle_indices = circuit_logical.optimize_qec_cycle_indices(constraint_model=constraint_model)
             circuit_logical.insert_qec_cycles(qec_cycle_indices=qec_cycle_indices)
 
-            result = execute_circuits(circuit_logical, noise_model=noise_model_input, backend=backend, method=method, shots=shots)
+            result = execute_circuits(circuit_logical, **kwargs)[0]
 
             sub_data["results"].append({
                 "constraint_model": constraint_model,
@@ -595,6 +603,7 @@ def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, qecc, c
             noise_model_input=noise_model_input,
             error_scan_keys=error_scan_keys,
             error_scan_val_lists=error_scan_val_lists,
+            compute_exact=compute_exact
         )
         all_data[c]["results_physical"] = results_physical
 

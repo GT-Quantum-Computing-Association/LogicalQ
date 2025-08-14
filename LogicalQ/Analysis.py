@@ -168,13 +168,15 @@ def qec_cycle_efficiency_bar(all_data, scan_keys=None, plot_metric=None, show=Fa
                 raise ValueError(f"scan_keys input contains invalid keys not present in experiment data: {invalid_keys}.")
 
         for scan_key in scan_keys:
+            fig, ax = plt.subplots()
+
             xdata = []
             ydata = []
 
             for circuit_result in circuit_results:
                 constraint_model = circuit_result["constraint_model"]
 
-                result = circuit_result["result"][0]
+                result = circuit_result["result"]
 
                 # Construct a LogicalDensityMatrix estimate from experiment counts
                 # @TODO - use density matrices instead once LogicalDensityMatrix is fully implemented
@@ -198,8 +200,6 @@ def qec_cycle_efficiency_bar(all_data, scan_keys=None, plot_metric=None, show=Fa
 
                 xdata.append(constraint_model[scan_key])
                 ydata.append(metric)
-
-            plt.figure()
 
             plt.bar(xdata, ydata)
 
