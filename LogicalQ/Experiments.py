@@ -25,7 +25,10 @@ from qiskit.transpiler import PassManager
 
 from qiskit.providers import Backend
 from qiskit_ibm_runtime import QiskitRuntimeService
-from pytket.extensions.qiskit.tket_backend import TketBackend
+
+from pytket.extensions.quantinuum import QuantinuumBackend
+from pytket.extensions.qiskit import qiskit_to_tk
+
 from qbraid.runtime.native.device import QbraidDevice
 
 DEFAULT = object()
@@ -109,44 +112,78 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
                 # @TODO - is it fine to specify both target and noise model, given that target includes some gate errors?
                 #         at least, what is the expected behavior in such a scenario?
                 backend = AerSimulator(method=method, target=target, noise_model=noise_model)
+        elif backend.startswith("quantinuum_"):
+            device_name = backend.split("_")[1]
+            backend = QuantinuumBackend(device_name=device_name)
+        elif backend.startswith("qbraid:"):
+            provider = QbraidProvider()
+            device = backend.split(":")[1]
+            device = provider.get_device(device_name)
         else:
             # @TODO - handle this case better, e.g. by checking whether access to the device exists through
             #         Tket or Qbraid, not just IBM
 
             service = QiskitRuntimeService()
             backend = service.backend(backend)
-    elif isinstance(backend, (AerSimulator, Backend, TketBackend, QbraidDevice)):
-        # @TODO - handle this case better
-        backend = backend
-    else:
-        raise TypeError(f"backend must be None, 'aer_simulator', the name of a backend, or an instance of AerSimulator or Backend, not type {type(backend)}")
 
-    # Transpile circuit
+    if isinstance(backend, AerSimulator):
+        _transpile = transpile
+        _cost = lambda circuits, shots : None
+        _run = lambda circuits, **kwargs : backend.run(circuits, **kwargs).result()
+    else:
+        if noise_model not in [None, DEFAULT]:
+            raise ValueError("Cannot pass noise_model to a non-simulator backend")
+        if coupling_map not in [None, DEFAULT]:
+            raise ValueError("Cannot pass coupling_map to a non-simulator backend")
+        if basis_gates not in [None, DEFAULT]:
+            raise ValueError("Cannot pass basis_gates to a non-simulator backend")
+
+        if isinstance(backend, Backend):
+            _transpile = transpile
+
+            # @TODO - implement
+            _cost = lambda circuits, shots : None
+
+            _run = lambda circuits, **kwargs : backend.run(circuits, **kwargs).result()
+        elif isinstance(backend, (QuantinuumBackend)):
+            _transpile = lambda circuits, coupling_map=None, optimization_level=0, **kwargs : backend.get_compiled_circuits(circuits, optimisation_level=optimization_level, **kwargs)
+
+            device_name = backend._device_name.upper().rstrip("LE")
+            _cost = lambda circuits, shots : backend.cost(circuits, n_shots=shots, syntax_checker=device_name+"SC")
+
+            # @TODO - implement a smarter run function that instead uses process_circuits to get a handle and check its status periodically
+            _run = lambda circuits, shots, memory=None, **kwargs : backend.run_circuits(circuits, n_shots=shots, **kwargs)
+        else:
+            raise TypeError(f"backend must be None, 'aer_simulator', the name of a backend, or an instance of AerSimulator, Backend, or QuantinuumBackend not type {type(backend)}")
+
+    # Transpile circuits
     # Method defaults to optimization off to preserve form of benchmarking circuit and full QEC
     # @TODO - non-Qiskit backend instances may require another AerSimulator backend to be used for transpilation
     if target is None:
-        circuits_transpiled = transpile(
+        circuits_transpiled = _transpile(
             circuits,
             backend=backend,
             coupling_map=coupling_map,
-            optimization_level=optimization_level,
-            translation_method="translator",
+            optimization_level=optimization_level
         )
     else:
         # @TODO - is it fine to specify both target and backend, given that target has parameters which backend specifies,
         #         and backend is actually constructed with target? at least, what is the expected behavior in such a scenario?
-        circuits_transpiled = transpile(
+        circuits_transpiled = _transpile(
             circuits,
             target=target,
             backend=backend,
             coupling_map=coupling_map,
-            optimization_level=optimization_level,
-            translation_method="translator",
+            optimization_level=optimization_level
         )
 
+    # Cost circuits (if applicable)
+    _cost(circuits_transpiled, shots)
+
+    # Run circuits
     results = []
     for circuit_transpiled in circuits_transpiled:
-        result = backend.run([circuit_transpiled], shots=shots, memory=memory).result()
+        result = _run([circuit_transpiled], shots=shots, memory=memory)
         results.append(result)
 
     if return_circuits_transpiled:
