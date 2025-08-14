@@ -18,11 +18,12 @@ from qiskit_aer import AerSimulator
 
 # @TODO - find expected results in the form of statevectors, density matrices, etc.
 
-def TestEncode(qecc_list=None):
-    if qecc_list is None:
-        qecc_list = implemented_codes
+def TestEncode(qeccs=None):
+    if qeccs is None:
+        qeccs = implemented_codes
 
-    for qecc in qecc_list:
+    all_successful = True
+    for qecc in qeccs:
         # LogicalQ
         n, k, d = qecc["label"]
 
@@ -59,28 +60,29 @@ def TestEncode(qecc_list=None):
 
         if np.isclose(fidelity, 1.0):
             print(f"TestEncode succeeded for {qecc['label']} with fidelity {fidelity}")
-            return True
         else:
             print(f"TestEncode failed for {qecc['label']} with fidelity {fidelity}")
-            return False
+            all_successful = False
 
-def TestUnflaggedSyndromeMeasurement(qecc_list=None):
+    return all_successful
+
+def TestUnflaggedSyndromeMeasurement(qeccs=None):
     print(f"WARNING - TestUnflaggedSyndromeMeasurement has not been fully implemented, returning True")
     return True
 
-def TestFlaggedSyndromeMeasurement(qecc_list=None):
+def TestFlaggedSyndromeMeasurement(qeccs=None):
     print(f"WARNING - TestFlaggedSyndromeMeasurement has not been fully implemented, returning True")
     return True
 
-def TestDecoding(qecc_list=None):
+def TestDecoding(qeccs=None):
     print(f"WARNING - TestDecoding has not been fully implemented, returning True")
     return True
 
-def TestQECCycle(qecc_list=None):
+def TestQECCycle(qeccs=None):
     if all([
-        TestUnflaggedSyndromeMeasurement(qecc_list),
-        TestFlaggedSyndromeMeasurement(qecc_list),
-        TestDecoding(qecc_list),
+        TestUnflaggedSyndromeMeasurement(qeccs),
+        TestFlaggedSyndromeMeasurement(qeccs),
+        TestDecoding(qeccs),
     ]):
         print(f"TestQECCycle succeeded")
         return True
@@ -88,10 +90,10 @@ def TestQECCycle(qecc_list=None):
         print(f"TestQECCycle failed")
         return False
 
-def TestAllQEC(qecc_list=None):
+def TestAllQEC(qeccs=None):
     if all([
-        TestEncode(qecc_list),
-        TestQECCycle(qecc_list),
+        TestEncode(qeccs),
+        TestQECCycle(qeccs),
     ]):
         print(f"TestAllQEC succeeded")
         return True

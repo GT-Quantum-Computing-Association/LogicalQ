@@ -18,14 +18,14 @@ if __name__ == "__main__":
 
     # Parse QECC input
     if args.qecc_labels:
-        qecc_list = []
+        qeccs = []
         for qecc_input in args.qecc_labels.split(";"):
             qecc = label_to_qecc(qecc_input)
-            qecc_list.append(qecc)
+            qeccs.append(qecc)
     else:
-        qecc_list = implemented_codes
+        qeccs = implemented_codes
 
     # Parse test input
-    TestAllQEC(qecc_list)
-    TestAllGates(qecc_list)
+    TestAllQEC(qeccs)
+    TestAllGates(qeccs)
 

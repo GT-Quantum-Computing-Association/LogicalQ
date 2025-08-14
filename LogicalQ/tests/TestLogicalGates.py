@@ -13,11 +13,11 @@ from qiskit_aer import AerSimulator
 
 # @TODO - find expected results in the form of statevectors, density matrices, etc.
 
-def TestX(qecc_list=None):
-    if qecc_list is None:
-        qecc_list = implemented_codes
+def TestX(qeccs=None):
+    if qeccs is None:
+        qeccs = implemented_codes
 
-    for qecc in qecc_list:
+    for qecc in qeccs:
         n, k, d = qecc["label"]
 
         lqc_x = LogicalCircuit(k, **qecc)
@@ -36,11 +36,11 @@ def TestX(qecc_list=None):
     print(f"WARNING - TestX has not been fully implemented, returning True")
     return True
 
-def TestY(qecc_list=None):
-    if qecc_list is None:
-        qecc_list = implemented_codes
+def TestY(qeccs=None):
+    if qeccs is None:
+        qeccs = implemented_codes
 
-    for qecc in qecc_list:
+    for qecc in qeccs:
         n, k, d = qecc["label"]
 
         lqc_y = LogicalCircuit(k, **qecc)
@@ -53,11 +53,11 @@ def TestY(qecc_list=None):
     print(f"WARNING - TestY has not been fully implemented, returning True")
     return True
 
-def TestZ(qecc_list=None):
-    if qecc_list is None:
-        qecc_list = implemented_codes
+def TestZ(qeccs=None):
+    if qeccs is None:
+        qeccs = implemented_codes
 
-    for qecc in qecc_list:
+    for qecc in qeccs:
         n, k, d = qecc["label"]
 
         lqc_z = LogicalCircuit(k, **qecc)
@@ -70,11 +70,11 @@ def TestZ(qecc_list=None):
     print(f"WARNING - TestZ has not been fully implemented, returning True")
     return True
 
-def TestH(qecc_list=None):
-    if qecc_list is None:
-        qecc_list = implemented_codes
+def TestH(qeccs=None):
+    if qeccs is None:
+        qeccs = implemented_codes
 
-    for qecc in qecc_list:
+    for qecc in qeccs:
         n, k, d = qecc["label"]
 
         lqc_h = LogicalCircuit(k, **qecc)
@@ -87,11 +87,11 @@ def TestH(qecc_list=None):
     print(f"WARNING - TestH has not been fully implemented, returning True")
     return True
 
-def TestS(qecc_list=None):
-    if qecc_list is None:
-        qecc_list = implemented_codes
+def TestS(qeccs=None):
+    if qeccs is None:
+        qeccs = implemented_codes
 
-    for qecc in qecc_list:
+    for qecc in qeccs:
         n, k, d = qecc["label"]
 
         lqc_s = LogicalCircuit(k, **qecc)
@@ -104,11 +104,11 @@ def TestS(qecc_list=None):
     print(f"WARNING - TestS has not been fully implemented, returning True")
     return True
 
-def TestT(qecc_list=None):
-    if qecc_list is None:
-        qecc_list = implemented_codes
+def TestT(qeccs=None):
+    if qeccs is None:
+        qeccs = implemented_codes
 
-    for qecc in qecc_list:
+    for qecc in qeccs:
         n, k, d = qecc["label"]
 
         lqc_t = LogicalCircuit(k, **qecc)
@@ -121,11 +121,11 @@ def TestT(qecc_list=None):
     print(f"WARNING - TestT has not been fully implemented, returning True")
     return True
 
-def TestCX(qecc_list=None):
-    if qecc_list is None:
-        qecc_list = implemented_codes
+def TestCX(qeccs=None):
+    if qeccs is None:
+        qeccs = implemented_codes
 
-    for qecc in qecc_list:
+    for qecc in qeccs:
         n, k, d = qecc["label"]
 
         lqc_cx = LogicalCircuit(k, **qecc)
@@ -139,11 +139,11 @@ def TestCX(qecc_list=None):
     print(f"WARNING - TestCX has not been fully implemented, returning True")
     return True
 
-def TestPauliGates(qecc_list=None):
+def TestPauliGates(qeccs=None):
     if all([
-        TestX(qecc_list),
-        TestY(qecc_list),
-        TestZ(qecc_list),
+        TestX(qeccs),
+        TestY(qeccs),
+        TestZ(qeccs),
     ]):
         print(f"TestPauliGates succeeded")
         return True
@@ -151,12 +151,12 @@ def TestPauliGates(qecc_list=None):
         print(f"TestPauliGates failed")
         return False
 
-def TestCliffordGates(qecc_list=None):
+def TestCliffordGates(qeccs=None):
     if all([
-        TestPauliGates(qecc_list),
-        TestH(qecc_list),
-        TestS(qecc_list),
-        TestCX(qecc_list),
+        TestPauliGates(qeccs),
+        TestH(qeccs),
+        TestS(qeccs),
+        TestCX(qeccs),
     ]):
         print(f"TestCliffordGates succeeded")
         return True
@@ -164,9 +164,9 @@ def TestCliffordGates(qecc_list=None):
         print(f"TestCliffordGates failed")
         return False
 
-def TestNonCliffordGates(qecc_list=None):
+def TestNonCliffordGates(qeccs=None):
     if all([
-        TestT(qecc_list),
+        TestT(qeccs),
     ]):
         print(f"TestNonCliffordGates succeeded")
         return True
@@ -174,13 +174,13 @@ def TestNonCliffordGates(qecc_list=None):
         print(f"TestNonCliffordGates failed")
         return False
 
-def TestAllGates(qecc_list=None):
+def TestAllGates(qeccs=None):
     print(f"WARNING - TestAllGates has not been fully implemented, returning True")
     return True
 
     if all([
-        TestCliffordGates(qecc_list),
-        TestNonCliffordGates(qecc_list),
+        TestCliffordGates(qeccs),
+        TestNonCliffordGates(qeccs),
     ]):
         print(f"TestAllGates succeeded")
         return True
