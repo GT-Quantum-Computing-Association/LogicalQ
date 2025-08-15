@@ -1686,7 +1686,7 @@ class LogicalStatevector(Statevector):
         if output is None: output = "text"
 
         if output == "text":
-            text = f"{self.logical_decomposition[0]} |0>_L + {self.logical_decomposition[1]} |1>_L + {self.logical_decomposition[2]} |psi^perp>"
+            text = f"{self.logical_decomposition[0]} |0>_L + {self.logical_decomposition[1]} |1>_L + {self.logical_decomposition[2]} |psi_L^perp>"
             return text
         elif output == "latex":
             from IPython.display import Latex
@@ -1694,7 +1694,7 @@ class LogicalStatevector(Statevector):
             latex = ""
             latex += "$$"
             latex += "\\begin{align}\n"
-            latex += f"{self.logical_decomposition[0]} \\ket{{0}}_L + {self.logical_decomposition[1]} \\ket{{1}}_L + {self.logical_decomposition[2]} \\ket{{\\psi^\\perp}}"
+            latex += f"{self.logical_decomposition[0]} \\ket{{0}}_L + {self.logical_decomposition[1]} \\ket{{1}}_L + {self.logical_decomposition[2]} \\ket{{\\psi_L^\\perp}}"
             latex += "\\end{align}\n"
             latex += "$$"
 
@@ -1703,7 +1703,7 @@ class LogicalStatevector(Statevector):
             latex = ""
             latex += "$$"
             latex += "\\begin{align}\n"
-            latex += f"{self.logical_decomposition[0]} \\ket{{0}}_L + {self.logical_decomposition[1]} \\ket{{1}}_L + {self.logical_decomposition[2]} \\ket{{\\psi^\\perp}}"
+            latex += f"{self.logical_decomposition[0]} \\ket{{0}}_L + {self.logical_decomposition[1]} \\ket{{1}}_L + {self.logical_decomposition[2]} \\ket{{\\psi_L^\\perp}}"
             latex += "\\end{align}\n"
             latex += "$$"
 
