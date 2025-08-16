@@ -10,26 +10,24 @@ from concurrent.futures import ProcessPoolExecutor as Pool
 
 from .Logical import LogicalCircuit, LogicalStatevector, LogicalDensityMatrix
 from .NoiseModel import construct_noise_model, construct_noise_model_from_hardware_model
-from .Transpilation.UnBox import UnBox
 
 from qiskit import QuantumCircuit
-from qiskit.circuit import Operation
-from qiskit.circuit.library import CXGate
 from qiskit.quantum_info import Statevector, DensityMatrix
 
-from qiskit_aer import AerSimulator, noise
+from qiskit_aer import AerSimulator
 from qiskit_aer.noise import NoiseModel
 
 from qiskit import transpile
 from qiskit.transpiler import PassManager
+from .Transpilation.UnBox import UnBox
 
 from qiskit.providers import Backend
 from qiskit_ibm_runtime import QiskitRuntimeService
-
 from pytket.extensions.quantinuum import QuantinuumBackend
 from pytket.extensions.qiskit import qiskit_to_tk
-
 from qbraid.runtime.native.device import QbraidDevice
+
+from qiskit.exceptions import QiskitError
 
 DEFAULT = object()
 
@@ -52,6 +50,11 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
     else:
         raise TypeError(f"Invalid type for circuits input: {type(circuit_input)}")
 
+    # Check that the user has appended a measurement to every circuit
+    for c, circuit in enumerate(circuits):
+        if "measure" not in circuit.count_ops():
+            raise ValueError(f"No measurements found in circuit with name {circuit.name} at index {c}; all circuits must have measurements in order to be executed.")
+
     # Patch to account for backends that do not yet recognize BoxOp's during transpilation
     pm = PassManager([UnBox()])
     for c in range(len(circuits)):
@@ -73,7 +76,7 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
         else:
             # Default to no noise model
             noise_model = None
-    elif noise_model is not None:
+    elif noise_model is not None and not isinstance(noise_model, NoiseModel):
         raise TypeError(f"Invalid type for noise_model input: {type(noise_model)}")
 
     # Resolve coupling_map
@@ -84,7 +87,7 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
             coupling_map = "fully_coupled"
         else:
             coupling_map = hardware_model["device_info"].get("coupling_map", None)
-    elif coupling_map is not None:
+    elif coupling_map is not None and not hasattr(coupling_map, "__iter__"):
         raise TypeError(f"Invalid type for coupling_map input: {type(coupling_map)}")
 
     if coupling_map == "fully_coupled":
@@ -92,17 +95,22 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
         coupling_map = [list(pair) for pair in itertools.product(range(max_num_qubits), range(max_num_qubits))]
 
     # Resolve basis_gates
-    if hardware_model is not None:
-        basis_gates = list(hardware_model["device_info"].get("basis_gates", None).keys())
+    if basis_gates is DEFAULT:
+        if hardware_model is None:
+            basis_gates = None
+        else:
+            basis_gates = list(hardware_model["device_info"].get("basis_gates", None).keys())
+    elif basis_gates is not None:
+        raise TypeError(f"Invalid type for basis_gates input: {type(basis_gates)}")
 
     # Resolve backend
     if isinstance(backend, str):
         if backend == "aer_simulator":
             if target is None:
-                if basis_gates is not None:
-                    backend = AerSimulator(method=method, noise_model=noise_model, basis_gates=basis_gates, coupling_map=coupling_map)
-                else:
+                if basis_gates is None:
                     backend = AerSimulator(method=method, noise_model=noise_model, coupling_map=coupling_map)
+                else:
+                    backend = AerSimulator(method=method, noise_model=noise_model, basis_gates=basis_gates, coupling_map=coupling_map)
             else:
                 if basis_gates is not None:
                     raise ValueError("Cannot specify both target and basis_gates; target should be constructed based on basis gates")
@@ -163,7 +171,6 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
         circuits_transpiled = _transpile(
             circuits,
             backend=backend,
-            coupling_map=coupling_map,
             optimization_level=optimization_level
         )
     else:
@@ -178,12 +185,37 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
         )
 
     # Cost circuits (if applicable)
-    _cost(circuits_transpiled, shots)
+    # @TODO - retrieve user budget/available credits and include in confirmation prompt
+    costs = _cost(circuits_transpiled, shots)
+    if costs is None:
+        circuits_to_run = circuits_transpiled
+    else:
+        costs_str = "\n"
+        for c, (circuit, cost) in enumerate(zip(circuits, costs)):
+            name = circuit.name
+            costs_str += f"- Circuit {c} (name: '{name}'): {cost}\n"
+        cost_confirmation = input(f"Estimated costs are as follows, respectively for each circuit: {costs_str} Enter 'Y' to confirm all jobs, 'N' to reject all jobs, or an input like 'i,j' to confirm jobs i and j or '^i,j' to confirm all jobs except i and j.").upper()
+        if cost_confirmation == "Y":
+            circuits_to_run = circuits_transpiled
+        elif cost_confirmation == "N":
+            print("All jobs rejected, returning...")
+            return [None]*len(circuits_transpiled)
+        else:
+            if cost_confirmation.startswith("^"):
+                exclude_indices = [int(choice) for choice in cost_confirmation[1:].split(",")]
+                circuit_to_run = [circuits[c] for c in range(len(circuits_transpiled)) if c not in exclude_indices]
+            else:
+                include_indices = [int(choice) for choice in cost_confirmation.split(",")]
+                circuit_to_run = [circuits[c] for c in range(len(circuits_transpiled)) if c in include_indices]
 
     # Run circuits
     results = []
-    for circuit_transpiled in circuits_transpiled:
-        result = _run([circuit_transpiled], shots=shots, memory=memory)
+    for circuit_to_run in circuits_to_run:
+        if circuit_to_run is None:
+            result = None
+        else:
+            result = _run([circuit_to_run], shots=shots, memory=memory)
+
         results.append(result)
 
     if return_circuits_transpiled:
@@ -253,7 +285,7 @@ def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1,
         cpu_count = os.process_cpu_count() or 1
 
         batch_size = max(int(np.ceil((max_n_qubits+1-min_n_qubits)*(max_circuit_length+1-min_circuit_length)/cpu_count)), 1)
-        print(f"Applying mulitprocessing to {len(exp_inputs_list)} samples in batches of maximum size {batch_size} across {cpu_count} CPUs")
+        print(f"Applying multiprocessing to {len(exp_inputs_list)} samples in batches of maximum size {batch_size} across {cpu_count} CPUs")
 
         start = time.perf_counter()
 
@@ -425,7 +457,7 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
             cpu_count = os.process_cpu_count() or 1
 
             batch_size = max(int(np.ceil(len(circuit_input)*len(error_dicts)/cpu_count)), 1)
-            print(f"Applying mulitprocessing to {len(exp_inputs_list)} samples in batches of maximum size {batch_size} across {cpu_count} CPUs")
+            print(f"Applying multiprocessing to {len(exp_inputs_list)} samples in batches of maximum size {batch_size} across {cpu_count} CPUs")
 
             with Pool(cpu_count) as pool:
                 mp_result = pool.map(
@@ -543,9 +575,10 @@ def qec_cycle_efficiency_experiment(circuit_input, qecc, constraint_scan_keys, c
     for circuit_physical in circuit_input:
         circuit_physical_no_meas = circuit_physical.remove_final_measurements(inplace=False)
 
-        density_matrix_exact = DensityMatrix(circuit_physical_no_meas)
-
         circuit_logical = LogicalCircuit.from_physical_circuit(circuit_physical_no_meas, **qecc)
+
+        # @TODO - replicate code from other experiments which have a fallback to the Statevector if an error occurs
+        density_matrix_exact = DensityMatrix(circuit_physical_no_meas)
 
         # @TODO - determine whether this is a better data structure for this, including a better way to distinguish the data by circuit
         sub_data = {
@@ -557,8 +590,11 @@ def qec_cycle_efficiency_experiment(circuit_input, qecc, constraint_scan_keys, c
 
         for constraint_model in constraint_models:
             circuit_logical = LogicalCircuit.from_physical_circuit(circuit_physical, **qecc)
+
             qec_cycle_indices = circuit_logical.optimize_qec_cycle_indices(constraint_model=constraint_model)
             circuit_logical.insert_qec_cycles(qec_cycle_indices=qec_cycle_indices)
+
+            circuit_logical.measure_all()
 
             result = execute_circuits(circuit_logical, **kwargs)[0]
 
