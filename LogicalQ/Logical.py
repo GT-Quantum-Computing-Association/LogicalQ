@@ -273,7 +273,7 @@ class LogicalCircuit(QuantumCircuit):
         ])
 
         # Create Logical X circuit corresponding to X's and Z's at 1's in Pauli vector
-        self.LogicalXCircuit = QuantumCircuit(self.n)
+        self.LogicalXCircuit = QuantumCircuit(self.n, name="logical.logicalop.x.transversal:$\\hat{X}_{L}$")
         for i in range(self.k):
             # X part
             for q, bit in enumerate(self.LogicalXVector[0][i]):
@@ -283,7 +283,6 @@ class LogicalCircuit(QuantumCircuit):
             for q, bit in enumerate(self.LogicalXVector[1][i]):
                 if bit == 1:
                     self.LogicalXCircuit.z(q)
-        self.LogicalXGate = self.LogicalXCircuit.to_gate(label="$X_L$")
 
         self.LogicalZVector = np.block([
             [[np.zeros((self.k, r)), np.zeros((self.k, m-r)), np.zeros((self.k, self.k))]],
@@ -291,7 +290,7 @@ class LogicalCircuit(QuantumCircuit):
         ])
 
         # Create Logical Z circuit corresponding to X's and Z's at 1's in Pauli vector
-        self.LogicalZCircuit = QuantumCircuit(self.n)
+        self.LogicalZCircuit = QuantumCircuit(self.n, name="logical.logicalop.z.transversal:$\\hat{Z}_{L}$")
         for i in range(self.k):
             # X part
             for q, bit in enumerate(self.LogicalZVector[0][i]):
@@ -301,56 +300,60 @@ class LogicalCircuit(QuantumCircuit):
             for q, bit in enumerate(self.LogicalZVector[1][i]):
                 if bit == 1:
                     self.LogicalZCircuit.z(q)
-        self.LogicalZGate = self.LogicalZCircuit.to_gate(label="$Z_L$")
 
         self.LogicalYCircuit = self.LogicalXCircuit.compose(self.LogicalZCircuit)
-        self.LogicalYGate = self.LogicalYCircuit.to_gate(label="$Y_L$")
+        self.LogicalYCircuit.name = "logical.logicalop.y.transversal:$\\hat{Y}_{L}$"
+
+        self.PhysicalToLogicalCXCircuit = self.LogicalXCircuit.control(1, label="logical.logicalop.cx.transversal:$\\hat{CX}_{L}$")
+        self.PhysicalToLogicalCCXCircuit = self.LogicalXCircuit.control(2, label="logical.logicalop.ccx.transversal:$\\hat{CCX}_{L}$")
+        self.PhysicalToLogicalCZCircuit = self.LogicalZCircuit.control(1, label="logical.logicalop.cz.transversal:$\\hat{CZ}_{L}$")
+        self.PhysicalToLogicalCCZCircuit = self.LogicalZCircuit.control(2, label="logical.logicalop.ccz.transversal:$\\hat{CCZ}_{L}$")
+        self.PhysicalToLogicalCXCircuit.name = "logical.logicalop.cx.transversal:$\\hat{CX}_{L}$"
+        self.PhysicalToLogicalCCXCircuit.name = "logical.logicalop.ccx.transversal:$\\hat{CCX}_{L}$"
+        self.PhysicalToLogicalCZCircuit.name = "logical.logicalop.cz.transversal:$\\hat{CZ}_{L}$"
+        self.PhysicalToLogicalCCZCircuit.name = "logical.logicalop.ccz.transversal:$\\hat{CCZ}_{L}$"
 
         # Create Logical H circuit using Childs and Wiebe's linear combination of unitaries method
         self.LogicalHCircuit_LCU = QuantumCircuit(self.n + 1)
         self.LogicalHCircuit_LCU.h(self.n)
-        self.LogicalHCircuit_LCU.compose(self.LogicalXCircuit.control(1), [self.n, *list(range(self.n))], inplace=True)
+        self.LogicalHCircuit_LCU.compose(self.PhysicalToLogicalCXCircuit, [self.n, *list(range(self.n))], inplace=True)
         self.LogicalHCircuit_LCU.x(self.n)
-        self.LogicalHCircuit_LCU.compose(self.LogicalZCircuit.control(1), [self.n, *list(range(self.n))], inplace=True)
+        self.LogicalHCircuit_LCU.compose(self.PhysicalToLogicalCZCircuit, [self.n, *list(range(self.n))], inplace=True)
         self.LogicalHCircuit_LCU.x(self.n)
         self.LogicalHCircuit_LCU.h(self.n)
-        self.LogicalHGate_LCU = self.LogicalHCircuit_LCU.to_gate(label="$H_L$")
 
         # Creates Logical H circuit using coherent feedback
         self.LogicalHCircuit_CF = QuantumCircuit(self.n + 1)
         self.LogicalHCircuit_CF.h(self.n)
-        self.LogicalHCircuit_CF.compose(self.LogicalXCircuit.control(1), [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
-        self.LogicalHCircuit_CF.compose(self.LogicalZCircuit.control(1), [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalHCircuit_CF.compose(self.PhysicalToLogicalCZCircuit, [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalHCircuit_CF.compose(self.PhysicalToLogicalCZCircuit, [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
         self.LogicalHCircuit_CF.h(self.n)
-        self.LogicalHCircuit_CF.compose(self.LogicalXCircuit.control(1), [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalHCircuit_CF.compose(self.PhysicalToLogicalCXCircuit, [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
         self.LogicalHCircuit_CF.x(self.n)
-        self.LogicalHCircuit_CF.compose(self.LogicalZCircuit.control(1), [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalHCircuit_CF.compose(self.PhysicalToLogicalCZCircuit, [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
         self.LogicalHCircuit_CF.h(self.n)
-        self.LogicalHGate_CF = self.LogicalHCircuit_CF.to_gate(label="$H_{CF}$")
 
         # Creates Logical S circuit using coherent feedback
         self.LogicalSCircuit_CF = QuantumCircuit(self.n + 1)
         self.LogicalSCircuit_CF.h(self.n)
         self.LogicalSCircuit_CF.s(self.n)
         self.LogicalSCircuit_CF.h(self.n)
-        self.LogicalSCircuit_CF.compose(self.LogicalZCircuit.control(1), [self.LogicalSCircuit_CF.qubits[self.n]] + self.LogicalSCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalSCircuit_CF.compose(self.PhysicalToLogicalCZCircuit, [self.LogicalSCircuit_CF.qubits[self.n]] + self.LogicalSCircuit_CF.qubits[:self.n], inplace=True)
         self.LogicalSCircuit_CF.h(self.n)
-        self.LogicalSCircuit_CF.compose(self.LogicalZCircuit.control(1), [self.LogicalSCircuit_CF.qubits[self.n]] + self.LogicalSCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalSCircuit_CF.compose(self.PhysicalToLogicalCZCircuit, [self.LogicalSCircuit_CF.qubits[self.n]] + self.LogicalSCircuit_CF.qubits[:self.n], inplace=True)
         self.LogicalSCircuit_CF.sdg(self.n)
         self.LogicalSCircuit_CF.h(self.n)
-        self.LogicalSGate_CF = self.LogicalSCircuit_CF.to_gate(label="$S_{CF}$")
 
         # Creates Logical S^dagger circuit using coherent feedback
         self.LogicalSdgCircuit_CF = QuantumCircuit(self.n + 1)
         self.LogicalSdgCircuit_CF.h(self.n)
         self.LogicalSdgCircuit_CF.sdg(self.n)
         self.LogicalSdgCircuit_CF.h(self.n)
-        self.LogicalSdgCircuit_CF.compose(self.LogicalZCircuit.control(1), [self.LogicalSdgCircuit_CF.qubits[self.n]] + self.LogicalSdgCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalSdgCircuit_CF.compose(self.PhysicalToLogicalCZCircuit, [self.LogicalSdgCircuit_CF.qubits[self.n]] + self.LogicalSdgCircuit_CF.qubits[:self.n], inplace=True)
         self.LogicalSdgCircuit_CF.h(self.n)
-        self.LogicalSdgCircuit_CF.compose(self.LogicalZCircuit.control(1), [self.LogicalSdgCircuit_CF.qubits[self.n]] + self.LogicalSdgCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalSdgCircuit_CF.compose(self.PhysicalToLogicalCZCircuit, [self.LogicalSdgCircuit_CF.qubits[self.n]] + self.LogicalSdgCircuit_CF.qubits[:self.n], inplace=True)
         self.LogicalSdgCircuit_CF.s(self.n)
         self.LogicalSdgCircuit_CF.h(self.n)
-        self.LogicalSdgGate_CF = self.LogicalSdgCircuit_CF.to_gate(label="$S†_{CF}$")
 
         # Creates Logical T circuit using coherent feedback
         self.LogicalTCircuit_CF = QuantumCircuit(self.n + 2)
@@ -359,17 +362,16 @@ class LogicalCircuit(QuantumCircuit):
         self.LogicalTCircuit_CF.t(self.n)
         self.LogicalTCircuit_CF.s(self.n + 1)
         self.LogicalTCircuit_CF.h(self.n)
-        self.LogicalTCircuit_CF.compose(self.LogicalZCircuit.control(1), [self.LogicalTCircuit_CF.qubits[self.n]] + self.LogicalTCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalTCircuit_CF.compose(self.PhysicalToLogicalCZCircuit, [self.LogicalTCircuit_CF.qubits[self.n]] + self.LogicalTCircuit_CF.qubits[:self.n], inplace=True)
         self.LogicalTCircuit_CF.h(self.n)
         self.LogicalTCircuit_CF.h(self.n + 1)
-        self.LogicalTCircuit_CF.compose(self.LogicalZCircuit.control(2), self.LogicalTCircuit_CF.qubits[self.n:self.n+2] + self.LogicalTCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalTCircuit_CF.compose(self.PhysicalToLogicalCCZCircuit, self.LogicalTCircuit_CF.qubits[self.n:self.n+2] + self.LogicalTCircuit_CF.qubits[:self.n], inplace=True)
         self.LogicalTCircuit_CF.h(self.n + 1)
-        self.LogicalTCircuit_CF.compose(self.LogicalZCircuit.control(2), self.LogicalTCircuit_CF.qubits[self.n:self.n+2] + self.LogicalTCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalTCircuit_CF.compose(self.PhysicalToLogicalCCZCircuit, self.LogicalTCircuit_CF.qubits[self.n:self.n+2] + self.LogicalTCircuit_CF.qubits[:self.n], inplace=True)
         self.LogicalTCircuit_CF.tdg(self.n)
         self.LogicalTCircuit_CF.sdg(self.n + 1)
         self.LogicalTCircuit_CF.h(self.n)
         self.LogicalTCircuit_CF.h(self.n + 1)
-        self.LogicalTGate_CF = self.LogicalTCircuit_CF.to_gate(label="$T_{CF}$")
 
         # Creates Logical T^dagger circuit using coherent feedback
         self.LogicalTdgCircuit_CF = QuantumCircuit(self.n + 2)
@@ -378,17 +380,16 @@ class LogicalCircuit(QuantumCircuit):
         self.LogicalTdgCircuit_CF.tdg(self.n)
         self.LogicalTdgCircuit_CF.sdg(self.n + 1)
         self.LogicalTdgCircuit_CF.h(self.n)
-        self.LogicalTdgCircuit_CF.compose(self.LogicalZCircuit.control(1), [self.LogicalTdgCircuit_CF.qubits[self.n]] + self.LogicalTdgCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalTdgCircuit_CF.compose(self.PhysicalToLogicalCZCircuit, [self.LogicalTdgCircuit_CF.qubits[self.n]] + self.LogicalTdgCircuit_CF.qubits[:self.n], inplace=True)
         self.LogicalTdgCircuit_CF.h(self.n)
         self.LogicalTdgCircuit_CF.h(self.n + 1)
-        self.LogicalTdgCircuit_CF.compose(self.LogicalZCircuit.control(2), self.LogicalTdgCircuit_CF.qubits[self.n:self.n+2] + self.LogicalTdgCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalTdgCircuit_CF.compose(self.PhysicalToLogicalCCZCircuit, self.LogicalTdgCircuit_CF.qubits[self.n:self.n+2] + self.LogicalTdgCircuit_CF.qubits[:self.n], inplace=True)
         self.LogicalTdgCircuit_CF.h(self.n + 1)
-        self.LogicalTdgCircuit_CF.compose(self.LogicalZCircuit.control(2), self.LogicalTdgCircuit_CF.qubits[self.n:self.n+2] + self.LogicalTdgCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalTdgCircuit_CF.compose(self.PhysicalToLogicalCCZCircuit, self.LogicalTdgCircuit_CF.qubits[self.n:self.n+2] + self.LogicalTdgCircuit_CF.qubits[:self.n], inplace=True)
         self.LogicalTdgCircuit_CF.t(self.n)
         self.LogicalTdgCircuit_CF.s(self.n + 1)
         self.LogicalTdgCircuit_CF.h(self.n)
         self.LogicalTdgCircuit_CF.h(self.n + 1)
-        self.LogicalTdgGate_CF = self.LogicalTdgCircuit_CF.to_gate(label="$T†_{CF}$")
 
         # @TODO - Logical CX
 
@@ -430,6 +431,11 @@ class LogicalCircuit(QuantumCircuit):
             if len(qubits) > 0 and hasattr(qubits[0], "__iter__"):
                 # Double unwrapping in case qubits is actually a list of lists
                 qubits = [qj for qi in qubits for qj in qi]
+
+                # Check for duplicates - we could just apply set, but a common misconception is that you can call
+                # LogicalCircuit.encode([0], [0]) to encode the 0th qubit in the logical 0 state, so we warn the user instead
+                if len(set(qubits)) < len(qubits):
+                    raise ValueError("Qubits input contains duplicate values - if you are pass a list of initial states, you must specify it by the keyword initial_states")
             else:
                 # Simple list conversion to guarantee type
                 qubits = list(qubits)
@@ -608,7 +614,7 @@ class LogicalCircuit(QuantumCircuit):
             depths.extend([d]*len(slice.data))
 
         new_qec_cycle_indices_initial = {}
-        def compute_instruction_contributions(q, i, d, instruction, counters, running_cost):
+        def compute_instruction_contributions(q, i, depth, instruction, counters, running_cost):
             # Ignore certain "trivial" operations
             if instruction.name in ["barrier"]:
                 return False
@@ -624,19 +630,35 @@ class LogicalCircuit(QuantumCircuit):
                 for param in instruction.params:
                     if isinstance(param, QuantumCircuit):
                         for sub_instruction in param:
-                            met = met or compute_instruction_contributions(q, i, d, sub_instruction, counters, running_cost)
+                            met = met or compute_instruction_contributions(q, i, depth, sub_instruction, counters, running_cost)
+
+                            # Stop here for this instruction - we currently don't have special costs for ControlFlowOps in this function
+                            return met
 
             # @TODO - handle controlled gates
             if instruction.is_controlled_gate():
                 if not instruction.is_standard_gate():
-                    print(f"WARNING - Non-Qiskit-standard controlled gate with name '{instruction.name}' and label '{instruction.label}' identified, costs may not be accurate")
+                    if instruction.name.startswith("clogical.logicalop"):
+                        base_gate = instruction.base_gate
+                        met = met or compute_instruction_contributions(q, i, depth, base_gate, counters, running_cost)
+                    else:
+                        print(f"WARNING - Unrecognized controlled gate with name '{instruction.name}' and label '{instruction.label}' identified, costs may not be accurate")
 
             # @TODO - unsure whether this is implemented correctly
             if "circuit_depth_logical_qubit" in constraint_model.keys():
-                if (d - d[new_qec_cycle_indices_initial[q][-1]]) >= constraint_model["circuit_depth_logical_qubit"]:
+                if q in new_qec_cycle_indices_initial:
+                    qec_cycle_index_prev = new_qec_cycle_indices_initial[q][-1]
+                    depth_prev = depths[qec_cycle_index_prev]
+                else:
+                    depth_prev = 0
+
+                if (depth - depth_prev) >= constraint_model["circuit_depth_logical_qubit"]:
                     met = True
 
             # Check instruction-specific criteria
+            # @TODO - actually, we shouldn't have to check counters here, only once we escape the top-level instruction,
+            #         because we're (currently) not going to insert QEC cycles inside wrapped instructions
+
             if f"num_{instruction.name}" in constraint_model.keys():
                 counters[f"num_{instruction.name}"] = counters.get(f"num_{instruction.name}", 0) + 1
                 met = met or counters[f"num_{instruction.name}"] >= constraint_model[f"num_{instruction.name}"]
@@ -683,7 +705,7 @@ class LogicalCircuit(QuantumCircuit):
             # Running costs tracks collective constraints which sum over contributions from many sources, which must remain below the effective threshold
             running_cost = [0.0]
 
-            for i, (d, instruction) in enumerate(zip(depths, self.data)):
+            for i, (depth, instruction) in enumerate(zip(depths, self.data)):
                 # Check whether instruction involves logical qubit
                 instruction_involves_logical_qubit = False
                 for qreg_list in self.qreg_lists:
@@ -697,20 +719,18 @@ class LogicalCircuit(QuantumCircuit):
                 if not instruction_involves_logical_qubit:
                     continue
 
-                met = compute_instruction_contributions(q, i, d, instruction, counters, running_cost)
+                met = compute_instruction_contributions(q, i, depth, instruction, counters, running_cost)
 
                 # print(counters, running_cost[-1], constraint_model["effective_threshold"])
 
                 met = met or running_cost[-1] >= constraint_model["effective_threshold"]
                 if met:
-                    # print(f"Inserting QEC cycle at index {i}, depth {d}")
+                    # print(f"Inserting QEC cycle on qubit {q} at index {i}, depth {depth}")
                     new_qec_cycle_indices_initial[q] = new_qec_cycle_indices_initial.get(q, []) + [i]
 
                     # Reset counters and running cost
                     counters = {}
                     running_cost[-1] = 0.0
-
-                    break
 
         return new_qec_cycle_indices_initial
 
@@ -759,13 +779,13 @@ class LogicalCircuit(QuantumCircuit):
 
         # Reconstruct circuit, appending QEC cycles along the way when needed
         self.data = []
-        for i in range(len(_data)):
+        for i, instruction in enumerate(_data):
             # If current index is a key in transposed dictionary, append QEC cycles for corresponding values (logical qubit indices)
             if i in qec_cycle_indices_T:
-                ret = self.append_qec_cycle(qec_cycle_indices_T[i])
+                self.append_qec_cycle(qec_cycle_indices_T[i])
 
             # Append original circuit data
-            self.data.append(_data[i])
+            self.data.append(instruction)
 
         return _data, self.data
 
@@ -1685,6 +1705,7 @@ class LogicalStatevector(Statevector):
     def draw(self, output=None):
         if output is None: output = "text"
 
+        # @TODO - display scientific notation correctly in string formatting
         if output == "text":
             text = f"{self.logical_decomposition[0]} |0>_L + {self.logical_decomposition[1]} |1>_L + {self.logical_decomposition[2]} |psi_L^perp>"
             return text
