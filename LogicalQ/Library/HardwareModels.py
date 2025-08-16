@@ -87,15 +87,15 @@ hardware_model_Quantinuum_H2_1 = {
             },
             "depolarizing_error": {
                 1: {
-                    "all": (1-0.54) * 1.89E-5*1E2,
+                    "all": (1-0.54) * 1.89E-5,
                 },
                 2: {
-                    "all": (1-0.255) * 1.05E-3*1E2,
+                    "all": (1-0.255) * 1.05E-3,
                 },
             },
             "amplitude_damping_error": {
                 1: {
-                    "all": (0.54) * 1.89E-5*1E2,
+                    "all": (0.54) * 1.89E-5,
                 },
                 # 2: {
                 #     "all": (0.255) * 1.05E-3, # @TODO - not supported by Qiskit
