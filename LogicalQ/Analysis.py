@@ -19,9 +19,12 @@ from LogicalQ.Utilities import sanitize_save_parameters
     Returns:
         - plt: A matplotlib plot object
 """
-def circuit_scaling_bar3d(data, title=None, save=False, filename=None, save_dir=None, show=False):
+def circuit_scaling_bar3d(data, circuit_type=None, qecc=None, title=None, save=False, filename=None, save_dir=None, show=False):
     if not isinstance(data, dict):
         raise TypeError("Invalid type for data input: must be a dictionary of the form dict[n_qubits, dict[circuit_length, result]].")
+
+    if circuit_type is None:
+        circuit_type = "physical"
 
     if title == None:
         title = "Circuit scaling bar plot"
@@ -31,7 +34,7 @@ def circuit_scaling_bar3d(data, title=None, save=False, filename=None, save_dir=
 
     n_qubits_vals = []
     circuit_length_vals = []
-    exp_vals = []
+    error_rates = []
 
     for n_qubits, sub_data in data.items():
         # @TODO - make this work better for data where not every qubit count has the same range of circuit lengths
@@ -39,13 +42,21 @@ def circuit_scaling_bar3d(data, title=None, save=False, filename=None, save_dir=
             n_qubits_vals.append(n_qubits)
             circuit_length_vals.append(circuit_length)
 
-            # @TODO - if the circuit is an instance of LogicalCircuit, use get_logical_counts instead
-            exp_val = calculate_exp_val(result.get_counts())
-            exp_vals.append(exp_val)
+            if circuit_type == "physical":
+                print(n_qubits, result.get_counts())
+                error_rate = 1-calculate_state_probability("0"*n_qubits, result.get_counts())
+            elif circuit_type == "logical":
+                if qecc is None:
+                    raise ValueError("For logical circuits, a QECC must be specified for the purpose of data processing.")
+                error_rate = 1-LogicalStatevector.from_counts(result.get_counts(), n_qubits, **qecc).logical_decomposition[0]**2
+            else:
+                raise ValueError(f"Invalid input for circuit_type: {circuit_type}; please specify either 'physical' or 'logical'.")
+
+            error_rates.append(error_rate)
 
     ax = plt.figure().add_subplot(projection="3d")
 
-    top = np.array(exp_vals)
+    top = np.array(error_rates)
     bottom = np.zeros_like(top)
     width = depth = 1
 
@@ -54,12 +65,13 @@ def circuit_scaling_bar3d(data, title=None, save=False, filename=None, save_dir=
     ax.set_title(title)
     ax.set_xlabel("Number of qubits")
     ax.set_ylabel("Circuit length")
+    ax.set_zlabel("Error rate $P(1)$")
 
     if save:
-        plt.savefig(f"{save_dir}{filename}", dpi=500)
+        plt.savefig(f"{save_dir}{filename}", dpi=128)
 
     if show:
-        plt.gcf().set_dpi(500)
+        plt.gcf().set_dpi(128)
         plt.show()
 
     return plt
@@ -128,7 +140,7 @@ def noise_model_scaling_bar(all_data, scan_keys=None, separate_plots=False, save
                 # @TODO - format filename with index i
                 filename_i = filename
                 if save:
-                    plt.savefig(f"{save_dir}{filename_i}", dpi=500)
+                    plt.savefig(f"{save_dir}{filename_i}", dpi=128)
                     i += 1
                 if show: plt.show()
 
@@ -141,13 +153,13 @@ def noise_model_scaling_bar(all_data, scan_keys=None, separate_plots=False, save
             ax.set_xlabel("Noise parameter value")
             ax.set_ylabel("Fidelity")
 
-            if save: plt.savefig(f"{save_dir}{filename}", dpi=500)
+            if save: plt.savefig(f"{save_dir}{filename}", dpi=128)
             if show: plt.show()
 
     return plt
 
 # @TODO - add save functionality
-def qec_cycle_efficiency_bar(all_data, scan_keys=None, plot_metric=None, show=False):
+def qec_cycle_efficiency_scatter(all_data, scan_keys=None, plot_metric=None, show=False):
     if plot_metric is None:
         plot_metric = "fidelity"
 
@@ -201,7 +213,7 @@ def qec_cycle_efficiency_bar(all_data, scan_keys=None, plot_metric=None, show=Fa
                 xdata.append(constraint_model[scan_key])
                 ydata.append(metric)
 
-            plt.bar(xdata, ydata)
+            plt.plot(xdata, ydata)
 
             title = getattr(qc, "name", f"Circuit {c}")
             plt.title(f"{title}: Fidelity vs {scan_key}")
