@@ -24,7 +24,30 @@ class DecomposeIfElseOps(TransformationPass):
                 decomposed_circuit = None
 
                 if condition.op.name == "BIT_AND":
-                    print(f"WARNING - DecomposeIfElseOps encountered IfElseOp with label '{if_else_op.label}' which has condition with name 'BIT_AND', not yet implemented.")
+                    """
+                    Decompose classical AND gate via truth table:
+                    |-----------------|
+                    | A | B | A AND B |
+                    |-----------------|
+                    | 0 | 0 |    0    |
+                    | 0 | 1 |    0    |
+                    | 1 | 0 |    0    |
+                    | 1 | 1 |    1    |
+                    |-----------------|
+                    """
+
+                    bits = list(set([*if_body.qubits, *else_body.qubits, *if_body.clbits, *else_body.clbits]))
+                    decomposed_circuit = QuantumCircuit(bits, name="DecomposedClassicalXORCircuit")
+                    with decomposed_circuit.if_test((condition.left.var, 0)) as _else_left:
+                        with decomposed_circuit.if_test((condition.right.var, 0)) as _else_right:
+                            decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
+                        with _else_right:
+                            decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
+                    with _else_left:
+                        with decomposed_circuit.if_test((condition.right.var, 0)) as _else_right:
+                            decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
+                        with _else_right:
+                            decomposed_circuit.compose(if_body, if_body.qubits, if_body.clbits, inline_captures=True, inplace=True)
                 elif condition.op.name == "BIT_XOR":
                     """
                     Decompose classical XOR gate via truth table:
