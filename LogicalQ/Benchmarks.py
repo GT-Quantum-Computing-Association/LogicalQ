@@ -11,7 +11,10 @@ from qiskit_experiments.library import QuantumVolume
 """
     Constructs circuits composed of various Clifford gates and the full inverse, such that the composite operation is the identity if no errors occur.
 """
-def mirror_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sample=None, measure=False):
+def mirror_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sample=None, measure=False, seed=None):
+    if seed is not None:
+        np.random.seed(seed)
+
     if qubits is None:
         if n_qubits is None:
             qubits = [0]
@@ -62,7 +65,10 @@ def mirror_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sampl
 
     return mb_circuit
 
-def randomized_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sample=None, measure=False):
+def randomized_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sample=None, measure=False, seed=None):
+    if seed is not None:
+        np.random.seed(seed)
+
     if qubits is None:
         if n_qubits is None:
             qubits = [0]
@@ -125,7 +131,7 @@ def randomized_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_s
         seed (int): Random seed for reproducibility. Defaults to 1234.
         backend: Backend to be used for simulation.
 """
-def quantum_volume(n_qubits=1, trials=100, seed=1234):
+def quantum_volume(n_qubits=1, seed=None):
     qubits = list(range(n_qubits))
     qv_experiment = QuantumVolume(physical_qubits=qubits, trials=1, seed=seed)
 
