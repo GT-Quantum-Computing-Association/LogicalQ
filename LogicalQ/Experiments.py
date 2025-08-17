@@ -27,8 +27,6 @@ from pytket.extensions.quantinuum import QuantinuumBackend
 from pytket.extensions.qiskit import qiskit_to_tk
 from qbraid.runtime.native.device import QbraidDevice
 
-from qiskit.exceptions import QiskitError
-
 DEFAULT = object()
 
 """
@@ -154,7 +152,9 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
 
             _run = lambda circuits, **kwargs : backend.run(circuits, **kwargs).result()
         elif isinstance(backend, (QuantinuumBackend)):
-            _transpile = lambda circuits, coupling_map=None, optimization_level=0, **kwargs : backend.get_compiled_circuits(circuits, optimisation_level=optimization_level, **kwargs)
+            circuits = [qiskit_to_tk(circuit) for circuit in circuits]
+
+            _transpile = lambda circuits, backend=None, coupling_map=None, optimization_level=0, **kwargs : backend.get_compiled_circuits(circuits, optimisation_level=optimization_level, **kwargs)
 
             device_name = backend._device_name.upper().rstrip("LE")
             _cost = lambda circuits, shots : backend.cost(circuits, n_shots=shots, syntax_checker=device_name+"SC")
@@ -208,23 +208,24 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
                 include_indices = [int(choice) for choice in cost_confirmation.split(",")]
                 circuit_to_run = [circuits[c] for c in range(len(circuits_transpiled)) if c in include_indices]
 
-    # Run circuits
-    results = []
-    for circuit_to_run in circuits_to_run:
-        if circuit_to_run is None:
-            result = None
-        else:
-            result = _run([circuit_to_run], shots=shots, memory=memory)
-
-        results.append(result)
+    # # Run circuits
+    print("would run now")
+    # results = []
+    # for circuit_to_run in circuits_to_run:
+    #     if circuit_to_run is None:
+    #         result = None
+    #     else:
+    #         result = _run([circuit_to_run], shots=shots, memory=memory)
+    #
+    #     results.append(result)
 
     if return_circuits_transpiled:
         return results, circuits_transpiled
     else:
         return results
 
-# Core experiment function useful for multiprocessing
-def _experiment_core(task_id, circuit, noise_model, backend, method, shots):
+# Basic core experiment function useful for multiprocessing
+def _basic_experiment_core(task_id, circuit, noise_model, backend, method, shots):
     print(os.getpid(), "starting")
     result = execute_circuits(circuit, noise_model=noise_model, backend=backend, method=method, shots=shots)
     print(os.getpid(), "stopping")
@@ -284,21 +285,21 @@ def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1,
 
         cpu_count = os.process_cpu_count() or 1
 
-        batch_size = max(int(np.ceil((max_n_qubits+1-min_n_qubits)*(max_circuit_length+1-min_circuit_length)/cpu_count)), 1)
-        print(f"Applying multiprocessing to {len(exp_inputs_list)} samples in batches of maximum size {batch_size} across {cpu_count} CPUs")
+        # batch_size = max(int(np.ceil((max_n_qubits+1-min_n_qubits)*(max_circuit_length+1-min_circuit_length)/cpu_count)), 1)
+        print(f"Applying multiprocessing to {len(exp_inputs_list)} samples across {cpu_count} CPUs")
 
         start = time.perf_counter()
 
         with Pool(cpu_count) as pool:
             mp_result = pool.map(
-                _experiment_core,
+                _basic_experiment_core,
                 *[list(exp_inputs) for exp_inputs in zip(*exp_inputs_list)],
-                chunksize=batch_size
+                # chunksize=batch_size
             )
 
             # Unzip results
             for (task_id, result) in mp_result:
-                all_data[task_id[0]][task_id[1]] = result
+                all_data[task_id[0]][task_id[1]] = result[0]
 
         stop = time.perf_counter()
     else:
@@ -456,14 +457,14 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
 
             cpu_count = os.process_cpu_count() or 1
 
-            batch_size = max(int(np.ceil(len(circuit_input)*len(error_dicts)/cpu_count)), 1)
-            print(f"Applying multiprocessing to {len(exp_inputs_list)} samples in batches of maximum size {batch_size} across {cpu_count} CPUs")
+            # batch_size = max(int(np.ceil(len(circuit_input)*len(error_dicts)/cpu_count)), 1)
+            print(f"Applying multiprocessing to {len(exp_inputs_list)} samples across {cpu_count} CPUs")
 
             with Pool(cpu_count) as pool:
                 mp_result = pool.map(
-                    _experiment_core,
+                    _basic_experiment_core,
                     *[list(exp_inputs) for exp_inputs in zip(*exp_inputs_list)],
-                    chunksize=batch_size
+                    # chunksize=batch_size
                 )
 
             # Unzip results
@@ -548,9 +549,6 @@ def qec_cycle_efficiency_experiment(circuit_input, qecc, constraint_scan_keys, c
     if num_constraint_scan_val_lists != num_constraint_scan_keys:
         raise ValueError(f"constraint_scan_val_lists has first dimension {num_constraint_scan_val_lists}, but constraint_scan_keys specifies {num_constraint_scan_keys} keys, which is not equal. Please make sure that constraint_scan_keys has as many keys as there are lists in constraint_scan_val_lists.")
 
-    if with_mp:
-        raise NotImplementedError("with_mp=True specified, but this functionality is not implemented yet for qec_cycle_efficiency_experiment; ignoring.")
-
     # Construct constraint model dictionaries
     constraint_scan_val_prods = itertools.product(*constraint_scan_val_lists)
     constraint_models = []
@@ -572,6 +570,8 @@ def qec_cycle_efficiency_experiment(circuit_input, qecc, constraint_scan_keys, c
         save_file.close()
     atexit.register(save_progress)
 
+    start = time.perf_counter()
+
     for circuit_physical in circuit_input:
         circuit_physical_no_meas = circuit_physical.remove_final_measurements(inplace=False)
 
@@ -585,26 +585,69 @@ def qec_cycle_efficiency_experiment(circuit_input, qecc, constraint_scan_keys, c
             "physical_circuit": circuit_physical,
             "logical_circuit": circuit_logical,
             "density_matrix_exact": density_matrix_exact,
-            "results": []
+            "results": [{ "constraint_model": constraint_model } for constraint_model in constraint_models]
         }
 
-        for constraint_model in constraint_models:
-            circuit_logical = LogicalCircuit.from_physical_circuit(circuit_physical, **qecc)
+        if with_mp:
+            def _qec_cycle_efficiency_experiment_core(cm, _circuit_logical, constraint_model, kwargs):
+                print(os.getpid(), "starting")
+                qec_cycle_indices = circuit_logical.optimize_qec_cycle_indices(constraint_model=constraint_model)
+                _circuit_logical.insert_qec_cycles(qec_cycle_indices=qec_cycle_indices)
+                _circuit_logical.measure_all()
 
-            qec_cycle_indices = circuit_logical.optimize_qec_cycle_indices(constraint_model=constraint_model)
-            circuit_logical.insert_qec_cycles(qec_cycle_indices=qec_cycle_indices)
+                result = execute_circuits(_circuit_logical, **kwargs)[0]
+                print(os.getpid(), "stopping")
 
-            circuit_logical.measure_all()
+                return cm, qec_cycle_indices, result
 
-            result = execute_circuits(circuit_logical, **kwargs)[0]
+            exp_inputs_list = [
+                (
+                    cm,
+                    copy.deepcopy(circuit_logical),
+                    constraint_model,
+                    kwargs
+                )
+                for cm, constraint_model in enumerate(constraint_models)
+            ]
 
-            sub_data["results"].append({
-                "constraint_model": constraint_model,
-                "qec_cycle_indices": qec_cycle_indices,
-                "result": result
-            })
+            cpu_count = os.process_cpu_count() or 1
+
+            print(f"Applying multiprocessing to {len(exp_inputs_list)} samples across {cpu_count} CPUs")
+
+            with Pool(cpu_count) as pool:
+                mp_result = pool.map(
+                    _qec_cycle_efficiency_experiment_core,
+                    *[list(exp_inputs) for exp_inputs in zip(*exp_inputs_list)],
+                    # chunksize=batch_size
+                )
+
+            # Unzip results
+            for (cm, qec_cycle_indices, result) in mp_result:
+                sub_data["results"][cm].update({
+                    "qec_cycle_indices": qec_cycle_indices,
+                    "result": result
+                })
+        else:
+            for cm, constraint_model in enumerate(constraint_models):
+                _circuit_logical = copy.deepcopy(circuit_logical)
+
+                qec_cycle_indices = circuit_logical.optimize_qec_cycle_indices(constraint_model=constraint_model)
+                _circuit_logical.insert_qec_cycles(qec_cycle_indices=qec_cycle_indices)
+
+                _circuit_logical.measure_all()
+
+                result = execute_circuits(_circuit_logical, **kwargs)[0]
+
+                sub_data["results"][cm].update({
+                    "qec_cycle_indices": qec_cycle_indices,
+                    "result": result
+                })
 
         all_data.append(sub_data)
+
+    stop = time.perf_counter()
+
+    print(f"Completed experiment in {stop-start} seconds")
 
     # Run save_progress once for good measure and then unregister save_progress so it doesn't clutter our exit routine
     save_progress()
