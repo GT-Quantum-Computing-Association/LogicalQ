@@ -1,4 +1,4 @@
-from qiskit.circuit import ControlFlowOp, BoxOp
+from qiskit.circuit import BoxOp
 from qiskit.transpiler.basepasses import TransformationPass
 from qiskit.transpiler.passes.utils import control_flow
 from qiskit.converters import circuit_to_dag

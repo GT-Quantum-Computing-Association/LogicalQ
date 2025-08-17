@@ -43,6 +43,7 @@ def TestStatevectorFromLogicalCircuit(qeccs=None, states=None):
 
             lsv = LogicalStatevector(lqc)
 
+            # @TODO - improve the test to not depend on logical_decomposition
             if state == "0":
                 fidelity = lsv.logical_decomposition[0]**2
             elif state == "1":
