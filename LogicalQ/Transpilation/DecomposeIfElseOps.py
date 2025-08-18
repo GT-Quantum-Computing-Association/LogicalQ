@@ -77,7 +77,7 @@ class DecomposeIfElseOps(TransformationPass):
                     else:
                         bits = list(set([*if_body.qubits, *else_body.qubits, *if_body.clbits, *else_body.clbits]))
 
-                    decomposed_circuit = QuantumCircuit(bits, name="DecomposedClassicalXORCircuit")
+                    decomposed_circuit = QuantumCircuit(bits, name="DecomposedClassicalANDCircuit")
                     with decomposed_circuit.if_test(left_condition) as _else_left:
                         with decomposed_circuit.if_test(right_condition) as _else_right:
                             decomposed_circuit.compose(if_body, if_body.qubits, if_body.clbits, inline_captures=True, inplace=True)
