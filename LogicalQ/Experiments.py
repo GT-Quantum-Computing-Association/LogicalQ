@@ -209,15 +209,14 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
                 circuit_to_run = [circuits[c] for c in range(len(circuits_transpiled)) if c in include_indices]
 
     # # Run circuits
-    print("would run now")
-    # results = []
-    # for circuit_to_run in circuits_to_run:
-    #     if circuit_to_run is None:
-    #         result = None
-    #     else:
-    #         result = _run([circuit_to_run], shots=shots, memory=memory)
-    #
-    #     results.append(result)
+    results = []
+    for circuit_to_run in circuits_to_run:
+        if circuit_to_run is None:
+            result = None
+        else:
+            result = _run([circuit_to_run], shots=shots, memory=memory)
+
+        results.append(result)
 
     if return_circuits_transpiled:
         return results, circuits_transpiled
