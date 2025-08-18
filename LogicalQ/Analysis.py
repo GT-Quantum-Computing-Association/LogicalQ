@@ -223,6 +223,97 @@ def qec_cycle_efficiency_scatter(all_data, scan_keys=None, plot_metric=None, sho
 
             if show: plt.show()
 
+def plot_qec_scheduling_comparison(results, save_path=None, show_plot=True):
+    comparisons = results["comparisons"]
+    circuit_names = list(comparisons.keys())
+    
+    # Prepare data for plotting
+    methods = ["optimized", "random"]
+    for interval in results["metadata"]["fixed_intervals"]:
+        methods.append(f"fixed_{interval}")
+    
+    # Create figure with two subplots
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    
+    # Plot A: Absolute fidelities
+    x = np.arange(len(circuit_names))
+    width = 0.8 / len(methods)
+    
+    colors = ['#2E7D32', '#1976D2', '#D32F2F', '#F57C00', '#7B1FA2', '#00796B']
+    
+    for i, method in enumerate(methods):
+        fidelities = []
+        for circuit in circuit_names:
+            fid = comparisons[circuit]["fidelities"].get(method, 0)
+            fidelities.append(fid if fid is not None else 0)
+        
+        offset = (i - len(methods)/2 + 0.5) * width
+        bars = ax1.bar(x + offset, fidelities, width, 
+                      label=method.replace('_', ' ').title(), 
+                      color=colors[i % len(colors)], alpha=0.8)
+        
+        # Add value labels on bars
+        for bar, val in zip(bars, fidelities):
+            if val > 0:
+                height = bar.get_height()
+                ax1.text(bar.get_x() + bar.get_width()/2., height,
+                        f'{val:.3f}', ha='center', va='bottom', fontsize=8)
+    
+    ax1.set_xlabel('Benchmark Circuit', fontsize=12)
+    ax1.set_ylabel('Fidelity', fontsize=12)
+    ax1.set_title('QEC Scheduling Method Comparison: Absolute Fidelities', fontsize=14, fontweight='bold')
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(circuit_names, rotation=45, ha='right')
+    ax1.legend(loc='lower left', fontsize=10)
+    ax1.grid(True, alpha=0.3, axis='y')
+    ax1.set_ylim(0, 1.1)
+    
+    # Plot B: Fidelity ratios (optimized as baseline)
+    ratio_methods = ["random"] + [f"fixed_{i}" for i in results["metadata"]["fixed_intervals"]]
+    x2 = np.arange(len(circuit_names))
+    width2 = 0.8 / len(ratio_methods)
+    
+    for i, method in enumerate(ratio_methods):
+        ratios = []
+        for circuit in circuit_names:
+            # Get ratio of optimized vs this method
+            ratio_key = f"opt_vs_{method}"
+            ratio = comparisons[circuit].get(ratio_key, 1.0)
+            ratios.append(ratio if ratio is not None else 1.0)
+        
+        offset = (i - len(ratio_methods)/2 + 0.5) * width2
+        bars = ax2.bar(x2 + offset, ratios, width2,
+                      label=f'Opt/{method.replace("_", " ").title()}',
+                      color=colors[(i+1) % len(colors)], alpha=0.8)
+        
+        # Add value labels on bars
+        for bar, val in zip(bars, ratios):
+            height = bar.get_height()
+            ax2.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{val:.2f}', ha='center', va='bottom', fontsize=8)
+    
+    # Add horizontal line at y=1 for reference
+    ax2.axhline(y=1.0, color='black', linestyle='--', alpha=0.5, label='Equal Performance')
+    
+    ax2.set_xlabel('Benchmark Circuit', fontsize=12)
+    ax2.set_ylabel('Fidelity Ratio (Optimized / Method)', fontsize=12)
+    ax2.set_title('Performance Improvement of Optimized Scheduling', fontsize=14, fontweight='bold')
+    ax2.set_xticks(x2)
+    ax2.set_xticklabels(circuit_names, rotation=45, ha='right')
+    ax2.legend(loc='upper left', fontsize=10)
+    ax2.grid(True, alpha=0.3, axis='y')
+    
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Plot saved to {save_path}")
+    
+    if show_plot:
+        plt.show()
+    
+    return fig
+
 def counts_to_statevector(counts):
     result_key_0 = list(counts.keys())[0]
     if all([char in ["0", "1"] for char in result_key_0]):
