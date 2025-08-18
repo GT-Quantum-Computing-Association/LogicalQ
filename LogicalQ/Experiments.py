@@ -19,7 +19,7 @@ from qiskit_aer.noise import NoiseModel
 
 from qiskit import transpile
 from qiskit.transpiler import PassManager
-from .Transpilation.UnBox import UnBox
+from .Transpilation.UnBox import UnBoxTask
 
 from qiskit.providers import Backend
 from qiskit_ibm_runtime import QiskitRuntimeService
@@ -54,8 +54,9 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
             raise ValueError(f"No measurements found in circuit with name {circuit.name} at index {c}; all circuits must have measurements in order to be executed.")
 
     # Patch to account for backends that do not yet recognize BoxOp's during transpilation
-    pm = PassManager([UnBox()])
+    pm = PassManager([UnBoxTask()])
     for c in range(len(circuits)):
+        # @TODO - this while loop should be unnecessary with the new DoWhileController-based approach; test first
         while "box" in circuits[c].count_ops():
             circuits[c] = pm.run(circuits[c])
 

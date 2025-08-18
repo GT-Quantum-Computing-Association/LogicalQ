@@ -1,6 +1,7 @@
 from qiskit import QuantumCircuit
-from qiskit.circuit import IfElseOp
+from qiskit.circuit import ControlFlowOp, IfElseOp
 from qiskit.circuit.classical.expr import Binary, Unary
+from qiskit.transpiler import ConditionalController, DoWhileController
 from qiskit.transpiler.basepasses import TransformationPass
 from qiskit.transpiler.passes.utils import control_flow
 from qiskit.converters import circuit_to_dag
@@ -13,6 +14,11 @@ class DecomposeIfElseOps(TransformationPass):
 
     @control_flow.trivial_recurse
     def run(self, dag):
+        if len(dag.op_nodes(IfElseOp)) == 0:
+            return dag
+
+        self.property_set["decompose_if_else_ops_again"] = False
+
         for if_else_op_node in dag.op_nodes(IfElseOp):
             if_else_op = if_else_op_node.op
 
@@ -36,29 +42,51 @@ class DecomposeIfElseOps(TransformationPass):
                     |-----------------|
                     """
 
-                    # If there is a BIT_NOT gate in a condition, then it will be a unary instead, which we have to handle differently
+                    # Condition lvalue/rvalue type checking and parsing
+                    # If there is a BIT_NOT gate in a condition, then it will be a Unary instead, which we have to handle differently
+                    # If there is a nested condition, then it will be a Binary instead, which we have to handle differently
+                    # @TODO - handle the other possible types more safely until reaching the final else branch would guarantee an error
                     if isinstance(condition.left, Unary):
                         left_var = condition.left.operand.var
-                        left_condition = 0 if condition.left.op.name == "BIT_NOT" else 1
+                        left_val = 0 if condition.left.op.name == "BIT_NOT" else 1
+                        left_condition = (left_var, left_val)
+                    elif isinstance(condition.left, Binary):
+                        left_condition = condition.left
+
+                        self.property_set["decompose_if_else_ops_again"] = True
                     else:
                         left_var = condition.left.var
-                        left_condition = 1
+                        left_val = 1
+                        left_condition = (left_var, left_val)
+
                     if isinstance(condition.right, Unary):
                         right_var = condition.right.operand.var
-                        right_condition = 0 if condition.right.op.name == "BIT_NOT" else 1
+                        right_val = 0 if condition.right.op.name == "BIT_NOT" else 1
+                        right_condition = (right_var, right_val)
+                    elif isinstance(condition.right, Binary):
+                        right_condition = condition.right
+
+                        self.property_set["decompose_if_else_ops_again"] = True
                     else:
                         right_var = condition.right.var
-                        right_condition = 1
+                        right_val = 1
+                        right_condition = (right_var, right_val)
 
-                    bits = list(set([*if_body.qubits, *else_body.qubits, *if_body.clbits, *else_body.clbits]))
+                    if else_body is None:
+                        bits = list(set([*if_body.qubits, *if_body.clbits]))
+                    else:
+                        bits = list(set([*if_body.qubits, *else_body.qubits, *if_body.clbits, *else_body.clbits]))
+
                     decomposed_circuit = QuantumCircuit(bits, name="DecomposedClassicalXORCircuit")
-                    with decomposed_circuit.if_test((left_var, left_condition)) as _else_left:
-                        with decomposed_circuit.if_test((right_var, right_condition)) as _else_right:
+                    with decomposed_circuit.if_test(left_condition) as _else_left:
+                        with decomposed_circuit.if_test(right_condition) as _else_right:
                             decomposed_circuit.compose(if_body, if_body.qubits, if_body.clbits, inline_captures=True, inplace=True)
-                        with _else_right:
+                        if else_body is not None:
+                            with _else_right:
+                                decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
+                    if else_body is not None:
+                        with _else_left:
                             decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
-                    with _else_left:
-                        decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
                 elif condition.op.name == "BIT_XOR":
                     """
                     Decompose classical XOR gate via truth table:
@@ -84,14 +112,28 @@ class DecomposeIfElseOps(TransformationPass):
                             decomposed_circuit.compose(if_body, if_body.qubits, if_body.clbits, inline_captures=True, inplace=True)
                         with _else_right:
                             decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
-                else:
-                    print(f"WARNING - DecomposeIfElseOps encountered IfElseOp with label '{if_else_op.label}' which has condition with name '{condition.op.name}', skipping.")
+                # else:
+                #     print(f"WARNING - DecomposeIfElseOps encountered IfElseOp with label '{if_else_op.label}' which has condition with name '{condition.op.name}', skipping.")
 
                 if decomposed_circuit is not None:
                     decomposed_dag = circuit_to_dag(decomposed_circuit)
                     dag.substitute_node_with_dag(if_else_op_node, decomposed_dag)
-            else:
-                print(f"WARNING - DecomposeIfElseOps encountered IfElseOp with label '{if_else_op.label}' which has condition of unrecognized type {type(condition)}, skipping.")
+            # else:
+            #     print(f"WARNING - DecomposeIfElseOps encountered IfElseOp with label '{if_else_op.label}' which has condition of unrecognized type {type(condition)}, skipping.")
+            #     continue
 
         return dag
+
+def decompose_if_else_ops_condition(property_set):
+    # Return True when IfElseOp's contain an instance of Binary as condition lvalue(s)/rvalue(s)
+    if "decompose_if_else_ops_again" not in property_set:
+        property_set["decompose_if_else_ops"] = True
+
+    return property_set.get("decompose_if_else_ops_again")
+
+def DecomposeIfElseOpsTask():
+    return DoWhileController(
+        tasks=[DecomposeIfElseOps()],
+        do_while=decompose_if_else_ops_condition,
+    )
 
