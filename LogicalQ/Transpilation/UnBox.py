@@ -12,7 +12,7 @@ class UnBox(TransformationPass):
 
     @control_flow.trivial_recurse
     def run(self, dag):
-        self.property_set["unbox_agan"] = False
+        self.property_set["unbox_again"] = False
 
         for box_op in dag.op_nodes(BoxOp):
             assert len(box_op.op.params) == 1, f"BoxOp has more than one param: {box_op.op.params}"
@@ -30,7 +30,7 @@ def unbox_condition(property_set):
     if "unbox_again" not in property_set:
         property_set["unbox_again"] = True
 
-    return property_set.get("unbox_again", True)
+    return property_set.get("unbox_again")
 
 def UnBoxTask():
     return DoWhileController(
