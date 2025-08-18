@@ -903,8 +903,11 @@ class LogicalCircuit(QuantumCircuit):
                             if stabilizer[i] == 'Z':
                                 s_indices.append(i)
 
-                        with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][z] for z in s_indices])):
+                        # @TODO - _else branch is a temporary patch for a confusing transpilation bug during IfElseOp decomposition
+                        with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][z] for z in s_indices])) as _else:
                             self.set_cbit(self.curr_syndrome_cregs[q][n], 1)
+                        with _else:
+                            pass
 
                     # Final syndrome diff
                     for n in range(self.n_ancilla_qubits):

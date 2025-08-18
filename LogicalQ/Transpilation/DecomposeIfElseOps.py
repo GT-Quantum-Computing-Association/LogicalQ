@@ -81,11 +81,11 @@ class DecomposeIfElseOps(TransformationPass):
                     with decomposed_circuit.if_test(left_condition) as _else_left:
                         with decomposed_circuit.if_test(right_condition) as _else_right:
                             decomposed_circuit.compose(if_body, if_body.qubits, if_body.clbits, inline_captures=True, inplace=True)
-                        if else_body is not None:
-                            with _else_right:
+                        with _else_right:
+                            if else_body is not None:
                                 decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
-                    if else_body is not None:
-                        with _else_left:
+                    with _else_left:
+                        if else_body is not None:
                             decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
                 elif condition.op.name == "BIT_XOR":
                     """
@@ -100,18 +100,50 @@ class DecomposeIfElseOps(TransformationPass):
                     |-----------------|
                     """
 
-                    bits = list(set([*if_body.qubits, *else_body.qubits, *if_body.clbits, *else_body.clbits]))
+                    if isinstance(condition.left, Unary):
+                        left_var = condition.left.operand.var
+                        left_val = 1 if condition.left.op.name == "BIT_NOT" else 0
+                        left_condition = (left_var, left_val)
+                    elif isinstance(condition.left, Binary):
+                        left_condition = condition.left
+
+                        self.property_set["decompose_if_else_ops_again"] = True
+                    else:
+                        left_var = condition.left.var
+                        left_val = 0
+                        left_condition = (left_var, left_val)
+
+                    if isinstance(condition.right, Unary):
+                        right_var = condition.right.operand.var
+                        right_val = 1 if condition.right.op.name == "BIT_NOT" else 0
+                        right_condition = (right_var, right_val)
+                    elif isinstance(condition.right, Binary):
+                        right_condition = condition.right
+
+                        self.property_set["decompose_if_else_ops_again"] = True
+                    else:
+                        right_var = condition.right.var
+                        right_val = 0
+                        right_condition = (right_var, right_val)
+
+                    if else_body is None:
+                        bits = list(set([*if_body.qubits, *if_body.clbits]))
+                    else:
+                        bits = list(set([*if_body.qubits, *else_body.qubits, *if_body.clbits, *else_body.clbits]))
+
                     decomposed_circuit = QuantumCircuit(bits, name="DecomposedClassicalXORCircuit")
-                    with decomposed_circuit.if_test((condition.left.var, 0)) as _else_left:
-                        with decomposed_circuit.if_test((condition.right.var, 0)) as _else_right:
-                            decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
+                    with decomposed_circuit.if_test(left_condition) as _else_left:
+                        with decomposed_circuit.if_test(right_condition) as _else_right:
+                            if else_body is not None:
+                                decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
                         with _else_right:
                             decomposed_circuit.compose(if_body, if_body.qubits, if_body.clbits, inline_captures=True, inplace=True)
                     with _else_left:
-                        with decomposed_circuit.if_test((condition.right.var, 0)) as _else_right:
+                        with decomposed_circuit.if_test(right_condition) as _else_right:
                             decomposed_circuit.compose(if_body, if_body.qubits, if_body.clbits, inline_captures=True, inplace=True)
                         with _else_right:
-                            decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
+                            if else_body is not None:
+                                decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
                 # else:
                 #     print(f"WARNING - DecomposeIfElseOps encountered IfElseOp with label '{if_else_op.label}' which has condition with name '{condition.op.name}', skipping.")
 
