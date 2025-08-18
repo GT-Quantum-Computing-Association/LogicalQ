@@ -466,7 +466,7 @@ class LogicalCircuit(QuantumCircuit):
 
                     for _ in range(max_iterations - 1):
                         # If the ancilla stores a 1, reset the entire logical qubit and redo
-                        with super().if_test((self.enc_verif_cregs[q][0], 1)):
+                        with super().if_test((self.enc_verif_cregs[q][0], 1)) as _else:
                             super().reset(self.logical_qregs[q])
 
                             # Initial encoding
@@ -480,6 +480,8 @@ class LogicalCircuit(QuantumCircuit):
                             # Measure ancilla
                             # super().measure(self.ancilla_qregs[q][0], self.enc_verif_cregs[q][0])
                             super().append(Measure(), [self.ancilla_qregs[q][0]], [self.enc_verif_cregs[q][0]], copy=False)
+                        with _else:
+                            pass
 
                     # Reset ancilla qubit
                     super().reset(self.ancilla_qregs[q][0])
@@ -818,11 +820,13 @@ class LogicalCircuit(QuantumCircuit):
                 self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_1, flagged=True, steane_flag_1=use_steane_flagged_circuits)
 
                 # If no change in syndrome, perform second flagged syndrome measurement
-                with self.if_test(expr.equal(self.flagged_syndrome_diff_cregs[q], 0)):
+                with self.if_test(expr.equal(self.flagged_syndrome_diff_cregs[q], 0)) as _else:
                     self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_2, flagged=True, steane_flag_2=use_steane_flagged_circuits)
+                with _else:
+                    pass
 
                 # If change in syndrome, perform unflagged syndrome measurement, decode, and correct
-                with self.if_test(expr.not_equal(self.flagged_syndrome_diff_cregs[q], 0)):
+                with self.if_test(expr.not_equal(self.flagged_syndrome_diff_cregs[q], 0)) as _else:
                     self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, flagged=False)
                     self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, flagged=False)
 
@@ -833,8 +837,12 @@ class LogicalCircuit(QuantumCircuit):
 
                     # Update previous syndrome
                     for n in range(self.n_stabilizers):
-                        with self.if_test(expr.lift(self.unflagged_syndrome_diff_cregs[q][n])):
+                        with self.if_test(expr.lift(self.unflagged_syndrome_diff_cregs[q][n])) as _else_inner:
                             self.cbit_not(self.prev_syndrome_cregs[q][n])
+                        with _else_inner:
+                            pass
+                with _else:
+                    pass
 
             index_final = len(self.data)-1
 
@@ -857,21 +865,33 @@ class LogicalCircuit(QuantumCircuit):
             # Decoding sequence with flagged syndrome
             if with_flagged:
                 flag_diff = [self.flagged_syndrome_diff_cregs[q][x] for x in stabilizer_indices]
-                with super().if_test(expr.bit_and(self.cbit_and(flag_diff, [1, 0, 0]), self.cbit_and(syn_diff, [0, 1, 0]))):
+                with super().if_test(expr.bit_and(self.cbit_and(flag_diff, [1, 0, 0]), self.cbit_and(syn_diff, [0, 1, 0]))) as _else:
                     self.cbit_not(self.pauli_frame_cregs[q][pf_ind])
-                with super().if_test(expr.bit_and(self.cbit_and(flag_diff, [1, 0, 0]), self.cbit_and(syn_diff, [0, 0, 1]))):
+                with _else:
+                    pass
+                with super().if_test(expr.bit_and(self.cbit_and(flag_diff, [1, 0, 0]), self.cbit_and(syn_diff, [0, 0, 1]))) as _else:
                     self.cbit_not(self.pauli_frame_cregs[q][pf_ind])
-                with super().if_test(expr.bit_and(self.cbit_and(flag_diff, [0, 1, 1]), self.cbit_and(syn_diff, [0, 0, 1]))):
+                with _else:
+                    pass
+                with super().if_test(expr.bit_and(self.cbit_and(flag_diff, [0, 1, 1]), self.cbit_and(syn_diff, [0, 0, 1]))) as _else:
                     self.cbit_not(self.pauli_frame_cregs[q][pf_ind])
+                with _else:
+                    pass
 
             # Unflagged decoding sequence
             else:
-                with super().if_test(self.cbit_and(syn_diff, [0, 1, 0])):
+                with super().if_test(self.cbit_and(syn_diff, [0, 1, 0])) as _else:
                     self.cbit_not(self.pauli_frame_cregs[q][pf_ind])
-                with super().if_test(self.cbit_and(syn_diff, [0, 1, 1])):
+                with _else:
+                    pass
+                with super().if_test(self.cbit_and(syn_diff, [0, 1, 1])) as _else:
                     self.cbit_not(self.pauli_frame_cregs[q][pf_ind])
-                with super().if_test(self.cbit_and(syn_diff, [0, 0, 1])):
+                with _else:
+                    pass
+                with super().if_test(self.cbit_and(syn_diff, [0, 0, 1])) as _else:
                     self.cbit_not(self.pauli_frame_cregs[q][pf_ind])
+                with _else:
+                    pass
 
     def measure(self, logical_qubit_indices, cbit_indices, with_error_correction=True):
         if not hasattr(logical_qubit_indices, "__iter__"):
@@ -891,8 +911,10 @@ class LogicalCircuit(QuantumCircuit):
 
             with self.box(label="logical.qec.measure:$\\hat{M}_\\text{QEC}$"):
                 # @TODO - use LogicalXVector instead
-                with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][x] for x in [4,5,6]])):
+                with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][x] for x in [4,5,6]])) as _else:
                     self.set_cbit(self.output_creg[c], 1)
+                with _else:
+                    pass
 
                 if with_error_correction:
                     # Final syndrome
@@ -903,7 +925,6 @@ class LogicalCircuit(QuantumCircuit):
                             if stabilizer[i] == 'Z':
                                 s_indices.append(i)
 
-                        # @TODO - _else branch is a temporary patch for a confusing transpilation bug during IfElseOp decomposition
                         with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][z] for z in s_indices])) as _else:
                             self.set_cbit(self.curr_syndrome_cregs[q][n], 1)
                         with _else:
@@ -918,8 +939,10 @@ class LogicalCircuit(QuantumCircuit):
 
                     # Final correction
                     self.apply_decoding([q], self.z_stabilizers, with_flagged=False)
-                    with super().if_test(expr.lift(self.pauli_frame_cregs[q][1])):
+                    with super().if_test(expr.lift(self.pauli_frame_cregs[q][1])) as _else:
                         self.cbit_not(self.output_creg[c])
+                    with _else:
+                        pass
 
     def measure_all(self, inplace=True, with_error_correction=True):
         if inplace:
@@ -1062,8 +1085,10 @@ class LogicalCircuit(QuantumCircuit):
                     super().h(self.logical_op_qregs[t][0])
                     super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
 
-                    with super().if_test((self.logical_op_meas_cregs[t][0], 1)):
+                    with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as _else:
                         self.z(t)
+                    with _else:
+                        pass
 
                     super().reset(self.logical_op_qregs[t][0])
         elif method == "Coherent_Feedback":
@@ -1100,8 +1125,10 @@ class LogicalCircuit(QuantumCircuit):
                     super().h(self.logical_op_qregs[t][0])
                     super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
 
-                    with super().if_test((self.logical_op_meas_cregs[t][0], 1)):
+                    with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as _else:
                         self.z(t)
+                    with _else:
+                        pass
 
                     super().reset(self.logical_op_qregs[t][0])
         elif method == "Coherent_Feedback":
@@ -1141,8 +1168,10 @@ class LogicalCircuit(QuantumCircuit):
                     super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
                     super().reset(self.logical_op_qregs[t][0])
 
-                    with super().if_test((self.logical_op_meas_cregs[t][0], 1)):
+                    with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as _else:
                         self.s(t, method='LCU_corrected')
+                    with _else:
+                        pass
 
         elif method == "Coherent_Feedback":
             for t in targets:
@@ -1176,8 +1205,10 @@ class LogicalCircuit(QuantumCircuit):
                         super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
                         super().reset(self.logical_op_qregs[t][0])
 
-                        with super().if_test((self.logical_op_meas_cregs[t][0], 1)):
+                        with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as _else:
                             self.sdg(t, method='LCU_corrected')
+                        with _else:
+                            pass
 
             elif method == "Coherent_Feedback":
                 for t in targets:
