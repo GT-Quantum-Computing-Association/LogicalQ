@@ -889,7 +889,7 @@ class LogicalCircuit(QuantumCircuit):
                 # super().measure(self.logical_qregs[q][n], self.final_measurement_cregs[q][n])
                 super().append(Measure(), [self.logical_qregs[q][n]], [self.final_measurement_cregs[q][n]], copy=False)
 
-            with self.box(label="logical.qec.measure:QEC Measurement"):
+            with self.box(label="logical.qec.measure:$\\hat{M}_\\text{QEC}$"):
                 # @TODO - use LogicalXVector instead
                 with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][x] for x in [4,5,6]])):
                     self.set_cbit(self.output_creg[c], 1)
