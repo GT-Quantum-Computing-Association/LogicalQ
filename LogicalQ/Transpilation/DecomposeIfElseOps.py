@@ -1,6 +1,6 @@
 from qiskit import QuantumCircuit
 from qiskit.circuit import ControlFlowOp, IfElseOp
-from qiskit.circuit.classical.expr import Binary, Unary
+from qiskit.circuit.classical.expr import Binary, Unary, Var
 from qiskit.transpiler import ConditionalController, DoWhileController
 from qiskit.transpiler.basepasses import TransformationPass
 from qiskit.transpiler.passes.utils import control_flow
@@ -24,11 +24,27 @@ class DecomposeIfElseOps(TransformationPass):
 
             condition = if_else_op.condition
 
-            if isinstance(condition, Binary):
-                if_body, else_body = if_else_op.params
+            if_body, else_body = if_else_op.params
 
-                decomposed_circuit = None
+            decomposed_circuit = None
 
+            if isinstance(condition, Unary):
+                var = condition.operand.var
+                val = 0 if condition.op.name == "BIT_NOT" else 1
+                condition = (var, val)
+
+                if else_body is None:
+                    bits = list(set([*if_body.qubits, *if_body.clbits]))
+                else:
+                    bits = list(set([*if_body.qubits, *else_body.qubits, *if_body.clbits, *else_body.clbits]))
+
+                decomposed_circuit = QuantumCircuit(bits, name="DecomposedClassicalNOTCircuit")
+                with decomposed_circuit.if_test(condition) as _else:
+                    decomposed_circuit.compose(if_body, if_body.qubits, if_body.clbits, inline_captures=True, inplace=True)
+                with _else:
+                    if else_body is not None:
+                        decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
+            elif isinstance(condition, Binary):
                 if condition.op.name == "BIT_AND":
                     """
                     Decompose classical AND gate via truth table:
@@ -146,13 +162,13 @@ class DecomposeIfElseOps(TransformationPass):
                                 decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
                 # else:
                 #     print(f"WARNING - DecomposeIfElseOps encountered IfElseOp with label '{if_else_op.label}' which has condition with name '{condition.op.name}', skipping.")
+            else:
+                print(f"WARNING - DecomposeIfElseOps encountered IfElseOp with label '{if_else_op.label}' which has condition of unrecognized type {type(condition)}, skipping.")
+                continue
 
-                if decomposed_circuit is not None:
-                    decomposed_dag = circuit_to_dag(decomposed_circuit)
-                    dag.substitute_node_with_dag(if_else_op_node, decomposed_dag)
-            # else:
-            #     print(f"WARNING - DecomposeIfElseOps encountered IfElseOp with label '{if_else_op.label}' which has condition of unrecognized type {type(condition)}, skipping.")
-            #     continue
+            if decomposed_circuit is not None:
+                decomposed_dag = circuit_to_dag(decomposed_circuit)
+                dag.substitute_node_with_dag(if_else_op_node, decomposed_dag)
 
         return dag
 
