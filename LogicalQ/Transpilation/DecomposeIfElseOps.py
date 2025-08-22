@@ -1,7 +1,7 @@
-from qiskit import QuantumCircuit
-from qiskit.circuit import ControlFlowOp, IfElseOp
-from qiskit.circuit.classical.expr import Binary, Unary, Var
-from qiskit.transpiler import ConditionalController, DoWhileController
+from qiskit import QuantumRegister, ClassicalRegister, QuantumCircuit
+from qiskit.circuit import IfElseOp
+from qiskit.circuit.classical.expr import Binary, Unary
+from qiskit.transpiler import DoWhileController
 from qiskit.transpiler.basepasses import TransformationPass
 from qiskit.transpiler.passes.utils import control_flow
 from qiskit.converters import circuit_to_dag
@@ -14,10 +14,13 @@ class DecomposeIfElseOps(TransformationPass):
 
     @control_flow.trivial_recurse
     def run(self, dag):
+        self.property_set["decompose_if_else_ops_again"] = False
+
         if len(dag.op_nodes(IfElseOp)) == 0:
             return dag
 
-        self.property_set["decompose_if_else_ops_again"] = False
+        # @TODO - find a good way to get this as user input
+        method = "sequential"
 
         for if_else_op_node in dag.op_nodes(IfElseOp):
             if_else_op = if_else_op_node.op
@@ -38,26 +41,25 @@ class DecomposeIfElseOps(TransformationPass):
                 else:
                     bits = list(set([*if_body.qubits, *else_body.qubits, *if_body.clbits, *else_body.clbits]))
 
-                decomposed_circuit = QuantumCircuit(bits, name="DecomposedClassicalNOTCircuit")
+                decomposed_circuit = QuantumCircuit(bits, name="DecomposedClassicalUnaryCircuit")
                 with decomposed_circuit.if_test(condition) as _else:
                     decomposed_circuit.compose(if_body, if_body.qubits, if_body.clbits, inline_captures=True, inplace=True)
                 with _else:
                     if else_body is not None:
                         decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
-            elif isinstance(condition, Binary):
-                if condition.op.name == "BIT_AND":
-                    """
-                    Decompose classical AND gate via truth table:
-                    |-----------------|
-                    | A | B | A AND B |
-                    |-----------------|
-                    | 0 | 0 |    0    |
-                    | 0 | 1 |    0    |
-                    | 1 | 0 |    0    |
-                    | 1 | 1 |    1    |
-                    |-----------------|
-                    """
 
+                # @TODO - I don't know how to check, so just forcing it again for safety
+                self.property_set["decompose_if_else_ops_again"] = True
+            elif isinstance(condition, Binary):
+                print("--- NEW OP ---", condition.op.name)
+
+                # print(dir(if_else_op))
+                # import matplotlib
+                # matplotlib.use("TkAgg")
+                # if_else_op.params[1].draw("mpl").show()
+                # if_else_op.params[0].draw("mpl").show()
+
+                if condition.op.name == "BIT_AND":
                     # Condition lvalue/rvalue type checking and parsing
                     # If there is a BIT_NOT gate in a condition, then it will be a Unary instead, which we have to handle differently
                     # If there is a nested condition, then it will be a Binary instead, which we have to handle differently
@@ -89,33 +91,100 @@ class DecomposeIfElseOps(TransformationPass):
                         right_condition = (right_var, right_val)
 
                     if else_body is None:
-                        bits = list(set([*if_body.qubits, *if_body.clbits]))
+                        bits = list(set([*if_else_op_node.qargs, *if_else_op_node.cargs, *if_body.qubits, *if_body.clbits]))
                     else:
-                        bits = list(set([*if_body.qubits, *else_body.qubits, *if_body.clbits, *else_body.clbits]))
+                        bits = list(set([*if_else_op_node.qargs, *if_else_op_node.cargs, *if_body.qubits, *else_body.qubits, *if_body.clbits, *else_body.clbits]))
 
-                    decomposed_circuit = QuantumCircuit(bits, name="DecomposedClassicalANDCircuit")
-                    with decomposed_circuit.if_test(left_condition) as _else_left:
-                        with decomposed_circuit.if_test(right_condition) as _else_right:
-                            decomposed_circuit.compose(if_body, if_body.qubits, if_body.clbits, inline_captures=True, inplace=True)
-                        with _else_right:
+                    if method == "nested":
+                        """
+                        Decompose classical AND gate via truth table:
+                        |-----------------|
+                        | A | B | A AND B |
+                        |-----------------|
+                        | 0 | 0 |    0    |
+                        | 0 | 1 |    0    |
+                        | 1 | 0 |    0    |
+                        | 1 | 1 |    1    |
+                        |-----------------|
+                        """
+
+                        decomposed_circuit = QuantumCircuit(bits, name="DecomposedClassicalANDCircuit")
+                        with decomposed_circuit.if_test(left_condition) as _else_left:
+                            with decomposed_circuit.if_test(right_condition) as _else_right:
+                                decomposed_circuit.compose(if_body, if_body.qubits, if_body.clbits, inline_captures=True, inplace=True)
+                            with _else_right:
+                                if else_body is not None:
+                                    decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
+                        with _else_left:
                             if else_body is not None:
                                 decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
-                    with _else_left:
-                        if else_body is not None:
+                    elif method == "sequential":
+                        """
+                        Decompose classical XOR gate via sequential {AND, NOT} decomposition:
+                        if (A AND B): ...
+                        === becomes ===
+                        A -> C
+                        B -> C [C now holds A AND B]
+                        if (C): ...
+                        """
+
+                        print("- sequential AND: -")
+                        print("bits:", bits)
+                        print("node qargs:", if_else_op_node.qargs)
+                        print("node cargs:", if_else_op_node.cargs)
+                        print("-")
+
+                        creg_setter_qreg = list(set(qubit for qubit in bits + list(if_else_op_node.qargs) if "qsetter" in qubit._register.name))
+                        intermediate_state_creg = list(set(clbit for clbit in bits + list(if_else_op_node.cargs) if "cintermediate_state" in clbit._register.name))
+
+                        print(creg_setter_qreg)
+                        print(intermediate_state_creg)
+                        print("-")
+
+                        filler_instruction_indices_if_body = []
+                        for i, instruction in enumerate(if_body.data):
+                            for clbit in instruction.clbits:
+                                if clbit in intermediate_state_creg:
+                                    filler_instruction_indices_if_body.append(i)
+                                    break
+
+                        filler_instruction_indices_else_body = []
+                        for i, instruction in enumerate(else_body.data):
+                            for clbit in instruction.clbits:
+                                if clbit in intermediate_state_creg:
+                                    filler_instruction_indices_else_body.append(i)
+                                    break
+
+                        print(filler_instruction_indices_if_body)
+                        print(filler_instruction_indices_else_body)
+
+                        # for i in filler_instruction_indices_if_body[::-1]:
+                        #     del if_body.data[i]
+                        # for i in filler_instruction_indices_else_body[::-1]:
+                        #     del else_body.data[i]
+
+                        decomposed_circuit = QuantumCircuit(bits, name="DecomposedClassicalANDCircuit")
+
+                        # @TODO - I might be double-counting NOT's because I sort of try to account for them in the condition handling, so check that
+
+                        # A -> C
+                        with decomposed_circuit.if_test(left_condition) as _else_left:
+                            decomposed_circuit.measure(creg_setter_qreg[1], intermediate_state_creg[0])
+                        with _else_left:
+                            decomposed_circuit.measure(creg_setter_qreg[0], intermediate_state_creg[0])
+
+                        # B -> C
+                        with decomposed_circuit.if_test(right_condition) as _else_right:
+                            decomposed_circuit.measure(creg_setter_qreg[1], intermediate_state_creg[0])
+                        with _else_right:
+                            decomposed_circuit.measure(creg_setter_qreg[0], intermediate_state_creg[0])
+
+                        # C
+                        with decomposed_circuit.if_test((intermediate_state_creg[0], 1)) as _else_right:
+                            decomposed_circuit.compose(if_body, if_body.qubits, if_body.clbits, inline_captures=True, inplace=True)
+                        with _else_right:
                             decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
                 elif condition.op.name == "BIT_XOR":
-                    """
-                    Decompose classical XOR gate via truth table:
-                    |-----------------|
-                    | A | B | A XOR B |
-                    |-----------------|
-                    | 0 | 0 |    0    |
-                    | 0 | 1 |    1    |
-                    | 1 | 0 |    1    |
-                    | 1 | 1 |    0    |
-                    |-----------------|
-                    """
-
                     if isinstance(condition.left, Unary):
                         left_var = condition.left.operand.var
                         left_val = 1 if condition.left.op.name == "BIT_NOT" else 0
@@ -143,28 +212,132 @@ class DecomposeIfElseOps(TransformationPass):
                         right_condition = (right_var, right_val)
 
                     if else_body is None:
-                        bits = list(set([*if_body.qubits, *if_body.clbits]))
+                        bits = list(set([*if_else_op_node.qargs, *if_else_op_node.cargs, *if_body.qubits, *if_body.clbits]))
                     else:
-                        bits = list(set([*if_body.qubits, *else_body.qubits, *if_body.clbits, *else_body.clbits]))
+                        bits = list(set([*if_else_op_node.qargs, *if_else_op_node.cargs, *if_body.qubits, *else_body.qubits, *if_body.clbits, *else_body.clbits]))
 
-                    decomposed_circuit = QuantumCircuit(bits, name="DecomposedClassicalXORCircuit")
-                    with decomposed_circuit.if_test(left_condition) as _else_left:
+                    if method == "nested":
+                        """
+                        Decompose classical XOR gate via truth table:
+                        |-----------------|
+                        | A | B | A XOR B |
+                        |-----------------|
+                        | 0 | 0 |    0    |
+                        | 0 | 1 |    1    |
+                        | 1 | 0 |    1    |
+                        | 1 | 1 |    0    |
+                        |-----------------|
+                        """
+
+                        decomposed_circuit = QuantumCircuit(bits, name="DecomposedClassicalXORCircuit")
+                        with decomposed_circuit.if_test(left_condition) as _else_left:
+                            with decomposed_circuit.if_test(right_condition) as _else_right:
+                                if else_body is not None:
+                                    decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
+                            with _else_right:
+                                decomposed_circuit.compose(if_body, if_body.qubits, if_body.clbits, inline_captures=True, inplace=True)
+                        with _else_left:
+                            with decomposed_circuit.if_test(right_condition) as _else_right:
+                                decomposed_circuit.compose(if_body, if_body.qubits, if_body.clbits, inline_captures=True, inplace=True)
+                            with _else_right:
+                                if else_body is not None:
+                                    decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
+                    elif method == "sequential":
+                        """
+                        Decompose classical XOR gate via sequential {AND, NOT} decomposition:
+                        if (A XOR B): ...
+                        === becomes ===
+                        NOT A -> C
+                        NOT B -> C
+                        NOT C -> D [D now holds NOT(NOT A AND NOT B) = A OR B]
+                        A -> C
+                        B -> C [C now holds A AND B]
+                        NOT C -> D [D now holds NOT(A AND B) AND (A OR B) = A XOR B]
+                        if (D): ...
+                        """
+
+                        print("- sequential XOR: -")
+                        print("bits:", bits)
+                        print("node qargs:", if_else_op_node.qargs)
+                        print("node cargs:", if_else_op_node.cargs)
+                        print("-")
+
+                        # creg_setter_qreg = list(set(qubit for qubit in bits + list(if_else_op_node.qargs) if "qsetter" in qubit._register.name))
+                        # intermediate_state_creg = list(set(clbit for clbit in bits + list(if_else_op_node.cargs) if "cintermediate_state" in clbit._register.name))
+
+                        creg_setter_qreg = [qubit for qubit in bits if "qsetter" in qubit._register.name]
+                        intermediate_state_creg = [clbit for clbit in bits if "cintermediate_state" in clbit._register.name]
+
+                        print(creg_setter_qreg)
+                        print(intermediate_state_creg)
+                        print("-")
+
+                        filler_instruction_indices_if_body = []
+                        for i, instruction in enumerate(if_body.data):
+                            for clbit in instruction.clbits:
+                                if clbit in intermediate_state_creg:
+                                    filler_instruction_indices_if_body.append(i)
+                                    break
+
+                        filler_instruction_indices_else_body = []
+                        for i, instruction in enumerate(else_body.data):
+                            for clbit in instruction.clbits:
+                                if clbit in intermediate_state_creg:
+                                    filler_instruction_indices_else_body.append(i)
+                                    break
+
+                        print(filler_instruction_indices_if_body)
+                        print(filler_instruction_indices_else_body)
+
+                        # for i in filler_instruction_indices_if_body[::-1]:
+                        #     del if_body.data[i]
+                        # for i in filler_instruction_indices_else_body[::-1]:
+                        #     del else_body.data[i]
+
+                        decomposed_circuit = QuantumCircuit(bits, name="DecomposedClassicalXORCircuit")
+
+                        # @TODO - I might be double-counting NOT's because I sort of try to account for them in the condition handling, so check that
+
+                        # NOT(A) -> C
+                        with decomposed_circuit.if_test(left_condition) as _else_left:
+                            decomposed_circuit.measure(creg_setter_qreg[0], intermediate_state_creg[0])
+                        with _else_left:
+                            decomposed_circuit.measure(creg_setter_qreg[1], intermediate_state_creg[0])
+
+                        # NOT(B) -> C
                         with decomposed_circuit.if_test(right_condition) as _else_right:
-                            if else_body is not None:
-                                decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
+                            decomposed_circuit.measure(creg_setter_qreg[0], intermediate_state_creg[0])
                         with _else_right:
-                            decomposed_circuit.compose(if_body, if_body.qubits, if_body.clbits, inline_captures=True, inplace=True)
-                    with _else_left:
+                            decomposed_circuit.measure(creg_setter_qreg[1], intermediate_state_creg[0])
+
+                        # NOT(C) -> D
+                        with decomposed_circuit.if_test((intermediate_state_creg[0], 1)) as _else:
+                            decomposed_circuit.measure(creg_setter_qreg[0], intermediate_state_creg[1])
+                        with _else:
+                            decomposed_circuit.measure(creg_setter_qreg[1], intermediate_state_creg[1])
+
+                        # A -> C
+                        with decomposed_circuit.if_test(left_condition) as _else_left:
+                            decomposed_circuit.measure(creg_setter_qreg[1], intermediate_state_creg[0])
+                        with _else_left:
+                            decomposed_circuit.measure(creg_setter_qreg[0], intermediate_state_creg[0])
+
+                        # B -> C
                         with decomposed_circuit.if_test(right_condition) as _else_right:
+                            decomposed_circuit.measure(creg_setter_qreg[1], intermediate_state_creg[0])
+                        with _else_right:
+                            decomposed_circuit.measure(creg_setter_qreg[0], intermediate_state_creg[0])
+
+                        # D
+                        with decomposed_circuit.if_test((intermediate_state_creg[0], 1)) as _else_right:
                             decomposed_circuit.compose(if_body, if_body.qubits, if_body.clbits, inline_captures=True, inplace=True)
                         with _else_right:
-                            if else_body is not None:
-                                decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
+                            decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
                 # else:
                 #     print(f"WARNING - DecomposeIfElseOps encountered IfElseOp with label '{if_else_op.label}' which has condition with name '{condition.op.name}', skipping.")
-            else:
-                print(f"WARNING - DecomposeIfElseOps encountered IfElseOp with label '{if_else_op.label}' which has condition of unrecognized type {type(condition)}, skipping.")
-                continue
+            # else:
+            #     print(f"WARNING - DecomposeIfElseOps encountered IfElseOp with label '{if_else_op.label}' which has condition of unrecognized type {type(condition)}, skipping.")
+            #     continue
 
             if decomposed_circuit is not None:
                 decomposed_dag = circuit_to_dag(decomposed_circuit)
