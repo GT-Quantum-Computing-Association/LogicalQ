@@ -8,6 +8,8 @@ import numpy as np
 from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor as Pool
 
+from qiskit.transpiler.passes import Decompose
+
 from .Logical import LogicalCircuit, LogicalStatevector, LogicalDensityMatrix
 from .NoiseModel import construct_noise_model, construct_noise_model_from_hardware_model
 
@@ -20,6 +22,7 @@ from qiskit_aer.noise import NoiseModel
 from qiskit import transpile
 from qiskit.transpiler import PassManager
 from .Transpilation.UnBox import UnBoxTask
+from .Transpilation.DecomposeIfElseOps import DecomposeIfElseOpsTask
 
 from qiskit.providers import Backend
 from qiskit_ibm_runtime import QiskitRuntimeService
@@ -133,6 +136,13 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
             service = QiskitRuntimeService()
             backend = service.backend(backend)
 
+    # Construct specialized callables for transpilation, costing, and running - the work could be
+    # done here, but we're trying to "factor out" common behavior which is present in all cases and
+    # only deal with backend-specific patches here - ths makes it easy to modify factored behavior
+    # for all use cases and not think about backend-specific code if not necessary
+    # @TODO - instead of relying on the transpile function, which is a thin wrapper around
+    #         generate_preset_pass_manager with some type-handling, maybe we can create
+    #         backend-specific pass managers here and then just run them later with common settings
     if isinstance(backend, AerSimulator):
         _transpile = transpile
         _cost = lambda circuits, shots : None
@@ -153,12 +163,20 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
 
             _run = lambda circuits, **kwargs : backend.run(circuits, **kwargs).result()
         elif isinstance(backend, (QuantinuumBackend)):
-            circuits = [qiskit_to_tk(circuit) for circuit in circuits]
+            def _transpile(circuits, backend=None, coupling_map=None, optimization_level=0, **kwargs):
+                pm = PassManager([DecomposeIfElseOpsTask(), Decompose()])
+                circuits_decomposed = pm.run(circuits)
+                tket_circuits_decomposed = [qiskit_to_tk(circuit_decomposed) for circuit_decomposed in circuits_decomposed]
+                return backend.get_compiled_circuits(tket_circuits_decomposed, optimisation_level=optimization_level, **kwargs)
 
-            _transpile = lambda circuits, backend=None, coupling_map=None, optimization_level=0, **kwargs : backend.get_compiled_circuits(circuits, optimisation_level=optimization_level, **kwargs)
+            # Do this type check here because pytket's error isn't very easy to understand for users
+            if not (
+                isinstance(shots, int) or
+                (hasattr(shots, "__iter__") and all([isinstance(shot_count, int) for shot_count in shots]))
+            ):
+                raise TypeError(f"Invalid type for shots input: {type(shots)}; must be int or iterable of ints")
 
-            device_name = backend._device_name.upper().rstrip("LE")
-            _cost = lambda circuits, shots : backend.cost(circuits, n_shots=shots, syntax_checker=device_name+"SC")
+            _cost = lambda circuits, shots : [backend.cost(circuit, n_shots=shots) for circuit in circuits]
 
             # @TODO - implement a smarter run function that instead uses process_circuits to get a handle and check its status periodically
             _run = lambda circuits, shots, memory=None, **kwargs : backend.run_circuits(circuits, n_shots=shots, **kwargs)
