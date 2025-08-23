@@ -325,7 +325,7 @@ class LogicalCircuit(QuantumCircuit):
         # Creates Logical H circuit using coherent feedback
         self.LogicalHCircuit_CF = QuantumCircuit(self.n + 1)
         self.LogicalHCircuit_CF.h(self.n)
-        self.LogicalHCircuit_CF.compose(self.PhysicalToLogicalCZCircuit, [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalHCircuit_CF.compose(self.PhysicalToLogicalCXCircuit, [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
         self.LogicalHCircuit_CF.compose(self.PhysicalToLogicalCZCircuit, [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
         self.LogicalHCircuit_CF.h(self.n)
         self.LogicalHCircuit_CF.compose(self.PhysicalToLogicalCXCircuit, [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
