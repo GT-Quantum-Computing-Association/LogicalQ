@@ -134,8 +134,10 @@ class DecomposeIfElseOps(TransformationPass):
                         print("node cargs:", if_else_op_node.cargs)
                         print("-")
 
-                        creg_setter_qreg = list(set(qubit for qubit in bits + list(if_else_op_node.qargs) if "qsetter" in qubit._register.name))
-                        intermediate_state_creg = list(set(clbit for clbit in bits + list(if_else_op_node.cargs) if "cintermediate_state" in clbit._register.name))
+                        creg_setter_qreg = [qubit for qubit in bits if "qsetter" in qubit._register.name]
+                        intermediate_state_creg = [clbit for clbit in bits if "cintermediate_state" in clbit._register.name]
+                        creg_setter_qreg.sort(key=lambda qubit : qubit._index)
+                        intermediate_state_creg.sort(key=lambda clbit : clbit._index)
 
                         print(creg_setter_qreg)
                         print(intermediate_state_creg)
@@ -267,6 +269,8 @@ class DecomposeIfElseOps(TransformationPass):
 
                         creg_setter_qreg = [qubit for qubit in bits if "qsetter" in qubit._register.name]
                         intermediate_state_creg = [clbit for clbit in bits if "cintermediate_state" in clbit._register.name]
+                        creg_setter_qreg.sort(key=lambda qubit : qubit._index)
+                        intermediate_state_creg.sort(key=lambda clbit : clbit._index)
 
                         print(creg_setter_qreg)
                         print(intermediate_state_creg)
