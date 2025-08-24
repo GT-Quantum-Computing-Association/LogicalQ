@@ -1,15 +1,19 @@
-from qiskit import QuantumRegister, ClassicalRegister, QuantumCircuit
+from qiskit import QuantumCircuit
 from qiskit.circuit import IfElseOp
 from qiskit.circuit.classical.expr import Binary, Unary
-from qiskit.transpiler import DoWhileController
-from qiskit.transpiler.basepasses import TransformationPass
+from qiskit.transpiler import DoWhileController, TransformationPass
 from qiskit.transpiler.passes.utils import control_flow
 from qiskit.converters import circuit_to_dag
 
 class DecomposeIfElseOps(TransformationPass):
     """``DecomposeIfElseOps`` transpilation pass decomposes multi-classical bit IfElseOp's into nested single-classical bit IfElseOp's."""
 
-    def __init__(self):
+    def __init__(self, method=None):
+        if method == None:
+            self.method == "nested"
+        else:
+            self.method = method
+
         super().__init__()
 
     @control_flow.trivial_recurse
@@ -18,9 +22,6 @@ class DecomposeIfElseOps(TransformationPass):
 
         if len(dag.op_nodes(IfElseOp)) == 0:
             return dag
-
-        # @TODO - find a good way to get this as user input
-        method = "sequential"
 
         for if_else_op_node in dag.op_nodes(IfElseOp):
             if_else_op = if_else_op_node.op
@@ -51,14 +52,6 @@ class DecomposeIfElseOps(TransformationPass):
                 # @TODO - I don't know how to check, so just forcing it again for safety
                 self.property_set["decompose_if_else_ops_again"] = True
             elif isinstance(condition, Binary):
-                print("--- NEW OP ---", condition.op.name)
-
-                # print(dir(if_else_op))
-                # import matplotlib
-                # matplotlib.use("TkAgg")
-                # if_else_op.params[1].draw("mpl").show()
-                # if_else_op.params[0].draw("mpl").show()
-
                 if condition.op.name == "BIT_AND":
                     # Condition lvalue/rvalue type checking and parsing
                     # If there is a BIT_NOT gate in a condition, then it will be a Unary instead, which we have to handle differently
@@ -95,7 +88,7 @@ class DecomposeIfElseOps(TransformationPass):
                     else:
                         bits = list(set([*if_else_op_node.qargs, *if_else_op_node.cargs, *if_body.qubits, *else_body.qubits, *if_body.clbits, *else_body.clbits]))
 
-                    if method == "nested":
+                    if self.method == "nested":
                         """
                         Decompose classical AND gate via truth table:
                         |-----------------|
@@ -118,7 +111,7 @@ class DecomposeIfElseOps(TransformationPass):
                         with _else_left:
                             if else_body is not None:
                                 decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
-                    elif method == "sequential":
+                    elif self.method == "sequential":
                         """
                         Decompose classical XOR gate via sequential {AND, NOT} decomposition:
                         if (A AND B): ...
@@ -128,20 +121,10 @@ class DecomposeIfElseOps(TransformationPass):
                         if (C): ...
                         """
 
-                        print("- sequential AND: -")
-                        print("bits:", bits)
-                        print("node qargs:", if_else_op_node.qargs)
-                        print("node cargs:", if_else_op_node.cargs)
-                        print("-")
-
                         creg_setter_qreg = [qubit for qubit in bits if "qsetter" in qubit._register.name]
                         intermediate_state_creg = [clbit for clbit in bits if "cintermediate_state" in clbit._register.name]
                         creg_setter_qreg.sort(key=lambda qubit : qubit._index)
                         intermediate_state_creg.sort(key=lambda clbit : clbit._index)
-
-                        print(creg_setter_qreg)
-                        print(intermediate_state_creg)
-                        print("-")
 
                         filler_instruction_indices_if_body = []
                         for i, instruction in enumerate(if_body.data):
@@ -156,9 +139,6 @@ class DecomposeIfElseOps(TransformationPass):
                                 if clbit in intermediate_state_creg:
                                     filler_instruction_indices_else_body.append(i)
                                     break
-
-                        print(filler_instruction_indices_if_body)
-                        print(filler_instruction_indices_else_body)
 
                         # for i in filler_instruction_indices_if_body[::-1]:
                         #     del if_body.data[i]
@@ -218,7 +198,7 @@ class DecomposeIfElseOps(TransformationPass):
                     else:
                         bits = list(set([*if_else_op_node.qargs, *if_else_op_node.cargs, *if_body.qubits, *else_body.qubits, *if_body.clbits, *else_body.clbits]))
 
-                    if method == "nested":
+                    if self.method == "nested":
                         """
                         Decompose classical XOR gate via truth table:
                         |-----------------|
@@ -244,7 +224,7 @@ class DecomposeIfElseOps(TransformationPass):
                             with _else_right:
                                 if else_body is not None:
                                     decomposed_circuit.compose(else_body, else_body.qubits, else_body.clbits, inline_captures=True, inplace=True)
-                    elif method == "sequential":
+                    elif self.method == "sequential":
                         """
                         Decompose classical XOR gate via sequential {AND, NOT} decomposition:
                         if (A XOR B): ...
@@ -258,23 +238,10 @@ class DecomposeIfElseOps(TransformationPass):
                         if (D): ...
                         """
 
-                        print("- sequential XOR: -")
-                        print("bits:", bits)
-                        print("node qargs:", if_else_op_node.qargs)
-                        print("node cargs:", if_else_op_node.cargs)
-                        print("-")
-
-                        # creg_setter_qreg = list(set(qubit for qubit in bits + list(if_else_op_node.qargs) if "qsetter" in qubit._register.name))
-                        # intermediate_state_creg = list(set(clbit for clbit in bits + list(if_else_op_node.cargs) if "cintermediate_state" in clbit._register.name))
-
                         creg_setter_qreg = [qubit for qubit in bits if "qsetter" in qubit._register.name]
                         intermediate_state_creg = [clbit for clbit in bits if "cintermediate_state" in clbit._register.name]
                         creg_setter_qreg.sort(key=lambda qubit : qubit._index)
                         intermediate_state_creg.sort(key=lambda clbit : clbit._index)
-
-                        print(creg_setter_qreg)
-                        print(intermediate_state_creg)
-                        print("-")
 
                         filler_instruction_indices_if_body = []
                         for i, instruction in enumerate(if_body.data):
@@ -289,9 +256,6 @@ class DecomposeIfElseOps(TransformationPass):
                                 if clbit in intermediate_state_creg:
                                     filler_instruction_indices_else_body.append(i)
                                     break
-
-                        print(filler_instruction_indices_if_body)
-                        print(filler_instruction_indices_else_body)
 
                         # for i in filler_instruction_indices_if_body[::-1]:
                         #     del if_body.data[i]
