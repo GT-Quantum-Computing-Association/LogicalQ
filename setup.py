@@ -18,6 +18,9 @@ setup(
         "qiskit_addon_utils",
         "qiskit_ibm_runtime",
         "pytket",
+        "pytket-qir",
+        "pytket-qiskit",
+        "pytket-quantinuum",
         "qbraid",
     ],
 )
