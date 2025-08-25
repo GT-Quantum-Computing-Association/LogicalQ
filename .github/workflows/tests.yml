@@ -12,7 +12,7 @@ on:
 
 jobs:
   tests:
-    name: Test all implemented codes
+    name: Run tests
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -29,7 +29,11 @@ jobs:
         python-version: ${{ matrix.python_version }}
         cache: pip
 
-    - name: Test All Implemented
+    - name: Install dependencies
       run: |
-        python -m pip install .
+        python -m pip install --upgrade pip
+        python -m pip install -e .
+
+    - name: TestAllImplemented
+      run: |
         python ./LogicalQ/tests/TestAllImplemented.py
