@@ -84,9 +84,8 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
     # Resolve coupling_map
     if coupling_map is DEFAULT:
         if hardware_model is None:
-            # # Default to fully-coupled map
-            # @TODO - pick a better default (like None) if the backend is a real backend
-            coupling_map = "fully_coupled"
+            # Default to fully-coupled map
+            coupling_map = None
         else:
             coupling_map = hardware_model["device_info"].get("coupling_map", None)
     elif coupling_map is not None and not hasattr(coupling_map, "__iter__"):
@@ -176,7 +175,8 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
             ):
                 raise TypeError(f"Invalid type for shots input: {type(shots)}; must be int or iterable of ints")
 
-            _cost = lambda circuits, shots : [backend.cost(circuit, n_shots=shots) for circuit in circuits]
+            syntax_checker = backend._device_name.rstrip("LE") + "SC"
+            _cost = lambda circuits, shots : [backend.cost(circuit, n_shots=shots, syntax_checker=syntax_checker) for circuit in circuits]
 
             # @TODO - implement a smarter run function that instead uses process_circuits to get a handle and check its status periodically
             _run = lambda circuits, shots, memory=None, **kwargs : backend.run_circuits(circuits, n_shots=shots, **kwargs)
@@ -252,7 +252,7 @@ def _basic_experiment_core(task_id, circuit, noise_model, backend, method, shots
 
 # @TODO - implement more experiments
 
-def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1, max_n_qubits=16, min_circuit_length=1, max_circuit_length=16, backend="aer_simulator", method="statevector", shots=1024, with_mp=True, save_dir=None, save_filename=None):
+def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubits=1, max_n_qubits=16, min_circuit_length=1, max_circuit_length=16, backend="aer_simulator", method="statevector", shots=1024, with_mp=True, save_dir=None, save_filename=None):
     if isinstance(circuit_input, QuantumCircuit):
         if max_n_qubits != min_n_qubits:
             print("A constant circuit has been provided as the circuit factory, but a non-trivial range of qubit counts has also been provided, so the fixed input will not be scaled in this parameter. If you would like for the number of qubits to be scaled, please provide a callable which takes the number of qubits, n_qubits, as an argument.")
@@ -265,7 +265,10 @@ def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1,
     else:
         raise ValueError("Please provide a QuantumCircuit/LogicalCircuit object or a method for constructing QuantumCircuits/LogicalCircuits.")
 
-    if isinstance(noise_model_input, NoiseModel):
+    if noise_model_input is None:
+        # Default option which lets users skip the noise model input, especially if their backend is a hardware backend
+        noise_model_factory = lambda n_qubits=None, circuit_length=None : None
+    elif isinstance(noise_model_input, NoiseModel):
         if max_n_qubits != min_n_qubits:
             print("A constant noise model has been provided as the noise model factory, but a non-trivial range of qubit counts has also been provided. The number of qubits will not be scaled; if you would like for the number of qubits to be scaled, please provide a callable which takes the number of qubits, n_qubits, as an argument.")
 
@@ -273,7 +276,7 @@ def circuit_scaling_experiment(circuit_input, noise_model_input, min_n_qubits=1,
     elif callable(noise_model_input):
         noise_model_factory = noise_model_input
     else:
-        raise ValueError("Please provide a NoiseModel object or a method for constructing NoiseModels.")
+        raise ValueError("Please provide a NoiseModel object, a method for constructing NoiseModels, or None (default) if backend is a hardware backend.")
 
     # Form a dict of dicts with the first layer (n_qubits) initialized to make later access faster and more reliable in parallel
     all_data = dict(zip(range(min_n_qubits, max_n_qubits+1), [{}]*(max_n_qubits+1-min_n_qubits)))
