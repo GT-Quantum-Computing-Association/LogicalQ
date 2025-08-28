@@ -31,10 +31,11 @@ class LogicalCircuit(QuantumCircuit):
 
         self.label = label
         self.n, self.k, self.d = label
-        if any([len(stabilizer) != self.n for stabilizer in self.stabilizer_tableau]):
-            raise ValueError(f"Code label n ({self.n}) does not match individual stabilizer length ({self.n_physical_qubits})")
-
         self.n_physical_qubits = self.n
+
+        if any([len(stabilizer) != self.n for stabilizer in self.stabilizer_tableau]):
+            raise ValueError(f"Stabilizer lengths do not all equal the code label n ({self.n})")
+
         # @TODO - obtain an exact estimate for the number of ancilla qubits
         self.n_ancilla_qubits = self.n_stabilizers//2
         self.n_measure_qubits = self.n_ancilla_qubits
