@@ -13,6 +13,7 @@ To install LogicalQ, clone this repository and install via `pip`:
 git clone https://github.com/GT-Quantum-Computing-Association/LogicalQ.git
 cd LogicalQ
 python -m virtualenv .venv
+.venv/bin/activate
 python -m pip install -e .
 ```
 
@@ -39,3 +40,4 @@ lsv = LogicalStatevector(lqc)
 lsv.draw("latex")
 ```
 See the `demos` directory for more examples!
+
