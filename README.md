@@ -12,6 +12,7 @@ To install LogicalQ, clone this repository and install via `pip`:
 ```py
 git clone https://github.com/GT-Quantum-Computing-Association/LogicalQ.git
 cd LogicalQ
+python -m virtualenv .venv
 python -m pip install -e .
 ```
 
@@ -23,13 +24,18 @@ from LogicalQ.Logical import LogicalCircuit, LogicalStatevector
 from LogicalQ.Library.QECCs import steane_code
 
 lqc = LogicalCircuit(2, **steane_code)
+lqc.encode(initial_states=[1,0])
 
 lqc.h(0)
 lqc.cx(0, 1)
+
+lqc.append_qec_cycle()
+
+lqc.measure_all()
 
 lqc.draw("mpl")
 
 lsv = LogicalStatevector(lqc)
 lsv.draw("latex")
 ```
-
+See the `demos` directory for more examples!
