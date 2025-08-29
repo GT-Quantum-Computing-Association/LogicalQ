@@ -103,7 +103,7 @@ class LogicalCircuit(QuantumCircuit):
     def from_physical_circuit(cls, physical_circuit, label, stabilizer_tableau, name=None, max_iterations=1):
         logical_circuit = cls(physical_circuit.num_qubits, label, stabilizer_tableau, name)
 
-        logical_circuit.encode(range(physical_circuit.num_qubits), max_iterations=max_iterations)
+        logical_circuit.encode(*list(range(physical_circuit.num_qubits)), max_iterations=max_iterations)
 
         for i in range(len(physical_circuit.data)):
             circuit_instruction = physical_circuit.data[i]
@@ -1555,7 +1555,7 @@ class LogicalRegister(list):
     def __init__(self, qregs=None, cregs=None):
         self.qregs = qregs
         self.cregs = cregs
-        raise NotImplementedError("LogicalRegister is not yet fully implemented")
+        raise NotImplementedError("LogicalRegister is not yet fully implemented")    
 
 class LogicalStatevector(Statevector):
     def __init__(self, data, n_logical_qubits=None, label=None, stabilizer_tableau=None, dims=None):
