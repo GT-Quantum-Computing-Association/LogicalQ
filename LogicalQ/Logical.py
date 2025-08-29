@@ -467,7 +467,7 @@ class LogicalCircuit(QuantumCircuit):
 
                     for _ in range(max_iterations - 1):
                         # If the ancilla stores a 1, reset the entire logical qubit and redo
-                        with super().if_test((self.enc_verif_cregs[q][0], 1)) as _else:
+                        with super().if_test((self.enc_verif_cregs[q][0], 1)):
                             super().reset(self.logical_qregs[q])
 
                             # Initial encoding
@@ -481,8 +481,6 @@ class LogicalCircuit(QuantumCircuit):
                             # Measure ancilla
                             # super().measure(self.ancilla_qregs[q][0], self.enc_verif_cregs[q][0])
                             super().append(Measure(), [self.ancilla_qregs[q][0]], [self.enc_verif_cregs[q][0]], copy=False)
-                        with _else:
-                            pass
 
                     # Reset ancilla qubit
                     super().reset(self.ancilla_qregs[q][0])
@@ -585,13 +583,14 @@ class LogicalCircuit(QuantumCircuit):
                 self.steane_flagged_circuit2(logical_qubit_indices)
             else:
                 self.measure_stabilizers(logical_qubit_indices=[q], stabilizer_indices=stabilizer_indices)
+
             for n in range(self.n_ancilla_qubits):
                 # super().measure(self.ancilla_qregs[q][n], self.curr_syndrome_cregs[q][n])
                 super().append(Measure(), [self.ancilla_qregs[q][n]], [self.curr_syndrome_cregs[q][n]], copy=False)
 
             # Determine the syndrome difference
             for n in range(len(stabilizer_indices)):
-                with self.if_test(self.cbit_xor([self.curr_syndrome_cregs[q][n], self.prev_syndrome_cregs[q][stabilizer_indices[n]]])) as _else:
+                with super().if_test(self.cbit_xor([self.curr_syndrome_cregs[q][n], self.prev_syndrome_cregs[q][stabilizer_indices[n]]])) as _else:
                     self.set_cbit(syndrome_diff_creg[stabilizer_indices[n]], 1)
                 with _else:
                     self.set_cbit(syndrome_diff_creg[stabilizer_indices[n]], 0)
@@ -820,25 +819,31 @@ class LogicalCircuit(QuantumCircuit):
                 # Perform first flagged syndrome measurements
                 self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_1, flagged=True, steane_flag_1=use_steane_flagged_circuits)
 
-                with self.if_test(self.cbit_and(self.flagged_syndrome_diff_cregs[q], [0]*self.flagged_syndrome_diff_cregs[q].size)) as _else:
-                    # If no change in syndrome, perform second flagged syndrome measurement
+                # If no change in syndrome, perform second flagged syndrome measurement
+                with super().if_test(self.cbit_and(self.flagged_syndrome_diff_cregs[q], [0]*self.flagged_syndrome_diff_cregs[q].size)):
                     self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_2, flagged=True, steane_flag_2=use_steane_flagged_circuits)
-                with _else:
-                    # If change in syndrome, perform unflagged syndrome measurement, decode, and correct
+
+                # Patch to make circuit digestible for transpilation to pytket by splitting up parts of if_tests
+                # @TODO - identify a better solution
+
+                # If change in syndrome, perform unflagged syndrome measurement, decode, and correct:
+                with super().if_test(self.cbit_and(self.flagged_syndrome_diff_cregs[q], [1]*self.flagged_syndrome_diff_cregs[q].size)):
                     self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, flagged=False)
+                # with super().if_test(self.cbit_and(self.flagged_syndrome_diff_cregs[q], [1]*self.flagged_syndrome_diff_cregs[q].size)):
                     self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, flagged=False)
 
+                with super().if_test(self.cbit_and(self.flagged_syndrome_diff_cregs[q], [1]*self.flagged_syndrome_diff_cregs[q].size)):
                     self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, with_flagged=False)
                     self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, with_flagged=False)
+                with super().if_test(self.cbit_and(self.flagged_syndrome_diff_cregs[q], [1]*self.flagged_syndrome_diff_cregs[q].size)):
                     self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, with_flagged=True)
                     self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, with_flagged=True)
 
-                    # Update previous syndrome
+                # Update previous syndrome
+                with super().if_test(self.cbit_and(self.flagged_syndrome_diff_cregs[q], [1]*self.flagged_syndrome_diff_cregs[q].size)):
                     for n in range(self.n_stabilizers):
-                        with self.if_test(expr.lift(self.unflagged_syndrome_diff_cregs[q][n])) as _else_inner:
+                        with super().if_test((self.unflagged_syndrome_diff_cregs[q][n], 1)):
                             self.cbit_not(self.prev_syndrome_cregs[q][n])
-                        with _else_inner:
-                            pass
 
             index_final = len(self.data)-1
 
@@ -861,33 +866,25 @@ class LogicalCircuit(QuantumCircuit):
             # Decoding sequence with flagged syndrome
             if with_flagged:
                 flag_diff = [self.flagged_syndrome_diff_cregs[q][x] for x in stabilizer_indices]
-                with super().if_test(expr.bit_and(self.cbit_and(flag_diff, [1, 0, 0]), self.cbit_and(syn_diff, [0, 1, 0]))) as _else:
+                with super().if_test(expr.bit_and(self.cbit_and(flag_diff, [1, 0, 0]), self.cbit_and(syn_diff, [0, 1, 0]))):
                     self.cbit_not(self.pauli_frame_cregs[q][pf_ind])
-                with _else:
-                    pass
-                with super().if_test(expr.bit_and(self.cbit_and(flag_diff, [1, 0, 0]), self.cbit_and(syn_diff, [0, 0, 1]))) as _else:
+
+                with super().if_test(expr.bit_and(self.cbit_and(flag_diff, [1, 0, 0]), self.cbit_and(syn_diff, [0, 0, 1]))):
                     self.cbit_not(self.pauli_frame_cregs[q][pf_ind])
-                with _else:
-                    pass
-                with super().if_test(expr.bit_and(self.cbit_and(flag_diff, [0, 1, 1]), self.cbit_and(syn_diff, [0, 0, 1]))) as _else:
+
+                with super().if_test(expr.bit_and(self.cbit_and(flag_diff, [0, 1, 1]), self.cbit_and(syn_diff, [0, 0, 1]))):
                     self.cbit_not(self.pauli_frame_cregs[q][pf_ind])
-                with _else:
-                    pass
 
             # Unflagged decoding sequence
             else:
-                with super().if_test(self.cbit_and(syn_diff, [0, 1, 0])) as _else:
+                with super().if_test(self.cbit_and(syn_diff, [0, 1, 0])):
                     self.cbit_not(self.pauli_frame_cregs[q][pf_ind])
-                with _else:
-                    pass
-                with super().if_test(self.cbit_and(syn_diff, [0, 1, 1])) as _else:
+
+                with super().if_test(self.cbit_and(syn_diff, [0, 1, 1])):
                     self.cbit_not(self.pauli_frame_cregs[q][pf_ind])
-                with _else:
-                    pass
-                with super().if_test(self.cbit_and(syn_diff, [0, 0, 1])) as _else:
+
+                with super().if_test(self.cbit_and(syn_diff, [0, 0, 1])):
                     self.cbit_not(self.pauli_frame_cregs[q][pf_ind])
-                with _else:
-                    pass
 
     def measure(self, logical_qubit_indices, cbit_indices, with_error_correction=True):
         if not hasattr(logical_qubit_indices, "__iter__"):
@@ -907,10 +904,8 @@ class LogicalCircuit(QuantumCircuit):
 
             with self.box(label="logical.qec.measure:$\\hat{M}_\\text{QEC}$"):
                 # @TODO - use LogicalXVector instead
-                with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][x] for x in [4,5,6]])) as _else:
+                with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][x] for x in [4,5,6]])):
                     self.set_cbit(self.output_creg[c], 1)
-                with _else:
-                    pass
 
                 if with_error_correction:
                     # Final syndrome
@@ -921,10 +916,8 @@ class LogicalCircuit(QuantumCircuit):
                             if stabilizer[i] == 'Z':
                                 s_indices.append(i)
 
-                        with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][z] for z in s_indices])) as _else:
+                        with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][z] for z in s_indices])):
                             self.set_cbit(self.curr_syndrome_cregs[q][n], 1)
-                        with _else:
-                            pass
 
                     # Final syndrome diff
                     for n in range(self.n_ancilla_qubits):
@@ -935,10 +928,8 @@ class LogicalCircuit(QuantumCircuit):
 
                     # Final correction
                     self.apply_decoding([q], self.z_stabilizers, with_flagged=False)
-                    with super().if_test(expr.lift(self.pauli_frame_cregs[q][1])) as _else:
+                    with super().if_test((self.pauli_frame_cregs[q][1], 1)):
                         self.cbit_not(self.output_creg[c])
-                    with _else:
-                        pass
 
     def measure_all(self, inplace=True, with_error_correction=True):
         if inplace:
@@ -1178,41 +1169,41 @@ class LogicalCircuit(QuantumCircuit):
             raise ValueError(f"'{method}' is not a valid method for the logical T gate")
 
     def tdg(self, *targets, method="Coherent_Feedback"):
-            """
-            Logical T^dagger gate
+        """
+        Logical T^dagger gate
 
-            Definition:
-            [1    0         ]
-            [0    e^(-ipi/4)]
-            """
+        Definition:
+        [1    0         ]
+        [0    e^(-ipi/4)]
+        """
 
-            if len(targets) == 1 and hasattr(targets[0], "__iter__"):
-                targets = targets[0]
+        if len(targets) == 1 and hasattr(targets[0], "__iter__"):
+            targets = targets[0]
 
-            if method == "LCU_Corrected":
-                for t in targets:
-                    with self.box(label="logical.logicalop.t.lcu_corrected:$\\hat{T^\\dagger}_{L}$"):
-                        super().h(self.logical_op_qregs[t][0])
-                        super().tdg(self.logical_op_qregs[t][0])
-                        super().h(self.logical_op_qregs[t][0])
-                        super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
-                        super().h(self.logical_op_qregs[t][0])
+        if method == "LCU_Corrected":
+            for t in targets:
+                with self.box(label="logical.logicalop.t.lcu_corrected:$\\hat{T^\\dagger}_{L}$"):
+                    super().h(self.logical_op_qregs[t][0])
+                    super().tdg(self.logical_op_qregs[t][0])
+                    super().h(self.logical_op_qregs[t][0])
+                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
+                    super().h(self.logical_op_qregs[t][0])
 
-                        super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
-                        super().reset(self.logical_op_qregs[t][0])
+                    super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
+                    super().reset(self.logical_op_qregs[t][0])
 
-                        with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as _else:
-                            self.sdg(t, method='LCU_corrected')
-                        with _else:
-                            pass
+                    with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as _else:
+                        self.sdg(t, method='LCU_corrected')
+                    with _else:
+                        pass
 
-            elif method == "Coherent_Feedback":
-                for t in targets:
-                    with self.box(label="logical.logicalop.t.coherent_feedback:$\\hat{T^\\dagger}_{L}$"):
-                        super().compose(self.LogicalTdgCircuit_CF, self.logical_qregs[t][:] + self.logical_op_qregs[t][:], inplace=True)
+        elif method == "Coherent_Feedback":
+            for t in targets:
+                with self.box(label="logical.logicalop.t.coherent_feedback:$\\hat{T^\\dagger}_{L}$"):
+                    super().compose(self.LogicalTdgCircuit_CF, self.logical_qregs[t][:] + self.logical_op_qregs[t][:], inplace=True)
 
-            else:
-                raise ValueError(f"'{method}' is not a valid method for the logical T^dagger gate")
+        else:
+            raise ValueError(f"'{method}' is not a valid method for the logical T^dagger gate")
 
     def cx(self, control, *_targets, method="Ancilla_Assisted"):
         """
@@ -1269,7 +1260,7 @@ class LogicalCircuit(QuantumCircuit):
                     super().cz(self.logical_qregs[control][:], self.logical_qregs[t][:])
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical CZ gate")
-        
+
     def cy(self, control, *_targets, method="Ancilla_Assisted"):
         """
         Logical Controlled-PauliY gate
@@ -1443,7 +1434,7 @@ class LogicalCircuit(QuantumCircuit):
 
     # Performs a NOT statement on a classical bit
     def cbit_not(self, cbit):
-        with self.if_test(expr.lift(cbit)) as _else:
+        with super().if_test((cbit, 1)) as _else:
             self.set_cbit(cbit, 0)
         with _else:
             self.set_cbit(cbit, 1)
