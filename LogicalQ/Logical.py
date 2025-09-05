@@ -1691,17 +1691,27 @@ class LogicalStatevector(Statevector):
             lqc_0L = LogicalCircuit(self.n_logical_qubits, self.label, self.stabilizer_tableau)
             lqc_1L = LogicalCircuit(self.n_logical_qubits, self.label, self.stabilizer_tableau)
 
-            lqc_0L.encode(range(self.n_logical_qubits), initial_states=[0])
-            lqc_1L.encode(range(self.n_logical_qubits), initial_states=[1])
+            # generate all possible initial states, in ascending order of value
+            states = [[]]
+            for i in range(self.n_logical_qubits):
+                new_states = []
+                for state in states:
+                    new_states.append([*state, 0])
+                    new_states.append([*state, 1])
+                states = new_states.copy()
+            
+            lqcs = [LogicalCircuit(self.n_logical_qubits, self.label, self.stabilizer_tableau)
+                    for i in range(np.pow(2, self.n_logical_qubits))]
+            for (i, state) in enumerate(states):
+                lqcs[i].encode(range(self.n_logical_qubits), initial_states=state)
+            lsvs = [LogicalStatevector(lqc) for lqc in lqcs]
 
-            lsv_0L = LogicalStatevector(lqc_0L)
-            lsv_1L = LogicalStatevector(lqc_1L)
+            coeffs = [0.] * np.pow(2, self.n_logical_qubits)
+            for i in range(len(coeffs)):
+                coeffs[i] = np.vdot(np.conj(lsvs[i].data), self.data)
+            delta = 1 - np.sqrt(np.sum(np.pow(coeffs),2))
 
-            alpha = np.vdot(np.conj(self.data), lsv_0L.data)
-            beta =  np.vdot(np.conj(self.data), lsv_1L.data)
-            delta = 1 - np.sqrt(np.power(alpha,2) + np.power(beta,2))
-
-            self._logical_decomposition = np.array([alpha, beta, delta])
+            self._logical_decomposition = np.array([*coeffs, delta])
             self._logical_decomposition[np.abs(self._logical_decomposition) < atol] = 0.0
 
         return self._logical_decomposition
