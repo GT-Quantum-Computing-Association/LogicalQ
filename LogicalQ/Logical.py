@@ -1697,8 +1697,8 @@ class LogicalStatevector(Statevector):
             lsv_0L = LogicalStatevector(lqc_0L)
             lsv_1L = LogicalStatevector(lqc_1L)
 
-            alpha = np.conj(np.vdot(self.data, lsv_0L.data))
-            beta =  np.conj(np.vdot(self.data, lsv_1L.data))
+            alpha = np.vdot(np.conj(self.data), lsv_0L.data)
+            beta =  np.vdot(np.conj(self.data), lsv_1L.data)
             delta = 1 - np.sqrt(np.power(alpha,2) + np.power(beta,2))
 
             self._logical_decomposition = np.array([alpha, beta, delta])
