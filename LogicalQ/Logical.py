@@ -1565,6 +1565,18 @@ class LogicalStatevector(Statevector):
             self.label = self.logical_circuit.label
             self.stabilizer_tableau = self.logical_circuit.stabilizer_tableau
 
+            # Get a list of non-logical qubits to later partial trace over
+            # This must happen before unboxing because QuantumCircuit does not 
+            # store logical_qreg information.
+            non_data_qubits = []
+            count = 0
+            for qreg in self.logical_circuit.qregs:
+                if qreg in self.logical_circuit.logical_qregs:
+                    count += qreg.size
+                else:
+                    non_data_qubits = non_data_qubits + list(range(count, count+qreg.size))
+                    count += qreg.size
+
             # Circuit-to-instruction conversions can't handle QEC (due to ControlFlowOps and measurements),
             # nor can they handle other BoxOp's that may appear in the circuit (such as logical gates)
             pm_unbox = PassManager([ClearQEC(), UnBox()])
@@ -1578,7 +1590,6 @@ class LogicalStatevector(Statevector):
             lsv_full = Statevector(data=self.logical_circuit, dims=dims)
 
             # Then, partial trace over the non-data qubits to obtain a DensityMatrix
-            non_data_qubits = list(range(self.label[0], self.logical_circuit.num_qubits))
             ldm_partial = partial_trace(lsv_full, non_data_qubits)
 
             try:
@@ -1620,8 +1631,6 @@ class LogicalStatevector(Statevector):
         else:
             raise TypeError(f"Object of type {type(data)} is not a valid data input for LogicalStatevector")
 
-        if self.n_logical_qubits > 1:
-            raise NotImplementedError("LogicalStatevector does not yet support circuits with multiple logical qubits")
 
         # Defer computation until necessary
         self._logical_decomposition = None
@@ -1709,7 +1718,7 @@ class LogicalStatevector(Statevector):
             coeffs = [0.] * np.pow(2, self.n_logical_qubits)
             for i in range(len(coeffs)):
                 coeffs[i] = np.vdot(np.conj(lsvs[i].data), self.data)
-            delta = 1 - np.sqrt(np.sum(np.pow(coeffs),2))
+            delta = np.sqrt(1 - np.sum(np.pow(coeffs,2)))
 
             self._logical_decomposition = np.array([*coeffs, delta])
             self._logical_decomposition[np.abs(self._logical_decomposition) < atol] = 0.0
