@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
     name="LogicalQ",
@@ -9,7 +9,7 @@ setup(
     license="LICENSE",
     description="A toolkit for quantum circuit development with built-in, generalized quantum error correction.",
     long_description=open("README.md").read(),
-    packages=["LogicalQ"],
+    packages=find_packages(),
     install_requires=[
         "numpy",
         "matplotlib",
