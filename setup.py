@@ -22,6 +22,7 @@ setup(
         "pytket-quantinuum",
         "qbraid",
         "ipykernel",
+        "pylatexenc",
     ],
 )
 
