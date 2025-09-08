@@ -103,7 +103,7 @@ class LogicalCircuit(QuantumCircuit):
     def from_physical_circuit(cls, physical_circuit, label, stabilizer_tableau, name=None, max_iterations=1):
         logical_circuit = cls(physical_circuit.num_qubits, label, stabilizer_tableau, name)
 
-        logical_circuit.encode(range(physical_circuit.num_qubits), max_iterations=max_iterations)
+        logical_circuit.encode(*list(range(physical_circuit.num_qubits)), max_iterations=max_iterations)
 
         for i in range(len(physical_circuit.data)):
             circuit_instruction = physical_circuit.data[i]
@@ -610,6 +610,9 @@ class LogicalCircuit(QuantumCircuit):
             raise ValueError("A valid constraint_model input is required by optimize_qec_cycle_indices")
 
         # @TODO - if the user has requested that QEC be ignored, check whether there are any QEC-related parameters in the constraint_model
+
+        # @TODO - transpile circuit into basis gates before doing scheduling
+        #       - one difficulty this will bring is mapping between indices before and after transpilation
 
         slices = slice_by_depth(self, 1)
         depths = []
