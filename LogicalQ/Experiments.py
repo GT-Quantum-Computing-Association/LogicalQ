@@ -142,7 +142,9 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
     # @TODO - instead of relying on the transpile function, which is a thin wrapper around
     #         generate_preset_pass_manager with some type-handling, maybe we can create
     #         backend-specific pass managers here and then just run them later with common settings
-    if isinstance(backend, AerSimulator):
+    if backend is None:
+        raise ValueError("Could not resolve backend - make sure to pass one.")
+    elif isinstance(backend, AerSimulator):
         _transpile = transpile
         _cost = lambda circuits, shots : None
         _run = lambda circuits, **kwargs : backend.run(circuits, **kwargs).result()
@@ -227,7 +229,7 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
                 include_indices = [int(choice) for choice in cost_confirmation.split(",")]
                 circuit_to_run = [circuits[c] for c in range(len(circuits_transpiled)) if c in include_indices]
 
-    # # Run circuits
+    # Run circuits
     results = []
     for circuit_to_run in circuits_to_run:
         if circuit_to_run is None:
@@ -335,7 +337,7 @@ def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubi
             for circuit_length in range(min_circuit_length, max_circuit_length+1):
                 # Construct circuit and benchmark noise
                 circuit_nl = circuit_factory(n_qubits=n_qubits, circuit_length=circuit_length)
-                result = execute_circuits(circuit_nl, noise_model=noise_model_n, backend=backend, method=method, shots=shots)[0]
+                result = execute_circuits(circuit_nl, **kwargs)[0]
 
                 # Save expectation values
                 sub_data[circuit_length] = result
