@@ -3,24 +3,57 @@ import itertools
 import numpy as np
 
 from qiskit import QuantumCircuit
-from qiskit.circuit import Parameter
 from qiskit.circuit.library import RGate, HGate, XGate, YGate, ZGate, TGate
 from qiskit.quantum_info import Statevector, DensityMatrix, state_fidelity
 
-from qiskit_aer import AerSimulator
-from qiskit.providers import Backend
-from qiskit_aer.noise import NoiseModel
-
 from .Logical import LogicalCircuit, LogicalStatevector, logical_state_fidelity
 from .Experiments import execute_circuits
-from .Library.Gates import string_to_gate_set, get_num_params
+from .Library.Gates import string_to_gate_set, gates_1q, gates_2q
+
+def compute_constraint_model(
+    hardware_model,
+    label, stabilizer_tableau,
+    optimizer=True,
+    effective_threshold=None,
+    gadget_costs=None,
+    constraint_model=None,
+):
+    if constraint_model is None:
+        constraint_model = {}
+
+    if effective_threshold is None:
+        if "effective_threshold" in constraint_model:
+            effective_threshold = constraint_model["effective_threshold"]
+        constraint_model["effective_threshold"] = effective_threshold
+
+    # Step 1: Add single-component gadget costs
+    # @TODO - assumes errors are all-qubit errors, needs to be able to handle qubit-specific errors
+    for qubit_noise_params in hardware_model["noise_params"].values():
+        for noise_param_key, noise_param_data in qubit_noise_params.items():
+            if noise_param_key in ["depolarizing_error", "amplitude_damping_error"]:
+                for param_n_qubits, n_qubit_error_data in noise_param_data.items():
+                    for gate, gate_error_value in n_qubit_error_data.items():
+                        if gate == "all":
+                            constraint_model[f"cost_ops_{param_n_qubits}q"] = constraint_model.get(f"cost_ops_{param_n_qubits}q", 0) + gate_error_value
+                        elif isinstance(gate, str):
+                            constraint_model[f"cost_{gate}"] = constraint_model.get(f"cost_{gate}", 0) + gate_error_value
+
+    # Step 2: Add multi-component gadget costs
+    if gadget_costs is not None:
+        for order, order_gadgets in gadget_costs.items():
+            for n_qubits, n_qubit_gadgets in order_gadgets.items():
+                for gadget, gadget_cost in n_qubit_gadgets.items():
+                    constraint_key = "cost_" + "-".join(component[0]().name for component in gadget)
+                    constraint_model[constraint_key] = gadget_cost
+
+    return constraint_model
 
 def compute_effective_threshold(
     hardware_model,
     label, stabilizer_tableau,
     initial_states=None,
     min_theta=0, max_theta=np.pi/2, n_theta=16,
-    min_phi=0, max_phi=np.pi/2, n_phi=16,
+    min_phi=0, max_phi=np.pi, n_phi=32,
     max_n_qec_cycles=1,
     threshold_conditions=None
 ):
@@ -53,9 +86,9 @@ def compute_effective_threshold(
         qc = QuantumCircuit(1)
         qc.append(state_prep_gate, [0])
 
-        lqc = LogicalCircuit.from_physical_circuit(qc, label, stabilizer_tableau)
-
         sv = Statevector(qc)
+
+        lqc = LogicalCircuit.from_physical_circuit(qc, label, stabilizer_tableau)
 
         qc_list.append(qc)
         lqc_list.append(lqc)
@@ -71,20 +104,27 @@ def compute_effective_threshold(
         for initial_state, qc, _lqc, sv in zip(initial_states, qc_list, lqc_list, sv_list):
             lqc = copy.deepcopy(_lqc)
 
-            n = label[0]
+            k = label[1]
             d = label[2]
             data_qubits = np.random.choice(lqc.logical_qregs[0], d)
             for data_qubit in data_qubits:
                 lqc._append(rgate, [data_qubit])
 
             corrected = False
-            for i in range(max_n_qec_cycles):
+            fidelity = 0.0
+            for n_qec_cycles in range(max_n_qec_cycles):
                 lqc.append_qec_cycle()
+                
+                lqc_meas = lqc.copy()
+                lqc_meas.measure_all()
 
-                # @TODO - use the hardware model
-                lsv = LogicalStatevector(lqc)
+                result = execute_circuits(lqc_meas, backend="aer_simulator", hardware_model=hardware_model, coupling_map=None, method="statevector", shots=int(1E5))[0]
+
+                # @TODO - use a saved statevector instead
+                lsv = LogicalStatevector.from_counts(result.get_counts(), k, label, stabilizer_tableau)
 
                 fidelity = logical_state_fidelity(sv, lsv)
+                print(theta, phi, n_qec_cycles, fidelity)
                 if np.isclose(fidelity, 1.0, atol=1E-2):
                     corrected = True
                     break
@@ -96,17 +136,19 @@ def compute_effective_threshold(
 
     # @TODO - make this support scans with multiple initial_states based on threshold_conditions
     # @TODO - verify that this computation makes sense
-    angles_list = list(fidelities[initial_state[0]].keys())
-    thetas = np.array([angles[0] for angles in angles_list])
-    phis = np.array([angles[1] for angles in angles_list])
-    ys = np.sin(phis) * np.sin(thetas)
-    effective_threshold_angular_idx = np.argmin(ys)
-    effective_threshold_theta = thetas[effective_threshold_angular_idx]
-    effective_threshold_phi = phis[effective_threshold_angular_idx]
+    if interior_points:
+        angles_list = interior_points[initial_states[0]]
+        thetas = np.array([angles[0] for angles in angles_list])
+        effective_threshold_theta = np.max(thetas)
 
-    ds = np.sqrt(effective_threshold_phi**2 + np.sin(effective_threshold_phi)**2 * effective_threshold_theta**2)
+        effective_threshold = effective_threshold_theta/np.pi
 
-    return interior_points, fidelities
+    else:
+        print("WARNING - No interior points found!")
+
+        effective_threshold = 0.0
+
+    return interior_points, fidelities, effective_threshold
 
 def compute_gadget_costs(
     gadgets_library=None,
@@ -152,8 +194,10 @@ def compute_gadget_costs(
 
                 # Execute circuits on noisy backends
                 qc_full.save_density_matrix()
+                qc_full.measure_all()
                 for qc_component in qc_component_list:
                     qc_component.save_density_matrix()
+                    qc_component.measure_all()
 
                 results = execute_circuits(qc_list, backend=backend, hardware_model=hardware_model, method="density_matrix")
 
@@ -178,7 +222,10 @@ def compute_gadget_costs(
 
     return gadgets_library, gadget_infidelities, gadget_costs
 
-def build_gadgets_library(min_depth, max_depth, step_depth, min_n_qubits, max_n_qubits, step_n_qubits):
+def build_gadgets_library(
+    min_depth, max_depth, step_depth,
+    min_n_qubits, max_n_qubits, step_n_qubits
+):
     gadgets_library = {}
     for depth in range(min_depth, max_depth, step_depth):
         gadgets_library[depth] = {}
