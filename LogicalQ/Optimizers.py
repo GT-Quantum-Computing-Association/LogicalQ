@@ -118,13 +118,12 @@ def compute_effective_threshold(
                 lqc_meas = lqc.copy()
                 lqc_meas.measure_all()
 
-                result = execute_circuits(lqc_meas, backend="aer_simulator", hardware_model=hardware_model, coupling_map=None, method="statevector", shots=int(1E5))[0]
+                result = execute_circuits(lqc_meas, backend="aer_simulator", hardware_model=hardware_model, coupling_map=None, method="statevector", shots=int(1E6))[0]
 
                 # @TODO - use a saved statevector instead
                 lsv = LogicalStatevector.from_counts(result.get_counts(), k, label, stabilizer_tableau)
 
                 fidelity = logical_state_fidelity(sv, lsv)
-                print(theta, phi, n_qec_cycles, fidelity)
                 if np.isclose(fidelity, 1.0, atol=1E-2):
                     corrected = True
                     break
