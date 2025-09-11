@@ -5,7 +5,7 @@ setup(
     version="7.1.3",
     author="GT-QCA",
     author_email="aliceandbob@gatechquantum.com",
-    url="https://github.com/GT-Quantum-Computing-Association/gatech-qec-project/",
+    url="https://github.com/GT-Quantum-Computing-Association/LogicalQ/",
     license="LICENSE",
     description="A toolkit for quantum circuit development with built-in, generalized quantum error correction.",
     long_description=open("README.md").read(),
