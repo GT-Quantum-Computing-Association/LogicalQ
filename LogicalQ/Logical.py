@@ -1693,13 +1693,9 @@ class LogicalStatevector(Statevector):
         lsv = cls(data=basis_vector, n_logical_qubits=n_logical_qubits, label=label, stabilizer_tableau=stabilizer_tableau)
         return lsv
 
-    # @TODO - generalize to multi-qubit circuits
     @property
     def logical_decomposition(self, atol=1E-13):
         if self._logical_decomposition is None:
-            lqc_0L = LogicalCircuit(self.n_logical_qubits, self.label, self.stabilizer_tableau)
-            lqc_1L = LogicalCircuit(self.n_logical_qubits, self.label, self.stabilizer_tableau)
-
             # generate all possible initial states, in ascending order of value
             states = [[]]
             for i in range(self.n_logical_qubits):
@@ -1717,7 +1713,7 @@ class LogicalStatevector(Statevector):
 
             coeffs = [0.] * np.pow(2, self.n_logical_qubits)
             for i in range(len(coeffs)):
-                coeffs[i] = np.vdot(np.conj(lsvs[i].data), self.data)
+                coeffs[i] = np.vdot(lsvs[i].data, self.data)
             delta = np.sqrt(1 - np.sum(np.pow(coeffs,2)))
 
             self._logical_decomposition = np.array([*coeffs, delta])
@@ -1835,10 +1831,74 @@ class LogicalDensityMatrix(DensityMatrix):
 
         print("WARNING - LogicalDensityMatrix has not been fully implemented yet!")
 
-    # @TODO - implement
     @property
     def logical_decomposition(self, atol=1E-13):
-        raise NotImplementedError()
+        # generate all possible initial states, in ascending order
+        states = [[]]
+        for i in range(self.n_logical_qubits):
+            new_states = []
+            for state in states:
+                new_states.append([*state, 0])
+                new_states.append([*state, 1])
+            states = new_states.copy()
+        
+        lqcs = [LogicalCircuit(self.n_logical_qubits, self.label, self.stabilizer_tableau)
+                for i in range(np.pow(2, self.n_logical_qubits))]
+        for (i, state) in enumerate(states):
+            lqcs[i].encode(range(self.n_logical_qubits), initial_states=state)
+        lsvs = [LogicalStatevector(lqc) for lqc in lqcs]
+
+        physical_rep = self.data.copy()
+        # Note: due to orthonormality of qubit states, the logical representation
+        # can be calculated as a set of matrix elements
+        logical_rep = np.zeros((2**self.n_logical_qubits, 2**self.n_logical_qubits), np.complex128)
+        for i in range(len(logical_rep)):
+            for j in range(len(logical_rep)):
+                logical_rep[i,j] = np.vdot(lsvs[i].data, self.data @ lsvs[j].data)
+                physical_rep -= logical_rep[i,j]*np.outer(lsvs[i].data, np.conj(lsvs[j].data))
+        delta = np.linalg.norm(physical_rep, ord='fro')
+
+        ## Compute Pauli decomposition of the density matrix.
+        #  This code is based on an algorithm of Hamaguchi et al. The
+        #  Original can be found in their GitHub repository at
+        #  https://github.com/quantum-programming/RoM-handbook, a supplement
+        #  to their paper at https://arxiv.org/pdf/2311.01362.
+        #  Copyright (c) 2023 Nobuyuki Yoshioka
+        rho = logical_rep.copy()
+        h = 1
+        while h < 2**self.n_logical_qubits:
+            for i_offset in range(0, 2**self.n_logical_qubits, h*2):
+                for j_offset in range(0, 2**self.n_logical_qubits):
+                    for i in range(i_offset, i_offset + h):
+                        for j in range(j_offset, j_offset + h):
+                            I = rho[i][j] + rho[i+h][j+h]
+                            Z = rho[i][j] - rho[i+h][j+h]
+                            X = rho[i][j+h] + rho[i+h][j]
+                            Y = 1.j*(rho[i][j+h] - rho[i+h][j])
+                            rho[i][j] = I
+                            rho[i+h][j+h] = Z
+                            rho[i][j+h] = X
+                            rho[i+h][j] = Y
+            h *= 2 # increment
+        rho = rho/(2**self.n_logical_qubits) # normalization
+
+        ## Now put the Pauli coefficient into a vector, according to a
+        #  Z-order curve; see https://en.wikipedia.org/wiki/Z-order_curve.
+        #  Coefficients are given in increasing value in base 4, where
+        #  I = 0, X = 1, Y = 2, Z = 3, i.e., III, IIX, IIY, IIZ, IXI, IXX, etc.
+        pauli_coeffs = np.zeros(4**self.n_logical_qubits, dtype=np.complex128)
+        for i in range(4**self.n_logical_qubits):
+            # interleave x, y coordinates for z-order curve
+            bitstr = format(i, f'0{4**self.n_logical_qubits}b')
+            x = int("".join([bitstr[j] for j in range(0, len(bitstr), 2)]), 2)
+            y = int("".join([bitstr[j] for j in range(1, len(bitstr), 2)]), 2)
+            pauli_coeffs[i] = rho[x,y]
+        del rho # no longer needed after flattening into pauli_coeffs
+        
+        self._logical_decomposition = np.array([*pauli_coeffs, delta]) # add non-logical
+        self._logical_decomposition[np.abs(self._logical_decomposition) < atol] = 0.0
+        
+        return self._logical_decomposition
 
     def __repr__(self, basis="logical"):
         if basis == "logical":
