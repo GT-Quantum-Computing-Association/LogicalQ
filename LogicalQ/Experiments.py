@@ -4,11 +4,8 @@ import copy
 import atexit
 import pickle
 import itertools
-import numpy as np
 from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor as Pool
-
-from qiskit.transpiler.passes import Decompose
 
 from .Logical import LogicalCircuit, LogicalStatevector, LogicalDensityMatrix
 from .NoiseModel import construct_noise_model, construct_noise_model_from_hardware_model
@@ -21,8 +18,10 @@ from qiskit_aer.noise import NoiseModel
 
 from qiskit import transpile
 from qiskit.transpiler import PassManager
+from qiskit.transpiler.passes import Decompose
 from .Transpilation.UnBox import UnBoxTask
 from .Transpilation.DecomposeIfElseOps import DecomposeIfElseOpsTask
+from .Transpilation.InsertOps import insert_before_measurement
 
 from qiskit.providers import Backend
 from qiskit_ibm_runtime import QiskitRuntimeService
@@ -37,7 +36,7 @@ DEFAULT = object()
 
     The parameters target, backend, and hardware_model are the preferred input type to this function. If specified, noise_model, noise_params, coupling_map, and basis_gates will try to override anything specified in target, backend, or hardware_model.
 """
-def execute_circuits(circuit_input, target=None, backend=None, hardware_model=None, noise_model=DEFAULT, noise_params=DEFAULT, coupling_map=DEFAULT, basis_gates=DEFAULT, method="statevector", optimization_level=0, shots=1024, memory=False, return_circuits_transpiled=False):
+def execute_circuits(circuit_input, target=None, backend=None, hardware_model=None, noise_model=DEFAULT, noise_params=DEFAULT, coupling_map=DEFAULT, basis_gates=DEFAULT, method="statevector", optimization_level=0, shots=1024, memory=False, save_statevector=False, save_density_matrix=False, return_circuits_transpiled=False):
     # Resolve circuits
     circuits = []
     if hasattr(circuit_input, "__iter__"):
@@ -53,8 +52,24 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
 
     # Check that the user has appended a measurement to every circuit
     for c, circuit in enumerate(circuits):
-        if "measure" not in circuit.count_ops():
+        def check_for_measurement(circuit):
+            for instruction in circuit.data:
+                if instruction.operation.name == "box" and instruction.operation.label.split(":")[0] == "logical.qec.measure":
+                    return True
+
+            return False
+        
+        if not check_for_measurement(circuit):
             raise ValueError(f"No measurements found in circuit with name {circuit.name} at index {c}; all circuits must have measurements in order to be executed.")
+
+    # Save statevector for all circuits if requested
+    if save_statevector:
+        for i, circuit in enumerate(circuits):
+            circuits[i], _ = insert_before_measurement(circuit, "statevector")
+
+    if save_density_matrix:
+        for i, circuit in enumerate(circuits):
+            circuits[i], _ = insert_before_measurement(circuit, "density_matrix")
 
     # Patch to account for backends that do not yet recognize BoxOp's during transpilation
     pm = PassManager([UnBoxTask()])
@@ -307,8 +322,6 @@ def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubi
         ]
 
         cpu_count = os.process_cpu_count() or 1
-
-        # batch_size = max(int(np.ceil((max_n_qubits+1-min_n_qubits)*(max_circuit_length+1-min_circuit_length)/cpu_count)), 1)
         print(f"Applying multiprocessing to {len(exp_inputs_list)} samples across {cpu_count} CPUs")
 
         start = time.perf_counter()
@@ -479,8 +492,6 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
             ]
 
             cpu_count = os.process_cpu_count() or 1
-
-            # batch_size = max(int(np.ceil(len(circuit_input)*len(error_dicts)/cpu_count)), 1)
             print(f"Applying multiprocessing to {len(exp_inputs_list)} samples across {cpu_count} CPUs")
 
             with Pool(cpu_count) as pool:

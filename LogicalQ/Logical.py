@@ -462,7 +462,6 @@ class LogicalCircuit(QuantumCircuit):
                     super().cx(self.logical_qregs[q][5], self.ancilla_qregs[q][0])
 
                     # Measure ancilla(e)
-                    # super().measure(self.ancilla_qregs[q][0], self.enc_verif_cregs[q][0])
                     super().append(Measure(), [self.ancilla_qregs[q][0]], [self.enc_verif_cregs[q][0]], copy=False)
 
                     for _ in range(max_iterations - 1):
@@ -479,7 +478,6 @@ class LogicalCircuit(QuantumCircuit):
                             super().cx(self.logical_qregs[q][5], self.ancilla_qregs[q][0])
 
                             # Measure ancilla
-                            # super().measure(self.ancilla_qregs[q][0], self.enc_verif_cregs[q][0])
                             super().append(Measure(), [self.ancilla_qregs[q][0]], [self.enc_verif_cregs[q][0]], copy=False)
                         with _else:
                             pass
@@ -586,7 +584,6 @@ class LogicalCircuit(QuantumCircuit):
             else:
                 self.measure_stabilizers(logical_qubit_indices=[q], stabilizer_indices=stabilizer_indices)
             for n in range(self.n_ancilla_qubits):
-                # super().measure(self.ancilla_qregs[q][n], self.curr_syndrome_cregs[q][n])
                 super().append(Measure(), [self.ancilla_qregs[q][n]], [self.curr_syndrome_cregs[q][n]], copy=False)
 
             # Determine the syndrome difference
@@ -903,12 +900,11 @@ class LogicalCircuit(QuantumCircuit):
             raise ValueError("Number of qubits should equal number of classical bits")
 
         for q, c in zip(logical_qubit_indices, cbit_indices):
-            # Measurement of state
-            for n in range(self.n_physical_qubits):
-                # super().measure(self.logical_qregs[q][n], self.final_measurement_cregs[q][n])
-                super().append(Measure(), [self.logical_qregs[q][n]], [self.final_measurement_cregs[q][n]], copy=False)
-
             with self.box(label="logical.qec.measure:$\\hat{M}_\\text{QEC}$"):
+                # Measurement of state
+                for n in range(self.n_physical_qubits):
+                    super().append(Measure(), [self.logical_qregs[q][n]], [self.final_measurement_cregs[q][n]], copy=False)
+                    
                 # @TODO - use LogicalXVector instead
                 with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][x] for x in [4,5,6]])) as _else:
                     self.set_cbit(self.output_creg[c], 1)
@@ -1438,10 +1434,8 @@ class LogicalCircuit(QuantumCircuit):
     # Set values of classical bits
     def set_cbit(self, cbit, value):
         if value == 0:
-            # super().measure(self.cbit_setter_qreg[0], cbit)
             super().append(Measure(), [self.cbit_setter_qreg[0]], [cbit], copy=False)
         else:
-            # super().measure(self.cbit_setter_qreg[1], cbit)
             super().append(Measure(), [self.cbit_setter_qreg[1]], [cbit], copy=False)
 
     # Performs a NOT statement on a classical bit
