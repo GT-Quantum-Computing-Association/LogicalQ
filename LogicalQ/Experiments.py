@@ -4,7 +4,6 @@ import copy
 import atexit
 import pickle
 import itertools
-import numpy as np
 from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor as Pool
 
@@ -13,12 +12,9 @@ from .NoiseModel import construct_noise_model, construct_noise_model_from_hardwa
 
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector, DensityMatrix
-from qiskit.circuit import CircuitInstruction
-from qiskit._accelerate.circuit import CircuitData
 
 from qiskit_aer import AerSimulator
 from qiskit_aer.noise import NoiseModel
-from qiskit_aer.library.save_instructions import SaveStatevector
 
 from qiskit import transpile
 from qiskit.transpiler import PassManager
@@ -326,8 +322,6 @@ def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubi
         ]
 
         cpu_count = os.process_cpu_count() or 1
-
-        # batch_size = max(int(np.ceil((max_n_qubits+1-min_n_qubits)*(max_circuit_length+1-min_circuit_length)/cpu_count)), 1)
         print(f"Applying multiprocessing to {len(exp_inputs_list)} samples across {cpu_count} CPUs")
 
         start = time.perf_counter()
@@ -498,8 +492,6 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
             ]
 
             cpu_count = os.process_cpu_count() or 1
-
-            # batch_size = max(int(np.ceil(len(circuit_input)*len(error_dicts)/cpu_count)), 1)
             print(f"Applying multiprocessing to {len(exp_inputs_list)} samples across {cpu_count} CPUs")
 
             with Pool(cpu_count) as pool:
