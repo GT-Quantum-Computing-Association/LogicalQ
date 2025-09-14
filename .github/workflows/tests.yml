@@ -1,0 +1,39 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - '*'
+  pull_request:
+    branches:
+      - '*'
+  schedule:
+    - cron: "0 8 * * 1"
+
+jobs:
+  tests:
+    name: Run tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        python_version: [ '3.13' ]
+        os: [ ubuntu-latest, windows-latest, macOS-latest ]
+
+    steps:
+    - name: Check out repository
+      uses: actions/checkout/@v5.0.0
+
+    - name: Set up Python ${{ matrix.python_version }}
+      uses: actions/setup-python@v5.6.0
+      with:
+        python-version: ${{ matrix.python_version }}
+        cache-dependency-path: ./setup.py
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install -e .
+
+    - name: TestAllImplemented
+      run: |
+        python ./LogicalQ/tests/TestAllImplemented.py

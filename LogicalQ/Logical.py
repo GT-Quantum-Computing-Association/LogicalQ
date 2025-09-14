@@ -31,10 +31,11 @@ class LogicalCircuit(QuantumCircuit):
 
         self.label = label
         self.n, self.k, self.d = label
-        if any([len(stabilizer) != self.n for stabilizer in self.stabilizer_tableau]):
-            raise ValueError(f"Code label n ({self.n}) does not match individual stabilizer length ({self.n_physical_qubits})")
-
         self.n_physical_qubits = self.n
+
+        if any([len(stabilizer) != self.n for stabilizer in self.stabilizer_tableau]):
+            raise ValueError(f"Stabilizer lengths do not all equal the code label n ({self.n})")
+
         # @TODO - obtain an exact estimate for the number of ancilla qubits
         self.n_ancilla_qubits = self.n_stabilizers//2
         self.n_measure_qubits = self.n_ancilla_qubits
@@ -102,7 +103,7 @@ class LogicalCircuit(QuantumCircuit):
     def from_physical_circuit(cls, physical_circuit, label, stabilizer_tableau, name=None, max_iterations=1):
         logical_circuit = cls(physical_circuit.num_qubits, label, stabilizer_tableau, name)
 
-        logical_circuit.encode(range(physical_circuit.num_qubits), max_iterations=max_iterations)
+        logical_circuit.encode(*list(range(physical_circuit.num_qubits)), max_iterations=max_iterations)
 
         for i in range(len(physical_circuit.data)):
             circuit_instruction = physical_circuit.data[i]
@@ -325,7 +326,7 @@ class LogicalCircuit(QuantumCircuit):
         # Creates Logical H circuit using coherent feedback
         self.LogicalHCircuit_CF = QuantumCircuit(self.n + 1)
         self.LogicalHCircuit_CF.h(self.n)
-        self.LogicalHCircuit_CF.compose(self.PhysicalToLogicalCZCircuit, [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
+        self.LogicalHCircuit_CF.compose(self.PhysicalToLogicalCXCircuit, [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
         self.LogicalHCircuit_CF.compose(self.PhysicalToLogicalCZCircuit, [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
         self.LogicalHCircuit_CF.h(self.n)
         self.LogicalHCircuit_CF.compose(self.PhysicalToLogicalCXCircuit, [self.LogicalHCircuit_CF.qubits[self.n]] + self.LogicalHCircuit_CF.qubits[:self.n], inplace=True)
@@ -608,6 +609,9 @@ class LogicalCircuit(QuantumCircuit):
             raise ValueError("A valid constraint_model input is required by optimize_qec_cycle_indices")
 
         # @TODO - if the user has requested that QEC be ignored, check whether there are any QEC-related parameters in the constraint_model
+
+        # @TODO - transpile circuit into basis gates before doing scheduling
+        #       - one difficulty this will bring is mapping between indices before and after transpilation
 
         slices = slice_by_depth(self, 1)
         depths = []

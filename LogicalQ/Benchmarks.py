@@ -15,6 +15,9 @@ def mirror_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sampl
     if seed is not None:
         np.random.seed(seed)
 
+    if n_qubits is not None:
+        qubits = list(range(n_qubits))
+
     if qubits is None:
         if n_qubits is None:
             qubits = [0]
