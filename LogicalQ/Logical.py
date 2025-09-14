@@ -2,7 +2,7 @@ import copy
 import numpy as np
 
 from qiskit import QuantumRegister, AncillaRegister, ClassicalRegister, QuantumCircuit
-from qiskit.circuit import Bit, Measure, Barrier
+from qiskit.circuit import Bit, Measure
 from qiskit.circuit.classical import expr
 from qiskit.quantum_info import Statevector, DensityMatrix, Pauli, partial_trace, state_fidelity
 from qiskit_addon_utils.slicing import slice_by_depth
@@ -462,7 +462,6 @@ class LogicalCircuit(QuantumCircuit):
                     super().cx(self.logical_qregs[q][5], self.ancilla_qregs[q][0])
 
                     # Measure ancilla(e)
-                    # super().measure(self.ancilla_qregs[q][0], self.enc_verif_cregs[q][0])
                     super().append(Measure(), [self.ancilla_qregs[q][0]], [self.enc_verif_cregs[q][0]], copy=False)
 
                     for _ in range(max_iterations - 1):
@@ -479,7 +478,6 @@ class LogicalCircuit(QuantumCircuit):
                             super().cx(self.logical_qregs[q][5], self.ancilla_qregs[q][0])
 
                             # Measure ancilla
-                            # super().measure(self.ancilla_qregs[q][0], self.enc_verif_cregs[q][0])
                             super().append(Measure(), [self.ancilla_qregs[q][0]], [self.enc_verif_cregs[q][0]], copy=False)
                         with _else:
                             pass
@@ -586,7 +584,6 @@ class LogicalCircuit(QuantumCircuit):
             else:
                 self.measure_stabilizers(logical_qubit_indices=[q], stabilizer_indices=stabilizer_indices)
             for n in range(self.n_ancilla_qubits):
-                # super().measure(self.ancilla_qregs[q][n], self.curr_syndrome_cregs[q][n])
                 super().append(Measure(), [self.ancilla_qregs[q][n]], [self.curr_syndrome_cregs[q][n]], copy=False)
 
             # Determine the syndrome difference
@@ -902,16 +899,10 @@ class LogicalCircuit(QuantumCircuit):
         if len(logical_qubit_indices) != len(cbit_indices):
             raise ValueError("Number of qubits should equal number of classical bits")
 
-        # Add a barrier indicating the beginning of measurement for easy indication to insert save_statevector instruction
-        # super().append(Barrier(), logical_qubit_indices, [], label="begin_measurement")
-
         for q, c in zip(logical_qubit_indices, cbit_indices):
-
             with self.box(label="logical.qec.measure:$\\hat{M}_\\text{QEC}$"):
-        
                 # Measurement of state
                 for n in range(self.n_physical_qubits):
-                    # super().measure(self.logical_qregs[q][n], self.final_measurement_cregs[q][n])
                     super().append(Measure(), [self.logical_qregs[q][n]], [self.final_measurement_cregs[q][n]], copy=False)
                     
                 # @TODO - use LogicalXVector instead
@@ -1443,10 +1434,8 @@ class LogicalCircuit(QuantumCircuit):
     # Set values of classical bits
     def set_cbit(self, cbit, value):
         if value == 0:
-            # super().measure(self.cbit_setter_qreg[0], cbit)
             super().append(Measure(), [self.cbit_setter_qreg[0]], [cbit], copy=False)
         else:
-            # super().measure(self.cbit_setter_qreg[1], cbit)
             super().append(Measure(), [self.cbit_setter_qreg[1]], [cbit], copy=False)
 
     # Performs a NOT statement on a classical bit
@@ -1563,7 +1552,7 @@ class LogicalRegister(list):
     def __init__(self, qregs=None, cregs=None):
         self.qregs = qregs
         self.cregs = cregs
-        raise NotImplementedError("LogicalRegister is not yet fully implemented")    
+        raise NotImplementedError("LogicalRegister is not yet fully implemented")
 
 class LogicalStatevector(Statevector):
     def __init__(self, data, n_logical_qubits=None, label=None, stabilizer_tableau=None, dims=None):
