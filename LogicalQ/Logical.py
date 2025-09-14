@@ -611,6 +611,9 @@ class LogicalCircuit(QuantumCircuit):
 
         # @TODO - if the user has requested that QEC be ignored, check whether there are any QEC-related parameters in the constraint_model
 
+        # @TODO - transpile circuit into basis gates before doing scheduling
+        #       - one difficulty this will bring is mapping between indices before and after transpilation
+
         slices = slice_by_depth(self, 1)
         depths = []
         for d, slice in enumerate(slices):
