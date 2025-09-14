@@ -2,7 +2,7 @@ import copy
 import numpy as np
 
 from qiskit import QuantumRegister, AncillaRegister, ClassicalRegister, QuantumCircuit
-from qiskit.circuit import Bit, Measure
+from qiskit.circuit import Bit, Measure, Barrier
 from qiskit.circuit.classical import expr
 from qiskit.quantum_info import Statevector, DensityMatrix, Pauli, partial_trace, state_fidelity
 from qiskit_addon_utils.slicing import slice_by_depth
@@ -899,13 +899,18 @@ class LogicalCircuit(QuantumCircuit):
         if len(logical_qubit_indices) != len(cbit_indices):
             raise ValueError("Number of qubits should equal number of classical bits")
 
+        # Add a barrier indicating the beginning of measurement for easy indication to insert save_statevector instruction
+        # super().append(Barrier(), logical_qubit_indices, [], label="begin_measurement")
+
         for q, c in zip(logical_qubit_indices, cbit_indices):
-            # Measurement of state
-            for n in range(self.n_physical_qubits):
-                # super().measure(self.logical_qregs[q][n], self.final_measurement_cregs[q][n])
-                super().append(Measure(), [self.logical_qregs[q][n]], [self.final_measurement_cregs[q][n]], copy=False)
 
             with self.box(label="logical.qec.measure:$\\hat{M}_\\text{QEC}$"):
+        
+                # Measurement of state
+                for n in range(self.n_physical_qubits):
+                    # super().measure(self.logical_qregs[q][n], self.final_measurement_cregs[q][n])
+                    super().append(Measure(), [self.logical_qregs[q][n]], [self.final_measurement_cregs[q][n]], copy=False)
+                    
                 # @TODO - use LogicalXVector instead
                 with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][x] for x in [4,5,6]])) as _else:
                     self.set_cbit(self.output_creg[c], 1)

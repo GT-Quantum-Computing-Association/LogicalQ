@@ -12,12 +12,16 @@ from qiskit.transpiler.passes import Decompose
 
 from .Logical import LogicalCircuit, LogicalStatevector, LogicalDensityMatrix
 from .NoiseModel import construct_noise_model, construct_noise_model_from_hardware_model
+from .Transpilation.InsertOps import insert_before_measurement
 
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector, DensityMatrix
+from qiskit.circuit import CircuitInstruction
+from qiskit._accelerate.circuit import CircuitData
 
 from qiskit_aer import AerSimulator
 from qiskit_aer.noise import NoiseModel
+from qiskit_aer.library.save_instructions import SaveStatevector
 
 from qiskit import transpile
 from qiskit.transpiler import PassManager
@@ -53,8 +57,24 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
 
     # Check that the user has appended a measurement to every circuit
     for c, circuit in enumerate(circuits):
-        if "measure" not in circuit.count_ops():
+        def check_for_measurement(circuit) -> bool:
+            for instruction in circuit.data:
+                if instruction.operation.name == "box" and instruction.operation.label.split(":")[0] == "logical.qec.measure":
+                        return True
+            return False
+        
+        if not check_for_measurement(circuit):
             raise ValueError(f"No measurements found in circuit with name {circuit.name} at index {c}; all circuits must have measurements in order to be executed.")
+
+    # Save statevector / density matrix for all circuits (optional, uses save_statevector bool)
+    if save_statevector:
+        for i, circuit in enumerate(circuits):
+            circuits[i], _ = insert_before_measurement(circuit, "statevector")
+            print("i got here")
+            
+    if save_density_matrix:
+        for i, circuit in enumerate(circuits):
+            circuits[i], _ = insert_before_measurement(circuit, "density_matrix")
 
     # Patch to account for backends that do not yet recognize BoxOp's during transpilation
     pm = PassManager([UnBoxTask()])
@@ -227,14 +247,11 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
                 include_indices = [int(choice) for choice in cost_confirmation.split(",")]
                 circuit_to_run = [circuits[c] for c in range(len(circuits_transpiled)) if c in include_indices]
 
-    # Save statevector / density matrix for all circuits (optional, uses save_statevector bool)
-    if save_statevector:
-        for circuit_to_run in circuits_to_run:
-            circuit_to_run.save_statevector()
-            
     if save_density_matrix:
-        for circuit_to_run in circuits_to_run:
-            circuit_to_run.save_density_matrix(label='rho')
+        #for circuit_to_run in circuits_to_run:
+        #    circuit_to_run.save_density_matrix(label='rho')
+        print("'save_density_matrix' currently has no effect.")
+        pass
 
     # # Run circuits
     results = []
