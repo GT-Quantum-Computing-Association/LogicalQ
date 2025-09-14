@@ -118,12 +118,17 @@ def compute_effective_threshold(
                 lqc_meas = lqc.copy()
                 lqc_meas.measure_all()
 
-                result = execute_circuits(lqc_meas, backend="aer_simulator", hardware_model=hardware_model, coupling_map=None, method="statevector", shots=int(1E6))[0]
+                # @TODO - not sure whether it makes sense to use a hardware model for this,
+                #         I think that the effective threshold should really be independent of hardware model
+                #       - also not sure what shot count we should use
+                result = execute_circuits(lqc_meas, backend="aer_simulator", coupling_map=None, method="statevector", shots=int(1E4))[0]
 
                 # @TODO - use a saved statevector instead
                 lsv = LogicalStatevector.from_counts(result.get_counts(), k, label, stabilizer_tableau)
 
                 fidelity = logical_state_fidelity(sv, lsv)
+
+                # @TEST - not sure what atol to use, 1E-2 is definitely too high if QEC is supposed to produce higher fidelities
                 if np.isclose(fidelity, 1.0, atol=1E-2):
                     corrected = True
                     break
@@ -141,7 +146,6 @@ def compute_effective_threshold(
         effective_threshold_theta = np.max(thetas)
 
         effective_threshold = effective_threshold_theta/np.pi
-
     else:
         print("WARNING - No interior points found!")
 
