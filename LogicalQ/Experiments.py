@@ -8,11 +8,8 @@ import numpy as np
 from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor as Pool
 
-from qiskit.transpiler.passes import Decompose
-
 from .Logical import LogicalCircuit, LogicalStatevector, LogicalDensityMatrix
 from .NoiseModel import construct_noise_model, construct_noise_model_from_hardware_model
-from .Transpilation.InsertOps import insert_before_measurement
 
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector, DensityMatrix
@@ -25,8 +22,10 @@ from qiskit_aer.library.save_instructions import SaveStatevector
 
 from qiskit import transpile
 from qiskit.transpiler import PassManager
+from qiskit.transpiler.passes import Decompose
 from .Transpilation.UnBox import UnBoxTask
 from .Transpilation.DecomposeIfElseOps import DecomposeIfElseOpsTask
+from .Transpilation.InsertOps import insert_before_measurement
 
 from qiskit.providers import Backend
 from qiskit_ibm_runtime import QiskitRuntimeService
@@ -41,7 +40,7 @@ DEFAULT = object()
 
     The parameters target, backend, and hardware_model are the preferred input type to this function. If specified, noise_model, noise_params, coupling_map, and basis_gates will try to override anything specified in target, backend, or hardware_model.
 """
-def execute_circuits(circuit_input, target=None, backend=None, hardware_model=None, noise_model=DEFAULT, noise_params=DEFAULT, coupling_map=DEFAULT, basis_gates=DEFAULT, method="statevector", optimization_level=0, shots=1024, memory=False, return_circuits_transpiled=False, save_statevector=False, save_density_matrix=False):
+def execute_circuits(circuit_input, target=None, backend=None, hardware_model=None, noise_model=DEFAULT, noise_params=DEFAULT, coupling_map=DEFAULT, basis_gates=DEFAULT, method="statevector", optimization_level=0, shots=1024, memory=False, save_statevector=False, save_density_matrix=False, return_circuits_transpiled=False):
     # Resolve circuits
     circuits = []
     if hasattr(circuit_input, "__iter__"):
@@ -57,21 +56,21 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
 
     # Check that the user has appended a measurement to every circuit
     for c, circuit in enumerate(circuits):
-        def check_for_measurement(circuit) -> bool:
+        def check_for_measurement(circuit):
             for instruction in circuit.data:
                 if instruction.operation.name == "box" and instruction.operation.label.split(":")[0] == "logical.qec.measure":
-                        return True
+                    return True
+
             return False
         
         if not check_for_measurement(circuit):
             raise ValueError(f"No measurements found in circuit with name {circuit.name} at index {c}; all circuits must have measurements in order to be executed.")
 
-    # Save statevector / density matrix for all circuits (optional, uses save_statevector bool)
+    # Save statevector for all circuits if requested
     if save_statevector:
         for i, circuit in enumerate(circuits):
             circuits[i], _ = insert_before_measurement(circuit, "statevector")
-            print("i got here")
-            
+
     if save_density_matrix:
         for i, circuit in enumerate(circuits):
             circuits[i], _ = insert_before_measurement(circuit, "density_matrix")
@@ -162,7 +161,9 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
     # @TODO - instead of relying on the transpile function, which is a thin wrapper around
     #         generate_preset_pass_manager with some type-handling, maybe we can create
     #         backend-specific pass managers here and then just run them later with common settings
-    if isinstance(backend, AerSimulator):
+    if backend is None:
+        raise ValueError("Could not resolve backend - make sure to pass one.")
+    elif isinstance(backend, AerSimulator):
         _transpile = transpile
         _cost = lambda circuits, shots : None
         _run = lambda circuits, **kwargs : backend.run(circuits, **kwargs).result()
@@ -247,13 +248,7 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
                 include_indices = [int(choice) for choice in cost_confirmation.split(",")]
                 circuit_to_run = [circuits[c] for c in range(len(circuits_transpiled)) if c in include_indices]
 
-    if save_density_matrix:
-        #for circuit_to_run in circuits_to_run:
-        #    circuit_to_run.save_density_matrix(label='rho')
-        print("'save_density_matrix' currently has no effect.")
-        pass
-
-    # # Run circuits
+    # Run circuits
     results = []
     for circuit_to_run in circuits_to_run:
         if circuit_to_run is None:
@@ -361,7 +356,7 @@ def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubi
             for circuit_length in range(min_circuit_length, max_circuit_length+1):
                 # Construct circuit and benchmark noise
                 circuit_nl = circuit_factory(n_qubits=n_qubits, circuit_length=circuit_length)
-                result = execute_circuits(circuit_nl, noise_model=noise_model_n, backend=backend, method=method, shots=shots)[0]
+                result = execute_circuits(circuit_nl, **kwargs)[0]
 
                 # Save expectation values
                 sub_data[circuit_length] = result

@@ -7,10 +7,11 @@ from qiskit_aer.library.save_instructions import SaveStatevector
 
 _TYPES = Literal["statevector", "density_matrix", "both"]
 
-def insert_before_measurement(logical_circuit, type_: _TYPES = "statevector"):
+# @TODO - convert into a formal TransformationPass
+def insert_before_measurement(logical_circuit, _type: _TYPES = "statevector"):
     """
     Traverses an original DAG, inserts a SaveStatevector instruction before
-    a specific 'box' node, and returns a new DAG.
+    "box" nodes with label "logical.qec.measure", and returns a new DAG.
 
     Args:
         original_dag (DAGCircuit): The DAG to be traversed.
@@ -20,8 +21,8 @@ def insert_before_measurement(logical_circuit, type_: _TYPES = "statevector"):
     """
     
     options = get_args(_TYPES)
-    if not (type_ in options):
-        raise AssertionError(f"'{type_}' is not in {options}")
+    if not (_type in options):
+        raise AssertionError(f"'{_type}' is not in {options}")
     
     original_dag = circuit_to_dag(logical_circuit)
     
@@ -34,25 +35,20 @@ def insert_before_measurement(logical_circuit, type_: _TYPES = "statevector"):
     insertion_complete = False
 
     for node in original_dag.topological_op_nodes():
-        op_name = getattr(node.op, 'name', None)
-        op_label = getattr(node.op, 'label', None)
+        op_name = getattr(node.op, "name", None)
+        op_label = getattr(node.op, "label", None)
 
-        #print(f"Processing node: {op_name}, with label: {op_label}")
-
-        if (not insertion_complete and
-            op_name == "box" and
-            op_label and op_label.split(":")[0] == "logical.qec.measure"):
-            
+        if (not insertion_complete and op_name == "box" and op_label and op_label.split(":")[0] == "logical.qec.measure"):
             qubits = []
             regs = list(new_dag.qregs.values())
             for reg in regs:
                 qubits = qubits + [qubit for qubit in reg]
             
-            if type_ == "statevector" or type == "both":
+            if _type == "statevector" or _type == "both":
                 save_inst = SaveStatevector(len(qubits), "statevector")
                 new_dag.apply_operation_back(save_inst, qubits)
 
-            if type_ == "density_matrix" or type == "both":
+            if _type == "density_matrix" or _type == "both":
                 save_inst = SaveStatevector(len(qubits), "density_matrix")
                 new_dag.apply_operation_back(save_inst, qubits)
 
@@ -70,3 +66,4 @@ def insert_before_measurement(logical_circuit, type_: _TYPES = "statevector"):
     new_logical_circuit = dag_to_circuit(new_dag)
     
     return new_logical_circuit, new_dag
+

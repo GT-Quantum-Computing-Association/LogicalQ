@@ -213,7 +213,7 @@ def qec_cycle_efficiency_scatter(all_data, scan_keys=None, plot_metric=None, sho
                 xdata.append(constraint_model[scan_key])
                 ydata.append(metric)
 
-            plt.plot(xdata, ydata)
+            plt.scatter(xdata, ydata)
 
             title = getattr(qc, "name", f"Circuit {c}")
             plt.title(f"{title}: Fidelity vs {scan_key}")
