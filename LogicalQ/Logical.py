@@ -1414,8 +1414,6 @@ class LogicalCircuit(QuantumCircuit):
                 self.measure(qubits, clbits, with_error_correction=True)
             case "barrier":
                 pass
-            case "unitary":
-                self.unitary()
             case _:
                 # @TODO - identify a better way of providing these warnings
                 # print(f"WARNING: Physical operation '{operation.upper()}' does not have a logical counterpart implemented! Defaulting to physical operation.")
