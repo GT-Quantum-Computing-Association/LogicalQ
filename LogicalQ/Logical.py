@@ -1634,7 +1634,23 @@ class LogicalStatevector(Statevector):
             for outcome_raw in outcomes_raw:
                 # @TODO - find a more reliable method that does not rely on the current indexing
                 # Get substring corresponding to logical measurement result
-                outcomes.append(outcome_raw[1:1+label[0]])
+                binary = ""
+                if all([char in ["0", "1"] for char in outcome_raw]):
+                    binary = outcome_raw
+                    # outcomes.append(outcome_raw[1:1+label[0]])
+                elif outcome_raw.startswith("0b"):
+                    binary = outcome_raw[2:]
+                    # outcomes.append(outcome_raw[3:3+label[0]])
+                elif outcome_raw.startswith("0x"):
+                    binary = str(bin(int(outcome_raw, 16)))[2:]
+                    # outcomes.append(binary[1:1+label[0]])
+                else:
+                    raise ValueError("Could not resolve count format")
+                if len(binary) < 1+label[0]: # handling weird edge case
+                    outcomes.append("0" * label[0])
+                else:
+                    outcomes.append(binary[1:1+label[0]])
+
         elif basis == "logical":
             # @TODO - make sure this is correct
             for outcome_raw in outcomes_raw:
