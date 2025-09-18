@@ -1655,8 +1655,8 @@ class LogicalStatevector(Statevector):
                     # outcomes.append(binary[1:1+label[0]])
                 else:
                     raise ValueError("Could not resolve count format")
-                if len(binary) < 1+label[0]: # handling weird edge case
-                    outcomes.append("0" * label[0])
+                if len(binary) < label[0]: # handling weird edge case
+                    binary = "0"*(label[0] - len(binary)) + binary
                 else:
                     outcomes.append(binary[1:1+label[0]])
 
@@ -1733,7 +1733,11 @@ class LogicalStatevector(Statevector):
             delta = np.sqrt(1 - np.sum(np.pow(coeffs,2)))
 
             self._logical_decomposition = np.array([*coeffs, delta])
-            self._logical_decomposition[np.abs(self._logical_decomposition) < atol] = 0.0
+            real_part = np.real(self._logical_decomposition)
+            imag_part = np.imag(self._logical_decomposition)
+            real_part[np.abs(real_part) < atol] = 0.0
+            imag_part[np.abs(imag_part) < atol] = 0.0
+            self._logical_decomposition = real_part + 1.j*imag_part
 
         return self._logical_decomposition
 
@@ -1825,6 +1829,8 @@ class LogicalDensityMatrix(DensityMatrix):
 
             raise NotImplementedError("LogicalDensityMatrix construction from QuantumCircuit is not yet supported; please provide a LogicalCircuit or an amplitude iterable")
         elif hasattr(data, "__iter__"):
+            if not (np.log2(len(data)).is_integer and data.shape == (len(data), len(data))):
+                raise ValueError("LogicalDensityMatrix data must be a square matrix whose dimention is a power of 2.")
             if n_logical_qubits and label and stabilizer_tableau:
                 self.logical_circuit = None
                 self.n_logical_qubits = n_logical_qubits
@@ -1884,7 +1890,7 @@ class LogicalDensityMatrix(DensityMatrix):
         h = 1
         while h < 2**self.n_logical_qubits:
             for i_offset in range(0, 2**self.n_logical_qubits, h*2):
-                for j_offset in range(0, 2**self.n_logical_qubits):
+                for j_offset in range(0, 2**self.n_logical_qubits, h*2):
                     for i in range(i_offset, i_offset + h):
                         for j in range(j_offset, j_offset + h):
                             I = rho[i][j] + rho[i+h][j+h]
