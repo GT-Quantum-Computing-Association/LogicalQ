@@ -1657,6 +1657,7 @@ class LogicalStatevector(Statevector):
                     raise ValueError("Could not resolve count format")
                 if len(binary) < label[0]: # handling weird edge case
                     binary = "0"*(label[0] - len(binary)) + binary
+                    outcomes.append(binary)
                 else:
                     outcomes.append(binary[1:1+label[0]])
 
