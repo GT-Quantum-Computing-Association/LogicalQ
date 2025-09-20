@@ -53,8 +53,12 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
     # Check that the user has appended a measurement to every circuit
     for c, circuit in enumerate(circuits):
         def check_for_measurement(circuit):
-            for instruction in circuit.data:
-                if instruction.operation.name == "box" and instruction.operation.label.split(":")[0] == "logical.qec.measure":
+            if isinstance(circuit, LogicalCircuit):
+                for instruction in circuit.data:
+                    if instruction.operation.name == "box" and instruction.operation.label.split(":")[0] == "logical.qec.measure":
+                        return True
+            else:
+                if "measure" in circuit.count_ops():
                     return True
 
             return False
@@ -260,16 +264,16 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
         return results
 
 # Basic core experiment function useful for multiprocessing
-def _basic_experiment_core(task_id, circuit, noise_model, backend, method, shots):
+def _basic_experiment_core(task_id, circuit, noise_model, kwargs):
     print(os.getpid(), "starting")
-    result = execute_circuits(circuit, noise_model=noise_model, backend=backend, method=method, shots=shots)
+    result = execute_circuits(circuit, noise_model=noise_model, **kwargs)
     print(os.getpid(), "stopping")
 
     return task_id, result
 
 # @TODO - implement more experiments
 
-def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubits=1, max_n_qubits=16, min_circuit_length=1, max_circuit_length=16, backend="aer_simulator", method="statevector", shots=1024, with_mp=True, save_dir=None, save_filename=None):
+def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubits=1, max_n_qubits=16, min_circuit_length=1, max_circuit_length=16, with_mp=True, save_dir=None, save_filename=None, **kwargs):
     if isinstance(circuit_input, QuantumCircuit):
         if max_n_qubits != min_n_qubits:
             print("A constant circuit has been provided as the circuit factory, but a non-trivial range of qubit counts has also been provided, so the fixed input will not be scaled in this parameter. If you would like for the number of qubits to be scaled, please provide a callable which takes the number of qubits, n_qubits, as an argument.")
@@ -316,7 +320,7 @@ def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubi
                 (n_qubits, circuit_length),
                 circuit_factory(n_qubits=n_qubits, circuit_length=circuit_length),
                 noise_model_factory(n_qubits=n_qubits),
-                backend, method, shots
+                kwargs
             )
             for (n_qubits, circuit_length) in itertools.product(range(min_n_qubits, max_n_qubits+1), range(min_circuit_length, max_circuit_length+1))
         ]
@@ -330,7 +334,6 @@ def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubi
             mp_result = pool.map(
                 _basic_experiment_core,
                 *[list(exp_inputs) for exp_inputs in zip(*exp_inputs_list)],
-                # chunksize=batch_size
             )
 
             # Unzip results
@@ -371,7 +374,7 @@ def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubi
 
     return all_data
 
-def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, error_scan_val_lists, basis_gates=None, target=None, backend="aer_simulator", method="density_matrix", compute_exact=False, shots=1024, with_mp=False, save_dir=None, save_filename=None):
+def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, error_scan_val_lists, basis_gates=None, target=None, compute_exact=False, with_mp=False, save_dir=None, save_filename=None, **kwargs):
     if isinstance(circuit_input, QuantumCircuit):
         circuit_input = [circuit_input]
     elif hasattr(circuit_input, "__iter__") and all([isinstance(circuit, QuantumCircuit) for circuit in circuit_input]):
@@ -486,7 +489,7 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
                     nm,
                     circuit,
                     noise_model,
-                    backend, method, shots
+                    kwargs
                 )
                 for nm, noise_model in enumerate(noise_models)
             ]
@@ -498,7 +501,6 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
                 mp_result = pool.map(
                     _basic_experiment_core,
                     *[list(exp_inputs) for exp_inputs in zip(*exp_inputs_list)],
-                    # chunksize=batch_size
                 )
 
             # Unzip results
