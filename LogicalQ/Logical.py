@@ -905,7 +905,7 @@ class LogicalCircuit(QuantumCircuit):
                 for n in range(self.n_physical_qubits):
                     super().append(Measure(), [self.logical_qregs[q][n]], [self.final_measurement_cregs[q][n]], copy=False)
                     
-                # @TODO - use LogicalXVector instead
+                # @TODO - use LogicalZVector instead
                 with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][x] for x in [4,5,6]])) as _else:
                     self.set_cbit(self.output_creg[c], 1)
                 with _else:
@@ -959,17 +959,17 @@ class LogicalCircuit(QuantumCircuit):
 
         return lqc_no_meas
 
-    def get_logical_counts(self, outputs, logical_qubit_indices=None):
-        if logical_qubit_indices == None:
+    def get_logical_counts(self, physical_counts, logical_qubit_indices=None):
+        if logical_qubit_indices is None:
             logical_qubit_indices = range(self.n_logical_qubits)
 
-        counts = {}
-        for output_n in outputs:
-            output = "".join([output_n[self.n_logical_qubits-1-l] for l in logical_qubit_indices])
+        logical_counts = {}
+        for physical_outcome, physical_outcome_counts in physical_counts.items():
+            logical_outcome = "".join([physical_outcome[self.n_logical_qubits-1-l] for l in logical_qubit_indices])
 
-            counts[output] = counts.get(output, 0) + 1
+            logical_counts[logical_outcome] = logical_counts.get(logical_outcome, 0) + physical_outcome_counts
 
-        return counts
+        return logical_counts
 
     ######################################
     ##### Logical quantum operations #####
