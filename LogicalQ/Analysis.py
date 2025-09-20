@@ -43,7 +43,6 @@ def circuit_scaling_bar3d(data, circuit_type=None, qecc=None, title=None, save=F
             circuit_length_vals.append(circuit_length)
 
             if circuit_type == "physical":
-                print(n_qubits, result.get_counts())
                 error_rate = 1-calculate_state_probability("0"*n_qubits, result.get_counts())
             elif circuit_type == "logical":
                 if qecc is None:
@@ -250,7 +249,7 @@ def calculate_state_probability(state, counts):
     total_counts = sum(list(counts.values()))
 
     # @TODO - generalize for superposition states
-    state_probability = counts[state]/total_counts
+    state_probability = counts.get(state, 0)/total_counts
 
     return state_probability
 
