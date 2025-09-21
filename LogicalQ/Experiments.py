@@ -315,15 +315,16 @@ def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubi
     atexit.register(save_progress)
 
     if with_mp:
-        exp_inputs_list = [
-            (
-                (n_qubits, circuit_length),
-                circuit_factory(n_qubits=n_qubits, circuit_length=circuit_length),
-                noise_model_factory(n_qubits=n_qubits),
-                kwargs
-            )
-            for (n_qubits, circuit_length) in itertools.product(range(min_n_qubits, max_n_qubits+1), range(min_circuit_length, max_circuit_length+1))
-        ]
+        circuit_dimensions_list = itertools.product(range(min_n_qubits, max_n_qubits+1), range(min_circuit_length, max_circuit_length+1))
+        circuit_list = [circuit_factory(n_qubits=n_qubits, circuit_length=circuit_length) for (n_qubits, circuit_length) in circuit_dimensions_list]
+        noise_model_list = [noise_model_factory(n_qubits=n_qubits) for (n_qubits, circuit_length) in circuit_dimensions_list]
+
+        exp_inputs_list = list(zip(
+            circuit_dimensions_list,
+            circuit_list,
+            noise_model_list,
+            [kwargs]*len(circuit_dimensions_list)
+        ))
 
         cpu_count = os.process_cpu_count() or 1
         print(f"Applying multiprocessing to {len(exp_inputs_list)} samples across {cpu_count} CPUs")
@@ -337,8 +338,10 @@ def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubi
             )
 
             # Unzip results
+            circuit_map = dict(zip(circuit_dimensions_list, circuit_list))
             for (task_id, result) in mp_result:
-                all_data[task_id[0]][task_id[1]] = result[0]
+                circuit = circuit_map[task_id]
+                all_data[task_id[0]][task_id[1]] = (circuit, result[0])
 
         stop = time.perf_counter()
     else:
@@ -356,7 +359,7 @@ def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubi
                 result = execute_circuits(circuit_nl, **kwargs)[0]
 
                 # Save expectation values
-                sub_data[circuit_length] = result
+                sub_data[circuit_length] = (circuit_nl, result)
 
                 del circuit_nl
 

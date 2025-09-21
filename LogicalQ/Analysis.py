@@ -19,12 +19,9 @@ from LogicalQ.Utilities import sanitize_save_parameters
     Returns:
         - plt: A matplotlib plot object
 """
-def circuit_scaling_bar3d(data, circuit_type=None, qecc=None, title=None, save=False, filename=None, save_dir=None, show=False):
+def circuit_scaling_bar3d(data, title=None, save=False, filename=None, save_dir=None, show=False):
     if not isinstance(data, dict):
         raise TypeError("Invalid type for data input: must be a dictionary of the form dict[n_qubits, dict[circuit_length, result]].")
-
-    if circuit_type is None:
-        circuit_type = "physical"
 
     if title == None:
         title = "Circuit scaling bar plot"
@@ -38,18 +35,19 @@ def circuit_scaling_bar3d(data, circuit_type=None, qecc=None, title=None, save=F
 
     for n_qubits, sub_data in data.items():
         # @TODO - make this work better for data where not every qubit count has the same range of circuit lengths
-        for circuit_length, result in sub_data.items():
+        for circuit_length, data_tuple in sub_data.items():
             n_qubits_vals.append(n_qubits)
             circuit_length_vals.append(circuit_length)
 
-            if circuit_type == "physical":
+            circuit, result = data_tuple
+
+            if isinstance(circuit, LogicalCircuit):
+                logical_counts = circuit.get_logical_counts(result.get_counts())
+                error_rate = 1-logical_counts.get("0", 0)/sum(list(logical_counts.values()))
+            elif isinstance(circuit, QuantumCircuit):
                 error_rate = 1-calculate_state_probability("0"*n_qubits, result.get_counts())
-            elif circuit_type == "logical":
-                if qecc is None:
-                    raise ValueError("For logical circuits, a QECC must be specified for the purpose of data processing.")
-                error_rate = 1-LogicalStatevector.from_counts(result.get_counts(), n_qubits, **qecc).logical_decomposition[0]**2
             else:
-                raise ValueError(f"Invalid input for circuit_type: {circuit_type}; please specify either 'physical' or 'logical'.")
+                raise ValueError(f"Expected QuantumCircuit or LogicalCircuit, found object {circuit} of type {type(circuit)}.")
 
             error_rates.append(error_rate)
 
@@ -64,13 +62,13 @@ def circuit_scaling_bar3d(data, circuit_type=None, qecc=None, title=None, save=F
     ax.set_title(title)
     ax.set_xlabel("Number of qubits")
     ax.set_ylabel("Circuit length")
-    ax.set_zlabel("Error rate $P(1)$")
+    ax.set_zlabel("Error rate $1-P(0)$")
 
     if save:
-        plt.savefig(f"{save_dir}{filename}", dpi=128)
+        plt.savefig(f"{save_dir}{filename}", dpi=256)
 
     if show:
-        plt.gcf().set_dpi(128)
+        plt.gcf().set_dpi(256)
         plt.show()
 
     return plt
