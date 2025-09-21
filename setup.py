@@ -24,8 +24,7 @@ setup(
     ],
     extras_require={
         "docs": [
-            "sphinx",
-            "sphinx-rtd-theme",
+            "python-markdown-math"
         ],
     },
 )

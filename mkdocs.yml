@@ -1,0 +1,26 @@
+site_name: LogicalQ Documentation
+site_author: Georgia Tech Quantum Computing Association
+repo_url: https://github.com/GT-Quantum-Computing-Association/LogicalQ
+
+docs_dir: 'docs/docs'
+site_dir: 'docs/site'
+
+theme: readthedocs
+
+markdown_extensions:
+    - wikilinks
+    - toc:
+        title: Table of Contents
+    - attr_list
+    - fenced_code
+    - mdx_math:
+        enable_dollar_delimiter: True
+
+extra_javascript: [
+  'https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS_HTML', 'mathjaxhelper.js'
+]
+
+nav:
+ - LogicalQ:
+    - Overview: index.md
+
