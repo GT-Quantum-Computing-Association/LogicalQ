@@ -361,8 +361,6 @@ def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubi
                 # Save expectation values
                 sub_data[circuit_length] = (circuit_nl, result)
 
-                del circuit_nl
-
             del noise_model_n
 
             all_data[n_qubits] = sub_data
