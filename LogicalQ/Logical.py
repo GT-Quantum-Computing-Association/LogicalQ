@@ -1815,7 +1815,7 @@ class LogicalDensityMatrix(DensityMatrix):
 
             raise NotImplementedError("LogicalDensityMatrix construction from QuantumCircuit is not yet supported; please provide a LogicalCircuit or an amplitude iterable")
         elif hasattr(data, "__iter__"):
-            if not (np.log2(len(data)).is_integer and data.shape == (len(data), len(data))):
+            if not (np.log2(len(data)).is_integer() and data.shape == (len(data), len(data))):
                 raise ValueError("LogicalDensityMatrix data must be a square matrix whose dimention is a power of 2.")
             if n_logical_qubits and label and stabilizer_tableau:
                 self.logical_circuit = None
