@@ -259,6 +259,16 @@ class LogicalCircuit(QuantumCircuit):
             if row >= m:
                 break
 
+        # Since G is in RREF, a pivot row is also a pivot column, so find the pivot columns and move them forward
+        pivot_indices = []
+        for row in G[0]:
+            if 1 in row:
+                pivot_indices.append(int(np.where(row == 1)[0][0]))
+        
+        for diagonal_index, pivot_index in enumerate(pivot_indices):
+            if pivot_index > -1:
+                G[:, :, [diagonal_index, pivot_index]] = G[:, :, [pivot_index, diagonal_index]]
+
         self.G = G
 
         # Step 3: Construct logical operators using Pauli vector representations due to Gottesmann (1997)
@@ -462,7 +472,6 @@ class LogicalCircuit(QuantumCircuit):
                     super().cx(self.logical_qregs[q][5], self.ancilla_qregs[q][0])
 
                     # Measure ancilla(e)
-                    # super().measure(self.ancilla_qregs[q][0], self.enc_verif_cregs[q][0])
                     super().append(Measure(), [self.ancilla_qregs[q][0]], [self.enc_verif_cregs[q][0]], copy=False)
 
                     for _ in range(max_iterations - 1):
@@ -479,7 +488,6 @@ class LogicalCircuit(QuantumCircuit):
                             super().cx(self.logical_qregs[q][5], self.ancilla_qregs[q][0])
 
                             # Measure ancilla
-                            # super().measure(self.ancilla_qregs[q][0], self.enc_verif_cregs[q][0])
                             super().append(Measure(), [self.ancilla_qregs[q][0]], [self.enc_verif_cregs[q][0]], copy=False)
                         with _else:
                             pass
@@ -586,7 +594,6 @@ class LogicalCircuit(QuantumCircuit):
             else:
                 self.measure_stabilizers(logical_qubit_indices=[q], stabilizer_indices=stabilizer_indices)
             for n in range(self.n_ancilla_qubits):
-                # super().measure(self.ancilla_qregs[q][n], self.curr_syndrome_cregs[q][n])
                 super().append(Measure(), [self.ancilla_qregs[q][n]], [self.curr_syndrome_cregs[q][n]], copy=False)
 
             # Determine the syndrome difference
@@ -903,13 +910,12 @@ class LogicalCircuit(QuantumCircuit):
             raise ValueError("Number of qubits should equal number of classical bits")
 
         for q, c in zip(logical_qubit_indices, cbit_indices):
-            # Measurement of state
-            for n in range(self.n_physical_qubits):
-                # super().measure(self.logical_qregs[q][n], self.final_measurement_cregs[q][n])
-                super().append(Measure(), [self.logical_qregs[q][n]], [self.final_measurement_cregs[q][n]], copy=False)
-
             with self.box(label="logical.qec.measure:$\\hat{M}_\\text{QEC}$"):
-                # @TODO - use LogicalXVector instead
+                # Measurement of state
+                for n in range(self.n_physical_qubits):
+                    super().append(Measure(), [self.logical_qregs[q][n]], [self.final_measurement_cregs[q][n]], copy=False)
+                    
+                # @TODO - use LogicalZVector instead
                 with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][x] for x in [4,5,6]])) as _else:
                     self.set_cbit(self.output_creg[c], 1)
                 with _else:
@@ -963,17 +969,17 @@ class LogicalCircuit(QuantumCircuit):
 
         return lqc_no_meas
 
-    def get_logical_counts(self, outputs, logical_qubit_indices=None):
-        if logical_qubit_indices == None:
+    def get_logical_counts(self, physical_counts, logical_qubit_indices=None):
+        if logical_qubit_indices is None:
             logical_qubit_indices = range(self.n_logical_qubits)
 
-        counts = {}
-        for output_n in outputs:
-            output = "".join([output_n[self.n_logical_qubits-1-l] for l in logical_qubit_indices])
+        logical_counts = {}
+        for physical_outcome, physical_outcome_counts in physical_counts.items():
+            logical_outcome = "".join([physical_outcome[self.n_logical_qubits-1-l] for l in logical_qubit_indices])
 
-            counts[output] = counts.get(output, 0) + 1
+            logical_counts[logical_outcome] = logical_counts.get(logical_outcome, 0) + physical_outcome_counts
 
-        return counts
+        return logical_counts
 
     ######################################
     ##### Logical quantum operations #####
@@ -1450,10 +1456,8 @@ class LogicalCircuit(QuantumCircuit):
     # Set values of classical bits
     def set_cbit(self, cbit, value):
         if value == 0:
-            # super().measure(self.cbit_setter_qreg[0], cbit)
             super().append(Measure(), [self.cbit_setter_qreg[0]], [cbit], copy=False)
         else:
-            # super().measure(self.cbit_setter_qreg[1], cbit)
             super().append(Measure(), [self.cbit_setter_qreg[1]], [cbit], copy=False)
 
     # Performs a NOT statement on a classical bit
@@ -1570,7 +1574,7 @@ class LogicalRegister(list):
     def __init__(self, qregs=None, cregs=None):
         self.qregs = qregs
         self.cregs = cregs
-        raise NotImplementedError("LogicalRegister is not yet fully implemented")    
+        raise NotImplementedError("LogicalRegister is not yet fully implemented")
 
 class LogicalStatevector(Statevector):
     def __init__(self, data, n_logical_qubits=None, label=None, stabilizer_tableau=None, dims=None):
