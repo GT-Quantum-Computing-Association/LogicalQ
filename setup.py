@@ -25,7 +25,7 @@ setup(
     extras_require={
         "docs": [
             "python-markdown-math",
-            "mkdocstrings",
+            "mkdocstrings[python]",
             "mkdocs-autoapi",
         ],
     },
