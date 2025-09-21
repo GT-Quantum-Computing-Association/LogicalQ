@@ -1637,21 +1637,19 @@ class LogicalStatevector(Statevector):
                 binary = ""
                 if all([char in ["0", "1"] for char in outcome_raw]):
                     binary = outcome_raw
-                    # outcomes.append(outcome_raw[1:1+label[0]])
                 elif outcome_raw.startswith("0b"):
                     binary = outcome_raw[2:]
-                    # outcomes.append(outcome_raw[3:3+label[0]])
                 elif outcome_raw.startswith("0x"):
                     binary = str(bin(int(outcome_raw, 16)))[2:]
-                    # outcomes.append(binary[1:1+label[0]])
                 else:
                     raise ValueError("Could not resolve count format")
-                if len(binary) < label[0]: # handling weird edge case
+
+                # If binary string is short (e.g. 0b0 or 0x0), pad to have length equalling number of data qubits
+                if len(binary) < label[0]:
                     binary = "0"*(label[0] - len(binary)) + binary
                     outcomes.append(binary)
                 else:
                     outcomes.append(binary[1:1+label[0]])
-
         elif basis == "logical":
             # @TODO - make sure this is correct
             for outcome_raw in outcomes_raw:
@@ -1716,7 +1714,7 @@ class LogicalStatevector(Statevector):
 
             alpha = np.vdot(self.data, lsv_0L.data)
             beta = np.vdot(self.data, lsv_1L.data)
-            delta = np.sqrt(1 - np.pow(np.abs(alpha),2) + np.pow(np.abs(beta),2))
+            delta = np.sqrt(1 - np.pow(np.abs(alpha), 2) + np.pow(np.abs(beta), 2))
 
             self._logical_decomposition = np.array([alpha, beta, delta])
             real_part = np.real(self._logical_decomposition)
@@ -1816,7 +1814,7 @@ class LogicalDensityMatrix(DensityMatrix):
             raise NotImplementedError("LogicalDensityMatrix construction from QuantumCircuit is not yet supported; please provide a LogicalCircuit or an amplitude iterable")
         elif hasattr(data, "__iter__"):
             if not (np.log2(len(data)).is_integer() and data.shape == (len(data), len(data))):
-                raise ValueError("LogicalDensityMatrix data must be a square matrix whose dimention is a power of 2.")
+                raise ValueError("LogicalDensityMatrix data must be a square matrix whose dimension is a power of 2.")
             if n_logical_qubits and label and stabilizer_tableau:
                 self.logical_circuit = None
                 self.n_logical_qubits = n_logical_qubits
