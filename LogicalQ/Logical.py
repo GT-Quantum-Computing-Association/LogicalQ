@@ -1403,6 +1403,18 @@ class LogicalCircuit(QuantumCircuit):
                 control_qubit = instruction.qubits[0]._index
                 target_qubit = instruction.qubits[1]._index
                 self.cy(control_qubit, target_qubit)
+            case "Rx" | "Ry" | "Rz":
+                
+                
+                
+                
+                pass
+            case "Rxx" | "Ryy" | "Rzz":
+                
+                
+                
+                
+                pass
             case "mcmt":
                 raise NotImplementedError(f"Physical operation 'MCMT' does not have physical gate conversion implemented!")
             case "measure":
