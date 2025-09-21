@@ -22,5 +22,11 @@ setup(
         "pytket-quantinuum",
         "qbraid",
     ],
+    extras_require={
+        "docs": [
+            "sphinx",
+            "sphinx-rtd-theme",
+        ],
+    },
 )
 
