@@ -1731,7 +1731,7 @@ class LogicalStatevector(Statevector):
             coeffs = [0.] * np.pow(2, self.n_logical_qubits)
             for i in range(len(coeffs)):
                 coeffs[i] = np.vdot(lsvs[i].data, self.data)
-            delta = np.sqrt(1 - np.sum(np.pow(coeffs,2)))
+            delta = np.sqrt(1 - np.sum(np.pow(np.abs(coeffs),2)))
 
             self._logical_decomposition = np.array([*coeffs, delta])
             real_part = np.real(self._logical_decomposition)
@@ -1830,7 +1830,7 @@ class LogicalDensityMatrix(DensityMatrix):
 
             raise NotImplementedError("LogicalDensityMatrix construction from QuantumCircuit is not yet supported; please provide a LogicalCircuit or an amplitude iterable")
         elif hasattr(data, "__iter__"):
-            if not (np.log2(len(data)).is_integer and data.shape == (len(data), len(data))):
+            if not (np.log2(len(data)).is_integer() and data.shape == (len(data), len(data))):
                 raise ValueError("LogicalDensityMatrix data must be a square matrix whose dimention is a power of 2.")
             if n_logical_qubits and label and stabilizer_tableau:
                 self.logical_circuit = None
