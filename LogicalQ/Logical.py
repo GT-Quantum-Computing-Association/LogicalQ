@@ -1582,15 +1582,15 @@ class LogicalStatevector(Statevector):
             self.logical_circuit.remove_final_measurements()
 
             # First, construct a Statevector object for the full system
-            lsv_full = Statevector(data=self.logical_circuit, dims=dims)
+            sv_full = Statevector(data=self.logical_circuit, dims=dims)
 
             # Then, partial trace over the non-data qubits to obtain a DensityMatrix
             non_data_qubits = list(range(self.label[0], self.logical_circuit.num_qubits))
-            ldm_partial = partial_trace(lsv_full, non_data_qubits)
+            dm_partial = partial_trace(sv_full, non_data_qubits)
 
             try:
-                lsv_partial = ldm_partial.to_statevector()
-                super().__init__(data=lsv_partial.data, dims=dims)
+                sv_partial = dm_partial.to_statevector()
+                super().__init__(data=sv_partial.data, dims=dims)
             except QiskitError as e:
                 raise ValueError("Unable to construct LogicalStatevector from LogicalCircuit because data qubits are in a mixed state; a LogicalDensityMatrix may be the best alternative") from e
             except Exception as e:
@@ -1610,8 +1610,21 @@ class LogicalStatevector(Statevector):
                 self.label = label
                 self.stabilizer_tableau = stabilizer_tableau
 
-                # @TODO - there's probably a smarter way of doing this
-                super().__init__(data=data._data, dims=dims)
+                # First, construct a Statevector object for the full system
+                sv_full = Statevector(data=data._data, dims=dims)
+
+                # Then, partial trace over the non-data qubits to obtain a DensityMatrix
+                non_data_qubits = list(range(self.label[0], sv_full.num_qubits))
+                dm_partial = partial_trace(sv_full, non_data_qubits)
+
+                try:
+                    sv_partial = dm_partial.to_statevector()
+                    print(sv_partial)
+                    super().__init__(data=sv_partial.data, dims=dims)
+                except QiskitError as e:
+                    raise ValueError("Unable to construct LogicalStatevector from Statevector because data qubits are in a mixed state; a LogicalDensityMatrix may be the best alternative") from e
+                except Exception as e:
+                    raise ValueError("Unable to construct LogicalStatevector from Statevector") from e
             else:
                 raise ValueError("LogicalStatevector construction from a Statevector requires n_logical_qubits, label, and stabilizer_tableau to all be specified")
         elif hasattr(data, "__iter__"):
@@ -1721,7 +1734,7 @@ class LogicalStatevector(Statevector):
 
             alpha = np.vdot(self.data, lsv_0L.data)
             beta = np.vdot(self.data, lsv_1L.data)
-            delta = np.sqrt(1 - np.pow(np.abs(alpha), 2) + np.pow(np.abs(beta), 2))
+            delta = np.sqrt(1 - np.pow(np.abs(alpha), 2) - np.pow(np.abs(beta), 2))
 
             self._logical_decomposition = np.array([alpha, beta, delta])
             real_part = np.real(self._logical_decomposition)
@@ -1729,6 +1742,7 @@ class LogicalStatevector(Statevector):
             real_part[np.abs(real_part) < atol] = 0.0
             imag_part[np.abs(imag_part) < atol] = 0.0
             self._logical_decomposition = real_part + 1.j*imag_part
+            self._logical_decomposition /= np.linalg.norm(self._logical_decomposition)
 
         return self._logical_decomposition
 
