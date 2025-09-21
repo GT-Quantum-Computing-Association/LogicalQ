@@ -1619,7 +1619,6 @@ class LogicalStatevector(Statevector):
 
                 try:
                     sv_partial = dm_partial.to_statevector()
-                    print(sv_partial)
                     super().__init__(data=sv_partial.data, dims=dims)
                 except QiskitError as e:
                     raise ValueError("Unable to construct LogicalStatevector from Statevector because data qubits are in a mixed state; a LogicalDensityMatrix may be the best alternative") from e
