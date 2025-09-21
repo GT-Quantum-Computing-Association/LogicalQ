@@ -16,6 +16,20 @@ markdown_extensions:
     - mdx_math:
         enable_dollar_delimiter: True
 
+plugins:
+    - mkdocstrings:
+        handlers:
+          python:
+            paths:
+              - LogicalQ/
+            selection:
+              docstring_style: numpy
+    - mkdocs-autoapi:
+        autoapi_dir: LogicalQ/
+        autoapi_ignore:
+          - demos/
+          - LogicalQ/**/.ipynb_checkpoints/
+
 extra_javascript: [
   'https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS_HTML', 'mathjaxhelper.js'
 ]

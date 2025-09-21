@@ -31,12 +31,13 @@ from qbraid.runtime.native.device import QbraidDevice
 
 DEFAULT = object()
 
-"""
+def execute_circuits(circuit_input, target=None, backend=None, hardware_model=None, noise_model=DEFAULT, noise_params=DEFAULT, coupling_map=DEFAULT, basis_gates=DEFAULT, method="statevector", optimization_level=0, shots=1024, memory=False, save_statevector=False, save_density_matrix=False, return_circuits_transpiled=False):
+    """
     General function to execute a circuit with smart handling of parameters, especially for circuits with QEC.
 
     The parameters target, backend, and hardware_model are the preferred input type to this function. If specified, noise_model, noise_params, coupling_map, and basis_gates will try to override anything specified in target, backend, or hardware_model.
-"""
-def execute_circuits(circuit_input, target=None, backend=None, hardware_model=None, noise_model=DEFAULT, noise_params=DEFAULT, coupling_map=DEFAULT, basis_gates=DEFAULT, method="statevector", optimization_level=0, shots=1024, memory=False, save_statevector=False, save_density_matrix=False, return_circuits_transpiled=False):
+    """
+
     # Resolve circuits
     circuits = []
     if hasattr(circuit_input, "__iter__"):
@@ -263,8 +264,11 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
     else:
         return results
 
-# Basic core experiment function useful for multiprocessing
 def _basic_experiment_core(task_id, circuit, noise_model, kwargs):
+    """
+    Basic core experiment function useful for multiprocessing
+    """
+
     print(os.getpid(), "starting")
     result = execute_circuits(circuit, noise_model=noise_model, **kwargs)
     print(os.getpid(), "stopping")

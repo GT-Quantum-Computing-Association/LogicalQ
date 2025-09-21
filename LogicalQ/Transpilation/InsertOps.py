@@ -14,7 +14,7 @@ def insert_before_measurement(logical_circuit, _type: _TYPES = "statevector"):
     "box" nodes with label "logical.qec.measure", and returns a new DAG.
 
     Args:
-        original_dag (DAGCircuit): The DAG to be traversed.
+        logical_circuit (DAGCircuit): The DAG to be traversed.
 
     Returns:
         DAGCircuit: The new DAG with the instruction inserted.

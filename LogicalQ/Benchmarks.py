@@ -8,10 +8,11 @@ from qiskit.circuit.library import UnitaryGate
 from qiskit.quantum_info import Operator
 from qiskit_experiments.library import QuantumVolume
 
-"""
-    Constructs circuits composed of various Clifford gates and the full inverse, such that the composite operation is the identity if no errors occur.
-"""
 def mirror_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sample=None, measure=False, seed=None):
+    """
+    Constructs circuits composed of various Clifford gates and the full inverse, such that the composite operation is the identity if no errors occur.
+    """
+
     if seed is not None:
         np.random.seed(seed)
 
@@ -125,16 +126,18 @@ def randomized_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_s
 
     return rb_circuit
 
-"""
+def quantum_volume(n_qubits=1, seed=None):
+    """
     Generate quantum volume benchmark circuits.
 
-    Parameters:
-        n_qubits (int): Number of qubits available for the benchmark (sets a maximum iteration limit on the circuit width).
-        trials: Number of trials to run for each qubit count. Defaults to 1.
-        seed (int): Random seed for reproducibility. Defaults to 1234.
-        backend: Backend to be used for simulation.
-"""
-def quantum_volume(n_qubits=1, seed=None):
+    Parameters
+    ----------
+    n_qubits : int
+        Number of qubits available for the benchmark (sets a maximum iteration limit on the circuit width).
+    seed : int
+        Random seed for reproducibility. Defaults to 1234.
+    """
+
     qubits = list(range(n_qubits))
     qv_experiment = QuantumVolume(physical_qubits=qubits, trials=1, seed=seed)
 
@@ -142,13 +145,16 @@ def quantum_volume(n_qubits=1, seed=None):
 
     return qv_circuits
 
-"""
+def quantum_teleportation(statevector, barriers=False):
+    """
     Generate a quantum teleportation circuit.
 
-    Parameters:
-        statevector: Arbitrary input state
-"""
-def quantum_teleportation(statevector, barriers=False):
+    Parameters
+    ----------
+    statevector : iterable
+        Arbitrary input state
+    """
+
     creg0 = ClassicalRegister(1, 'cr0')
     creg1 = ClassicalRegister(1, 'cr1')
     creg2 = ClassicalRegister(1, 'cr2')
@@ -185,13 +191,18 @@ def quantum_teleportation(statevector, barriers=False):
 
     return qc
 
-"""
+def n_qubit_ghz_generation(n_qubits=3, barriers=False):
+    """
     Generate an n-qubit GHZ state generation circuit.
 
-    Parameters:
-        n_qubits (int): Number of qubits in the GHZ state.
-"""
-def n_qubit_ghz_generation(n_qubits=3, barriers=False):
+    Parameters
+    ----------
+    n_qubits : int
+        Number of qubits in the GHZ state.
+    barriers : boolean
+        If True, apply barriers between sections of the circuit.
+    """
+
     qc = QuantumCircuit(n_qubits, n_qubits)
 
     # Apply Hadamard to qubit 0 to generate superposition

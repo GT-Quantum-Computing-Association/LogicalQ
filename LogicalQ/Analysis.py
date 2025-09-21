@@ -7,19 +7,30 @@ from qiskit.quantum_info import Statevector, state_fidelity
 from LogicalQ.Logical import LogicalCircuit, LogicalStatevector, LogicalDensityMatrix, logical_state_fidelity
 from LogicalQ.Utilities import sanitize_save_parameters
 
-"""
-    Plot a three-dimensional bar chart comparing qubit count and circuit length to expectation value.
-    Parameters:
-        - data: dict[n_qubits, dict[circuit_length, (result, counts)]]
-        - title: Plot title
-        - save: If true, output plot is saved
-        - filename: Filename to be saved as, if save is True
-        - save_dir: Directory to be saved in, if save is True
-        - show: If true, output plot is displayed
-    Returns:
-        - plt: A matplotlib plot object
-"""
 def circuit_scaling_bar3d(data, title=None, save=False, filename=None, save_dir=None, show=False):
+    """
+    Plot a three-dimensional bar chart comparing qubit count and circuit length to expectation value.
+
+    Parameters
+    ----------
+        data : dict[n_qubits, dict[circuit_length, (result, counts)]]
+        title : str
+            Plot title
+        save : bool
+            If true, output plot is saved
+        filename : str
+            Filename to be saved as, if save is True
+        save_dir : str
+            Directory to be saved in, if save is True
+        show : str
+            If true, output plot is displayed
+
+    Returns
+    -------
+        plt : matplotlib.pyplot
+            A matplotlib plot object
+    """
+
     if not isinstance(data, dict):
         raise TypeError("Invalid type for data input: must be a dictionary of the form dict[n_qubits, dict[circuit_length, result]].")
 
@@ -251,10 +262,11 @@ def calculate_state_probability(state, counts):
 
     return state_probability
 
-"""
-    Computes expectation value from circuit measurement counts.
-"""
 def calculate_exp_val(counts):
+    """
+    Computes expectation value from circuit measurement counts.
+    """
+
     total_counts = sum(list(counts.values()))
 
     exp_val = sum([key.count("1") for key in counts])/total_counts
