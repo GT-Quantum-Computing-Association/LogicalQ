@@ -29,6 +29,7 @@ from pytket.extensions.quantinuum import QuantinuumBackend
 from pytket.extensions.qiskit import qiskit_to_tk
 from qbraid.runtime.native.device import QbraidDevice
 
+
 DEFAULT = object()
 
 def execute_circuits(circuit_input, target=None, backend=None, hardware_model=None, noise_model=DEFAULT, noise_params=DEFAULT, coupling_map=DEFAULT, basis_gates=DEFAULT, method="statevector", optimization_level=0, shots=1024, memory=False, save_statevector=False, save_density_matrix=False, return_circuits_transpiled=False):
@@ -687,6 +688,85 @@ def qec_cycle_efficiency_experiment(circuit_input, qecc, constraint_scan_keys, c
         all_data.append(sub_data)
 
     stop = time.perf_counter()
+
+    print(f"Completed experiment in {stop-start} seconds")
+
+    # Run save_progress once for good measure and then unregister save_progress so it doesn't clutter our exit routine
+    save_progress()
+    atexit.unregister(save_progress)
+
+    return all_data
+
+def qec_cycle_circuit_scaling_experiment(circuit_input, qecc, constraint_model=None, min_n_qubits=1, max_n_qubits=16, min_circuit_length=1, max_circuit_length=16, with_mp=True, save_dir=None, save_filename=None, **kwargs):
+    if isinstance(circuit_input, QuantumCircuit):
+        if max_n_qubits != min_n_qubits:
+            print("A constant circuit has been provided as the circuit factory, but a non-trivial range of qubit counts has also been provided, so the fixed input will not be scaled in this parameter. If you would like for the number of qubits to be scaled, please provide a callable which takes the number of qubits, n_qubits, as an argument.")
+        if max_circuit_length != min_circuit_length:
+            print("A constant circuit has been provided as the circuit factory, but a non-trivial range of circuit lengths has also been provided, so the fixed input will not be scaled in this parameter. If you would like for the circuit length to be scaled, please provide a callable which takes the circuit length, circuit_length, as an argument.")
+
+        circuit_factory = lambda n_qubits, circuit_length: circuit_input
+    elif callable(circuit_input):
+        circuit_factory = circuit_input
+    else:
+        raise ValueError("Please provide a QuantumCircuit/LogicalCircuit object or a method for constructing QuantumCircuits/LogicalCircuits.")
+
+    # Form a dict of dicts with the first layer (n_qubits) initialized to make later access faster and more reliable in parallel
+    all_data = dict(zip(range(min_n_qubits, max_n_qubits+1), [{}]*(max_n_qubits+1-min_n_qubits)))
+
+    # Prepare to save progress in the event of program termination
+    if save_dir is None:
+        save_dir = "./data/"
+    if save_filename is None:
+        date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        save_filename = f"circuit_scaling_{date_str}.pkl"
+    save_file = open(save_dir + save_filename, "wb")
+    def save_progress():
+        pickle.dump(all_data, save_file, protocol=5)
+        save_file.close()
+    atexit.register(save_progress)
+
+    if with_mp:
+        raise NotImplementedError("with_mp=True specified, but this functionality is not implemented yet for qec_cycle_circuit_scaling_experiment; ignoring.")
+    else:
+        start = time.perf_counter()
+
+        for n_qubits in range(min_n_qubits, max_n_qubits+1):
+            for circuit_length in range(min_circuit_length, max_circuit_length+1):
+                # Construct physical circuit
+                circuit_nl_physical = circuit_factory(n_qubits=n_qubits, circuit_length=circuit_length)
+                circuit_nl_physical_no_meas = circuit_nl_physical.remove_final_measurements(inplace=False)
+
+                # Exact physical result
+                # @TODO - replicate code from other experiments which have a fallback to the Statevector if an error occurs
+                density_matrix_exact = DensityMatrix(circuit_nl_physical_no_meas)
+
+                # Noisy physical result
+                result_physical = execute_circuits(circuit_nl_physical, **kwargs)[0]
+
+                # Construct LogicalCircuit
+                circuit_nl_logical = LogicalCircuit.from_physical_circuit(circuit_nl_physical, **qecc)
+
+                # Apply QEC according to constraint model
+                qec_cycle_indices = circuit_nl_logical.optimize_qec_cycle_indices(constraint_model=constraint_model)
+                circuit_nl_logical.insert_qec_cycles(qec_cycle_indices=qec_cycle_indices)
+
+                # Noisy logical result
+                result_logical = execute_circuits(circuit_nl_logical, **kwargs)[0]
+
+                # @TODO - determine whether this is a better data structure for this, including a better way to distinguish the data by circuit
+                sub_data = {
+                    "physical_circuit": circuit_nl_physical,
+                    "logical_circuit": circuit_nl_logical,
+                    "density_matrix_exact": density_matrix_exact,
+                    "constraint_model": constraint_model,
+                    "result_physical": result_physical,
+                    "result_logical": result_logical
+                }
+
+                # Save expectation values
+                all_data[n_qubits][circuit_length] = sub_data
+
+        stop = time.perf_counter()
 
     print(f"Completed experiment in {stop-start} seconds")
 

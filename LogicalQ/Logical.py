@@ -1562,7 +1562,7 @@ class LogicalRegister(list):
     def __init__(self, qregs=None, cregs=None):
         self.qregs = qregs
         self.cregs = cregs
-        raise NotImplementedError("LogicalRegister is not yet fully implemented")
+        raise NotImplementedError("LogicalRegister is not yet fully implemented")    
 
 class LogicalStatevector(Statevector):
     def __init__(self, data, n_logical_qubits=None, label=None, stabilizer_tableau=None, dims=None):
