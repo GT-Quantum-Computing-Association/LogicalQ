@@ -4,12 +4,8 @@ import copy
 import atexit
 import pickle
 import itertools
-import numpy as np
 from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor as Pool
-
-from qiskit.transpiler.passes import Decompose
-from qiskit_aer.library import save_density_matrix
 
 from .Logical import LogicalCircuit, LogicalStatevector, LogicalDensityMatrix
 from .NoiseModel import construct_noise_model, construct_noise_model_from_hardware_model
@@ -22,6 +18,7 @@ from qiskit_aer.noise import NoiseModel
 
 from qiskit import transpile
 from qiskit.transpiler import PassManager
+from qiskit.transpiler.passes import Decompose
 from .Transpilation.UnBox import UnBoxTask
 from .Transpilation.DecomposeIfElseOps import DecomposeIfElseOpsTask
 
