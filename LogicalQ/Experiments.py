@@ -9,8 +9,8 @@ from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor as Pool
 
 from qiskit.transpiler.passes import Decompose
+from qiskit_aer.library import save_density_matrix
 
-from .Experiments import _basic_experiment_core, execute_circuits
 from .Logical import LogicalCircuit, LogicalStatevector, LogicalDensityMatrix
 from .NoiseModel import construct_noise_model, construct_noise_model_from_hardware_model
 
@@ -254,22 +254,9 @@ def _basic_experiment_core(task_id, circuit, noise_model, backend, method, shots
 
     return task_id, result
 
-def parity_experiment_core(task_id, circuit, noise_model, backend, method, shots, stabilizer_code):
-            n_qubits = circuit.n_qubits
-            
-            if n_qubits <= 2: # Don't go above 2 b/c of RAM requirements
-                lg_circuit = LogicalCircuit.from_physical_circuit(circuit, **stabilizer_code)
-                lg_circuit.measure_all()
-                lg_result = execute_circuits(lg_circuit, noise_model=noise_model, backend=backend, method=method, shots=shots)[0]
-                del lg_circuit
-            
-            circuit.measure_all()
-            phys_result = execute_circuits(circuit, noise_model=noise_model, backend=backend, method=method, shots=shots)[0]
-            return task_id, phys_result, lg_result
-
 # @TODO - implement more experiments
 
-def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubits=1, max_n_qubits=16, min_circuit_length=1, max_circuit_length=16, backend="aer_simulator", method="statevector", shots=1024, with_mp=True, save_dir=None, save_filename=None):
+def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubits=1, max_n_qubits=16, min_circuit_length=1, max_circuit_length=16, with_mp=True, save_dir=None, save_filename=None, **kwargs):
     if isinstance(circuit_input, QuantumCircuit):
         if max_n_qubits != min_n_qubits:
             print("A constant circuit has been provided as the circuit factory, but a non-trivial range of qubit counts has also been provided, so the fixed input will not be scaled in this parameter. If you would like for the number of qubits to be scaled, please provide a callable which takes the number of qubits, n_qubits, as an argument.")
@@ -372,144 +359,6 @@ def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubi
     atexit.unregister(save_progress)
 
     return all_data
-
-def circuit_combined_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubits=1, max_n_qubits=16, min_circuit_length=1, max_circuit_length=16, backend="aer_simulator", method="statevector", shots=1024, with_mp=True, save_dir=None, save_filename=None, stabilizer_code=None):
-    
-    if isinstance(circuit_input, QuantumCircuit):
-        if max_n_qubits != min_n_qubits:
-            print("A constant circuit has been provided as the circuit factory, but a non-trivial range of qubit counts has also been provided, so the fixed input will not be scaled in this parameter. If you would like for the number of qubits to be scaled, please provide a callable which takes the number of qubits, n_qubits, as an argument.")
-        if max_circuit_length != min_circuit_length:
-            print("A constant circuit has been provided as the circuit factory, but a non-trivial range of circuit lengths has also been provided, so the fixed input will not be scaled in this parameter. If you would like for the circuit length to be scaled, please provide a callable which takes the circuit length, circuit_length, as an argument.")
-
-        circuit_factory = lambda n_qubits, circuit_length: circuit_input
-    elif callable(circuit_input):
-        circuit_factory = circuit_input
-    else:
-        raise ValueError("Please provide a QuantumCircuit/LogicalCircuit object or a method for constructing QuantumCircuits/LogicalCircuits.")
-
-    if noise_model_input is None:
-        # Default option which lets users skip the noise model input, especially if their backend is a hardware backend
-        noise_model_factory = lambda n_qubits=None, circuit_length=None : None
-    elif isinstance(noise_model_input, NoiseModel):
-        if max_n_qubits != min_n_qubits:
-            print("A constant noise model has been provided as the noise model factory, but a non-trivial range of qubit counts has also been provided. The number of qubits will not be scaled; if you would like for the number of qubits to be scaled, please provide a callable which takes the number of qubits, n_qubits, as an argument.")
-
-        noise_model_factory = lambda n_qubits: noise_model_input
-    elif callable(noise_model_input):
-        noise_model_factory = noise_model_input
-    else:
-        raise ValueError("Please provide a NoiseModel object, a method for constructing NoiseModels, or None (default) if backend is a hardware backend.")
-
-    # Form a dict of dicts with the first layer (n_qubits) initialized to make later access faster and more reliable in parallel
-    max_lg_qubits = np.minimum(2, max_n_qubits) 
-    phys_all_data = dict(zip(range(min_n_qubits, max_n_qubits+1), [{}]*(max_n_qubits+1-min_n_qubits)))
-    lg_all_data = dict(zip(range(min_n_qubits, max_lg_qubits+1), [{}]*(max_lg_qubits+1-min_n_qubits)))
-
-    # Prepare to save progress in the event of program termination
-    if save_dir is None:
-        save_dir = "./data/"
-    if save_filename is None:
-        date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        save_filename = f"circuit_scaling_{date_str}.pkl"
-        
-    phys_save_file = open(save_dir + "phys_" + save_filename, "wb")
-    lg_save_file = open(save_dir + "lg_" + save_filename, "wb")
-    
-    def save_progress():
-        pickle.dump(lg_all_data, lg_save_file, protocol=5)
-        lg_save_file.close()
-        pickle.dump(phys_all_data, phys_save_file, protocol=5)
-        phys_save_file.close()
-        
-    atexit.register(save_progress)
-
-    if with_mp:
-        # @TODO Perform rigorous performance test to ensure implementation is fast and robust. There is not enough RAM on my laptop to do multiprocessing, especially since this function bundles in scaling testing for LogicalCircuit objects. Perhaps when PACE access comes online
-        
-        exp_inputs_list = [
-            (
-                (n_qubits, circuit_length),
-                circuit_factory(n_qubits=n_qubits, circuit_length=circuit_length),
-                noise_model_factory(n_qubits=n_qubits),
-                backend, method, shots, stabilizer_code
-            )
-            for (n_qubits, circuit_length) in itertools.product(range(min_n_qubits, max_n_qubits+1), range(min_circuit_length, max_circuit_length+1))
-        ]
-
-        cpu_count = (os.cpu_count() - 2) or 1
-
-        # batch_size = max(int(np.ceil((max_n_qubits+1-min_n_qubits)*(max_circuit_length+1-min_circuit_length)/cpu_count)), 1)
-        print(f"Applying multiprocessing to {len(exp_inputs_list)} samples across {cpu_count} CPUs")
-
-        start = time.perf_counter()
-
-        with Pool(cpu_count) as pool:
-            #results_iterator = pool.imap_unordered(parity_experiment_core), exp_inputs_list)
-
-            #mp_result = list(tqdm(results_iterator, total=len(exp_inputs_list)))
-            
-            mp_result = pool.starmap(
-                parity_experiment_core,
-                exp_inputs_list #*[list(exp_inputs) for exp_inputs in zip(*exp_inputs_list)],
-                # chunksize=batch_size
-            )
-
-            # Unzip results
-            for (task_id, phys_result, lg_result) in mp_result:
-                phys_all_data[task_id[0]][task_id[1]] = phys_result#[0]
-                if task_id[0] <= 2:
-                    lg_all_data[task_id[0]][task_id[1]] = lg_result#[0]
-
-        stop = time.perf_counter()
-    else:
-        start = time.perf_counter()
-
-        prog = 0
-        prog_max = (max_n_qubits - min_n_qubits + 1) * (max_circuit_length - min_circuit_length + 1)
-
-        for n_qubits in range(min_n_qubits, max_n_qubits+1):
-            phys_sub_data = {}
-            lg_sub_data = {}
-
-            noise_model_n = noise_model_factory(n_qubits=n_qubits)
-
-            for circuit_length in range(min_circuit_length, max_circuit_length+1):
-                
-                prog += 1
-                
-                # @TODO make this less jank
-                print(f"Estimated Progress: {np.round(100 * prog / prog_max, 2)}%")
-                
-                circuit = circuit_factory(n_qubits=n_qubits, circuit_length=circuit_length)
-                
-                if n_qubits <= 2: # Don't go above 2 b/c of RAM requirements
-                    lg_circuit = LogicalCircuit.from_physical_circuit(circuit, **stabilizer_code)
-                    lg_circuit.measure_all()
-                    lg_result = execute_circuits(lg_circuit, noise_model=noise_model_n, backend=backend, method=method, shots=shots)[0]
-                    lg_sub_data[circuit_length] = lg_result
-                    
-                    del lg_circuit
-                
-                circuit.measure_all()
-                result = execute_circuits(circuit, noise_model=noise_model_n, backend=backend, method=method, shots=shots)[0]
-                phys_sub_data[circuit_length] = result
-
-                del circuit
-
-            del noise_model_n
-
-            phys_all_data[n_qubits] = phys_sub_data
-            lg_all_data[n_qubits] = lg_sub_data
-
-        stop = time.perf_counter()
-
-    print(f"Completed experiment in {stop-start} seconds")
-
-    # Run save_progress once for good measure and then unregister save_progress so it doesn't clutter our exit routine
-    save_progress()
-    atexit.unregister(save_progress)
-
-    return phys_all_data, lg_all_data
 
 def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, error_scan_val_lists, basis_gates=None, target=None, backend="aer_simulator", method="density_matrix", compute_exact=False, shots=1024, with_mp=False, save_dir=None, save_filename=None):
     if isinstance(circuit_input, QuantumCircuit):
@@ -822,6 +671,85 @@ def qec_cycle_efficiency_experiment(circuit_input, qecc, constraint_scan_keys, c
         all_data.append(sub_data)
 
     stop = time.perf_counter()
+
+    print(f"Completed experiment in {stop-start} seconds")
+
+    # Run save_progress once for good measure and then unregister save_progress so it doesn't clutter our exit routine
+    save_progress()
+    atexit.unregister(save_progress)
+
+    return all_data
+
+def qec_cycle_circuit_scaling_experiment(circuit_input, qecc, constraint_model=None, min_n_qubits=1, max_n_qubits=16, min_circuit_length=1, max_circuit_length=16, with_mp=True, save_dir=None, save_filename=None, **kwargs):
+    if isinstance(circuit_input, QuantumCircuit):
+        if max_n_qubits != min_n_qubits:
+            print("A constant circuit has been provided as the circuit factory, but a non-trivial range of qubit counts has also been provided, so the fixed input will not be scaled in this parameter. If you would like for the number of qubits to be scaled, please provide a callable which takes the number of qubits, n_qubits, as an argument.")
+        if max_circuit_length != min_circuit_length:
+            print("A constant circuit has been provided as the circuit factory, but a non-trivial range of circuit lengths has also been provided, so the fixed input will not be scaled in this parameter. If you would like for the circuit length to be scaled, please provide a callable which takes the circuit length, circuit_length, as an argument.")
+
+        circuit_factory = lambda n_qubits, circuit_length: circuit_input
+    elif callable(circuit_input):
+        circuit_factory = circuit_input
+    else:
+        raise ValueError("Please provide a QuantumCircuit/LogicalCircuit object or a method for constructing QuantumCircuits/LogicalCircuits.")
+
+    # Form a dict of dicts with the first layer (n_qubits) initialized to make later access faster and more reliable in parallel
+    all_data = dict(zip(range(min_n_qubits, max_n_qubits+1), [{}]*(max_n_qubits+1-min_n_qubits)))
+
+    # Prepare to save progress in the event of program termination
+    if save_dir is None:
+        save_dir = "./data/"
+    if save_filename is None:
+        date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        save_filename = f"circuit_scaling_{date_str}.pkl"
+    save_file = open(save_dir + save_filename, "wb")
+    def save_progress():
+        pickle.dump(all_data, save_file, protocol=5)
+        save_file.close()
+    atexit.register(save_progress)
+
+    if with_mp:
+        raise NotImplementedError("with_mp=True specified, but this functionality is not implemented yet for qec_cycle_circuit_scaling_experiment; ignoring.")
+    else:
+        start = time.perf_counter()
+
+        for n_qubits in range(min_n_qubits, max_n_qubits+1):
+            for circuit_length in range(min_circuit_length, max_circuit_length+1):
+                # Construct physical circuit
+                circuit_nl_physical = circuit_factory(n_qubits=n_qubits, circuit_length=circuit_length)
+                circuit_nl_physical_no_meas = circuit_nl_physical.remove_final_measurements(inplace=False)
+
+                # Exact physical result
+                # @TODO - replicate code from other experiments which have a fallback to the Statevector if an error occurs
+                density_matrix_exact = DensityMatrix(circuit_nl_physical_no_meas)
+
+                # Noisy physical result
+                result_physical = execute_circuits(circuit_nl_physical, **kwargs)[0]
+
+                # Construct LogicalCircuit
+                circuit_nl_logical = LogicalCircuit.from_physical_circuit(circuit_nl_physical, **qecc)
+
+                # Apply QEC according to constraint model
+                qec_cycle_indices = circuit_nl_logical.optimize_qec_cycle_indices(constraint_model=constraint_model)
+                circuit_nl_logical.insert_qec_cycles(qec_cycle_indices=qec_cycle_indices)
+
+                # Noisy logical result
+                result_logical = execute_circuits(circuit_nl_logical, **kwargs)[0]
+
+                # @TODO - determine whether this is a better data structure for this, including a better way to distinguish the data by circuit
+                sub_data = {
+                    "physical_circuit": circuit_nl_physical,
+                    "logical_circuit": circuit_nl_logical,
+                    "density_matrix_exact": density_matrix_exact,
+                    "constraint_model": constraint_model,
+                    "result_physical": result_physical,
+                    "result_logical": result_logical
+                }
+
+                # Save expectation values
+                all_data[n_qubits][circuit_length] = sub_data
+
+        stop = time.perf_counter()
 
     print(f"Completed experiment in {stop-start} seconds")
 
