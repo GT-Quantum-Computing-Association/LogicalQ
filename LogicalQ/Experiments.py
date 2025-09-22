@@ -320,7 +320,7 @@ def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubi
     atexit.register(save_progress)
 
     if with_mp:
-        circuit_dimensions_list = itertools.product(range(min_n_qubits, max_n_qubits+1), range(min_circuit_length, max_circuit_length+1))
+        circuit_dimensions_list = list(itertools.product(range(min_n_qubits, max_n_qubits+1), range(min_circuit_length, max_circuit_length+1)))
         circuit_list = [circuit_factory(n_qubits=n_qubits, circuit_length=circuit_length) for (n_qubits, circuit_length) in circuit_dimensions_list]
         noise_model_list = [noise_model_factory(n_qubits=n_qubits) for (n_qubits, circuit_length) in circuit_dimensions_list]
 
