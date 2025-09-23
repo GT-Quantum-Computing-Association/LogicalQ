@@ -1880,6 +1880,7 @@ class LogicalDensityMatrix(DensityMatrix):
                 logical_rep[i,j] = np.vdot(lsvs[i].data, self.data @ lsvs[j].data)
                 physical_rep -= logical_rep[i,j]*np.outer(lsvs[i].data, np.conj(lsvs[j].data))
         delta = np.linalg.norm(physical_rep, ord='fro')
+        del physical_rep # free up memory after computing delta
 
         ## Compute Pauli decomposition of the density matrix.
         #  This code is based on an algorithm of Hamaguchi et al. The
@@ -1912,7 +1913,7 @@ class LogicalDensityMatrix(DensityMatrix):
         pauli_coeffs = np.zeros(4**self.n_logical_qubits, dtype=np.complex128)
         for i in range(4**self.n_logical_qubits):
             # interleave x, y coordinates for z-order curve
-            bitstr = format(i, f'0{4**self.n_logical_qubits}b')
+            bitstr = format(i, f'0{2**self.n_logical_qubits}b')
             x = int("".join([bitstr[j] for j in range(0, len(bitstr), 2)]), 2)
             y = int("".join([bitstr[j] for j in range(1, len(bitstr), 2)]), 2)
             pauli_coeffs[i] = rho[x,y]
