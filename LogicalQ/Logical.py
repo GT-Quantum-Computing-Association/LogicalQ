@@ -1565,7 +1565,27 @@ class LogicalRegister(list):
         raise NotImplementedError("LogicalRegister is not yet fully implemented")    
 
 class LogicalStatevector(Statevector):
+    """LogicalStatevector class"""
     def __init__(self, data, n_logical_qubits=None, label=None, stabilizer_tableau=None, dims=None):
+        """Initialize a LogicalStatevector object.
+
+        Args:
+            data: The data from which to construct the LogicalStatevector. This can be a
+                `LogicalCircuit` object, a qiskit `Statevector`, or a complex data vector.
+            n_logical_qubits (int): The number of logical qubits encoded in the statevector.
+            label (tuple): The label of the quantum error correction code, i.e., [[n,k,d]] (given as a
+                tuple), with n the number of physical qubits, k the number of logical qubits, and
+                d the distance.
+            stabilizer_tableau (list[str]): The set of stabilizers for the QECC.
+            dims: The subsystem dimension of the state.
+        
+        Raises:
+            ValueError: if `data` is a mixed state or otherwise invalid, or if other parameters
+                are not given when constructing from a complex vector.
+            TypeError: if `data` is not a supported data type.
+            NotImplementedError: if `n_logical_qubits` is greater than 1 or if `data` is a
+                qiskit QuantumCircuit.
+        """
         if isinstance(data, LogicalCircuit):
             self.logical_circuit = copy.deepcopy(data)
             self.n_logical_qubits = self.logical_circuit.n_logical_qubits
@@ -1647,6 +1667,21 @@ class LogicalStatevector(Statevector):
 
     @classmethod
     def from_counts(cls, counts, n_logical_qubits, label, stabilizer_tableau, basis="physical"):
+        """Construct a LogicalStatevector from measurement counts.
+
+        Args:
+            counts (dict): The set of counts measured from a circuit execution.
+            n_logical_qubits (int): The number of logical qubits.
+            label (tuple): The quantum error correction code [[n,k,d]] (given as a tuple).
+            stabilizer_tableau (list[str]): The set of stabilizers for the QECC.
+            basis (str): The basis in which each respective count's vector is given, physical or logical.
+        
+        Returns:
+            `LogicalStatevector`: The normalized LogicalStatevector constructed from the counts.
+        
+        Raises:
+            ValueError: if the counts format could not be parsed or if `basis` is invalid.
+        """
         outcomes_raw = [key.replace(" ", "") for key in counts.keys()]
         outcomes = []
         if basis == "physical":
@@ -1700,6 +1735,22 @@ class LogicalStatevector(Statevector):
 
     @classmethod
     def from_basis_str(cls, basis_str, n_logical_qubits, label, stabilizer_tableau, basis="physical"):
+        """Construct a LogicalStatevector, an element of the logical computational basis, from
+            a basis string.
+        
+        Args:
+            basis_str (str): Either a binary bitstring or its hex equivalent to identify the basis.
+            n_logical_qubits (int): Number of logical qubits.
+            label (tuple): The label of the quantum error correction code [[n,k,d]] (as a tuple).
+            stabilizer_tableau (list[str]): The set of stabilizers for the QECC.
+            basis (str): The basis in which each respective count's vector is given, physical or logical.
+        
+        Returns:
+            `LogicalStatevector`: The LogicalStatevector of the given basis state.
+        
+        Raises:
+            ValueError: if the `basis_str` could not be parsed due to improper format.
+        """
         if all([char in ["0", "1"] for char in basis_str]):
             d = 2**(len(basis_str))
             basis_idx = int(basis_str, 2)
@@ -1721,6 +1772,17 @@ class LogicalStatevector(Statevector):
     # @TODO - generalize to multi-qubit circuits
     @property
     def logical_decomposition(self, atol=1E-13):
+        """Give a decomposition of a LogicalStatevector into the logical basis.
+
+        Args:
+            atol (float): Tolerance within which to set probability amplitude to zero.
+
+        Returns:
+            `list`: The set of coefficients :math:`\alpha, \beta, \delta`, where
+                :math:`|\psi\rangle = \alpha|0\rangle + \beta|1\rangle + \delta|\psi^\perp\rangle`,
+                where :math:`|\psi^\perp\rangle` is the component of the state vector not in the
+                codespace.
+        """
         if self._logical_decomposition is None:
             lqc_0L = LogicalCircuit(self.n_logical_qubits, self.label, self.stabilizer_tableau)
             lqc_1L = LogicalCircuit(self.n_logical_qubits, self.label, self.stabilizer_tableau)
