@@ -1677,7 +1677,7 @@ class LogicalStatevector(Statevector):
             basis (str): The basis in which each respective count's vector is given, physical or logical.
         
         Returns:
-            `LogicalStatevector`: The normalized LogicalStatevector constructed from the counts.
+            [`LogicalStatevector`][LogicalQ.Logical.LogicalStatevector]: The normalized LogicalStatevector constructed from the counts.
         
         Raises:
             ValueError: if the counts format could not be parsed or if `basis` is invalid.
@@ -1746,7 +1746,8 @@ class LogicalStatevector(Statevector):
             basis (str): The basis in which each respective count's vector is given, physical or logical.
         
         Returns:
-            `LogicalStatevector`: The LogicalStatevector of the given basis state.
+            [`LogicalStatevector`][LogicalQ.Logical.LogicalStatevector]: The LogicalStatevector of
+                the given basis state.
         
         Raises:
             ValueError: if the `basis_str` could not be parsed due to improper format.
@@ -1778,9 +1779,9 @@ class LogicalStatevector(Statevector):
             atol (float): Tolerance within which to set probability amplitude to zero.
 
         Returns:
-            `list`: The set of coefficients :math:`\alpha, \beta, \delta`, where
-                :math:`|\psi\rangle = \alpha|0\rangle + \beta|1\rangle + \delta|\psi^\perp\rangle`,
-                where :math:`|\psi^\perp\rangle` is the component of the state vector not in the
+            `np.ndarray`: The set of coefficients $\\alpha, \\beta, \\delta$, where
+                $|\\psi\\rangle = \\alpha|0\\rangle + \\beta|1\\rangle + \\delta|\\psi^\\perp\\rangle$,
+                where $|\\psi^\\perp\\rangle$ is the component of the state vector not in the
                 codespace.
         """
         if self._logical_decomposition is None:
@@ -1809,6 +1810,20 @@ class LogicalStatevector(Statevector):
 
     # @TODO - find a way to let basis="logical" by default but without causing a recursive loop during logical_decomposition computation
     def __array__(self, basis="physical", dtype=None, copy=_numpy_compat.COPY_ONLY_IF_NEEDED):
+        """Return an array representation of the object.
+
+        Args:
+            basis (str): The basis, physical or logical, in which to represent the vector.
+            dtype (data-type): The desired data-type for the array.
+            copy (bool): If `True`, then the array data is copied
+        
+        Returns:
+            `np.ndarray`: The [`logical_decomposition`][LogicalQ.Logical.LogicalStatvector.logical_decomposition]
+                if basis is logical and the statevector data otherwise.
+        
+        Raises:
+            ValueError: if the basis is invalid.
+        """
         dtype = self.data.dtype if dtype is None else dtype
 
         if basis == "logical":
@@ -1819,6 +1834,17 @@ class LogicalStatevector(Statevector):
             raise ValueError(f"'{basis}' is not a valid basis for LogicalStatevector array representation")
 
     def __repr__(self, basis="logical"):
+        """Return a string representation of the statevector.
+
+        Args:
+            basis (str): The basis, logical or physical, in which to return the array.
+        
+        Returns:
+            `np.ndarray`: String representation of the statevector in the requested basis.
+
+        Raises:
+            ValueError: if the basis is invalid.
+        """
         if basis == "logical":
             data = self.logical_decomposition
         elif basis == "physical":
@@ -1834,6 +1860,18 @@ class LogicalStatevector(Statevector):
         )
 
     def draw(self, output=None):
+        """Return a visual representation of the statevector in the logical basis.
+
+        Args:
+            output (str): The method in which to draw. Valid choices are `text`, `latex`, and
+                `latex_source`.
+            
+        Returns:
+            `str` or `IPython.display.Latex`: String or LaTeX representation of the statevector.
+
+        Raises:
+            ValueError: if the draw method is invalid.
+        """
         if output is None: output = "text"
 
         # @TODO - display scientific notation correctly in string formatting
