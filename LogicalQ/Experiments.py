@@ -44,11 +44,11 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
     if hasattr(circuit_input, "__iter__"):
         for c, circuit in enumerate(circuit_input):
             if isinstance(circuit, QuantumCircuit):
-                circuits.append(copy.deepcopy(circuit))
+                circuits.append(circuit.copy())
             else:
                 raise TypeError(f"Iterable provided for circuits contains non-circuit object(s), first at index {c}: {circuit} (type: {type(circuit)})")
     elif isinstance(circuit_input, QuantumCircuit):
-        circuits = [copy.deepcopy(circuit_input)]
+        circuits = [circuit_input.copy()]
     else:
         raise TypeError(f"Invalid type for circuits input: {type(circuit_input)}")
 

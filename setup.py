@@ -21,6 +21,8 @@ setup(
         "pytket-qiskit",
         "pytket-quantinuum",
         "qbraid",
+        "ipykernel",
+        "pylatexenc",
     ],
     extras_require={
         "docs": [
