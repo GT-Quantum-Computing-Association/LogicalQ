@@ -1585,7 +1585,8 @@ class LogicalRegister(list):
 
 class LogicalStatevector(Statevector):
     """LogicalStatevector class"""
-    def __init__(self, data, n_logical_qubits=None, label=None, stabilizer_tableau=None, dims=None):
+    def __init__(self, data, logical_circuit=None, n_logical_qubits=None, label=None,
+                 stabilizer_tableau=None, dims=None):
         """Initialize a LogicalStatevector object.
 
         Args:
@@ -1654,8 +1655,8 @@ class LogicalStatevector(Statevector):
         elif isinstance(data, LogicalStatevector):
             raise TypeError("Cannot construct a LogicalStatevector from another LogicalStatevector in this way; a deepcopy may be more appropriate for this purpose")
         elif isinstance(data, Statevector):
-            if n_logical_qubits and label and stabilizer_tableau:
-                self.logical_circuit = None
+            if n_logical_qubits and label and stabilizer_tableau and logical_circuit:
+                self.logical_circuit = copy.deepcopy(logical_circuit)
                 self.n_logical_qubits = n_logical_qubits
                 self.label = label
                 self.stabilizer_tableau = stabilizer_tableau
@@ -1664,7 +1665,14 @@ class LogicalStatevector(Statevector):
                 sv_full = Statevector(data=data._data, dims=dims)
 
                 # Then, partial trace over the non-data qubits to obtain a DensityMatrix
-                non_data_qubits = list(range(self.label[0], sv_full.num_qubits))
+                non_data_qubits = []
+                count = 0
+                for qreg in self.logical_circuit.qregs:
+                    if qreg in self.logical_circuit.logical_qregs:
+                        count += qreg.size
+                    else:
+                        non_data_qubits = non_data_qubits + list(range(count, count+qreg.size))
+                        count += qreg.size
                 dm_partial = partial_trace(sv_full, non_data_qubits)
 
                 try:
@@ -1675,7 +1683,7 @@ class LogicalStatevector(Statevector):
                 except Exception as e:
                     raise ValueError("Unable to construct LogicalStatevector from Statevector") from e
             else:
-                raise ValueError("LogicalStatevector construction from a Statevector requires n_logical_qubits, label, and stabilizer_tableau to all be specified")
+                raise ValueError("LogicalStatevector construction from a Statevector requires n_logical_qubits, label, stabilizer_tableau, and logical_circuit to all be specified")
         elif hasattr(data, "__iter__"):
             if n_logical_qubits and label and stabilizer_tableau:
                 self.logical_circuit = None
