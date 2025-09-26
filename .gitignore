@@ -57,7 +57,7 @@ coverage.xml
 cover/
 
 # Demo data
-demos/data/
+demos/data/**
 
 # Translations
 *.mo
