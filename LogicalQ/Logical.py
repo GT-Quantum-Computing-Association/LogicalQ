@@ -1423,8 +1423,8 @@ class LogicalCircuit(QuantumCircuit):
                 pass
             case "initialize":
                 sv = instruction.params
-                if isinstance(sv, list):
-                    sv = Statevector(sv)
+                #if isinstance(sv, list):
+                #    sv = Statevector(sv)
                     
                 lsv = LogicalStatevector(sv, len(qubits), self.label, self.stabilizer_tableau)
                 self.initialize(lsv.data)
