@@ -1565,6 +1565,18 @@ class LogicalStatevector(Statevector):
             self.label = self.logical_circuit.label
             self.stabilizer_tableau = self.logical_circuit.stabilizer_tableau
 
+            # Get a list of non-logical qubits to later partial trace over
+            # This must happen before unboxing because QuantumCircuit does not 
+            # store logical_qreg information.
+            non_data_qubits = []
+            count = 0
+            for qreg in self.logical_circuit.qregs:
+                if qreg in self.logical_circuit.logical_qregs:
+                    count += qreg.size
+                else:
+                    non_data_qubits = non_data_qubits + list(range(count, count+qreg.size))
+                    count += qreg.size
+
             # Circuit-to-instruction conversions can't handle QEC (due to ControlFlowOps and measurements),
             # nor can they handle other BoxOp's that may appear in the circuit (such as logical gates)
             pm_unbox = PassManager([ClearQEC(), UnBox()])
@@ -1578,7 +1590,6 @@ class LogicalStatevector(Statevector):
             lsv_full = Statevector(data=self.logical_circuit, dims=dims)
 
             # Then, partial trace over the non-data qubits to obtain a DensityMatrix
-            non_data_qubits = list(range(self.label[0], self.logical_circuit.num_qubits))
             ldm_partial = partial_trace(lsv_full, non_data_qubits)
 
             try:
@@ -1620,8 +1631,6 @@ class LogicalStatevector(Statevector):
         else:
             raise TypeError(f"Object of type {type(data)} is not a valid data input for LogicalStatevector")
 
-        if self.n_logical_qubits > 1:
-            raise NotImplementedError("LogicalStatevector does not yet support circuits with multiple logical qubits")
 
         # Defer computation until necessary
         self._logical_decomposition = None
@@ -1634,7 +1643,24 @@ class LogicalStatevector(Statevector):
             for outcome_raw in outcomes_raw:
                 # @TODO - find a more reliable method that does not rely on the current indexing
                 # Get substring corresponding to logical measurement result
-                outcomes.append(outcome_raw[1:1+label[0]])
+                binary = ""
+                if all([char in ["0", "1"] for char in outcome_raw]):
+                    binary = outcome_raw
+                    # outcomes.append(outcome_raw[1:1+label[0]])
+                elif outcome_raw.startswith("0b"):
+                    binary = outcome_raw[2:]
+                    # outcomes.append(outcome_raw[3:3+label[0]])
+                elif outcome_raw.startswith("0x"):
+                    binary = str(bin(int(outcome_raw, 16)))[2:]
+                    # outcomes.append(binary[1:1+label[0]])
+                else:
+                    raise ValueError("Could not resolve count format")
+                if len(binary) < label[0]: # handling weird edge case
+                    binary = "0"*(label[0] - len(binary)) + binary
+                    outcomes.append(binary)
+                else:
+                    outcomes.append(binary[1:1+label[0]])
+
         elif basis == "logical":
             # @TODO - make sure this is correct
             for outcome_raw in outcomes_raw:
@@ -1684,25 +1710,47 @@ class LogicalStatevector(Statevector):
         lsv = cls(data=basis_vector, n_logical_qubits=n_logical_qubits, label=label, stabilizer_tableau=stabilizer_tableau)
         return lsv
 
-    # @TODO - generalize to multi-qubit circuits
     @property
     def logical_decomposition(self, atol=1E-13):
+        """Give a decomposition of a LogicalStatevector into the logical basis.
+
+        Args:
+            atol (float): Tolerance within which to set probability amplitude to zero.
+        
+        Returns:
+            `np.ndarray`: The set of coefficients $\\alpha_i, \\delta$, where
+                $|\\psi\\rangle = \\sum_{x=0}^{2^n - 1}\\alpha_x|x\\rangle + \\delta|\\psi^\\perp\\rangle$,
+                where $|\\psi^\\perp\\rangle$ is the component of the state vector not in the
+                codespace. Note that coefficients are returned in ascending order of value, e.g.,
+                000, 001, 010, 011, 100, 101, etc.
+        """
         if self._logical_decomposition is None:
-            lqc_0L = LogicalCircuit(self.n_logical_qubits, self.label, self.stabilizer_tableau)
-            lqc_1L = LogicalCircuit(self.n_logical_qubits, self.label, self.stabilizer_tableau)
+            # generate all possible initial states, in ascending order of value
+            states = [[]]
+            for i in range(self.n_logical_qubits):
+                new_states = []
+                for state in states:
+                    new_states.append([*state, 0])
+                    new_states.append([*state, 1])
+                states = new_states.copy()
+            
+            lqcs = [LogicalCircuit(self.n_logical_qubits, self.label, self.stabilizer_tableau)
+                    for i in range(np.pow(2, self.n_logical_qubits))]
+            for (i, state) in enumerate(states):
+                lqcs[i].encode(range(self.n_logical_qubits), initial_states=state)
+            lsvs = [LogicalStatevector(lqc) for lqc in lqcs]
 
-            lqc_0L.encode(range(self.n_logical_qubits), initial_states=[0])
-            lqc_1L.encode(range(self.n_logical_qubits), initial_states=[1])
+            coeffs = [0.] * np.pow(2, self.n_logical_qubits)
+            for i in range(len(coeffs)):
+                coeffs[i] = np.vdot(lsvs[i].data, self.data)
+            delta = np.sqrt(1 - np.sum(np.pow(np.abs(coeffs),2)))
 
-            lsv_0L = LogicalStatevector(lqc_0L)
-            lsv_1L = LogicalStatevector(lqc_1L)
-
-            alpha = np.vdot(self.data, lsv_0L.data)
-            beta = np.vdot(self.data, lsv_1L.data)
-            delta = 1 - np.sqrt(np.power(alpha,2) + np.power(beta,2))
-
-            self._logical_decomposition = np.array([alpha, beta, delta])
-            self._logical_decomposition[np.abs(self._logical_decomposition) < atol] = 0.0
+            self._logical_decomposition = np.array([*coeffs, delta])
+            real_part = np.real(self._logical_decomposition)
+            imag_part = np.imag(self._logical_decomposition)
+            real_part[np.abs(real_part) < atol] = 0.0
+            imag_part[np.abs(imag_part) < atol] = 0.0
+            self._logical_decomposition = real_part + 1.j*imag_part
 
         return self._logical_decomposition
 
