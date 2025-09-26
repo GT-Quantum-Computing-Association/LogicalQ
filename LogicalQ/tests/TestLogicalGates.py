@@ -1,13 +1,17 @@
 # from LogicalQ.Logical import LogicalCircuit
+import numpy as np
+from LogicalQ.Experiments import execute_circuits
+from LogicalQ.Logical import LogicalStatevector, logical_state_fidelity
 from LogicalQ.LogicalGeneral import LogicalCircuitGeneral as LogicalCircuit
 from LogicalQ.Library.QECCs import implemented_codes
 
 from qiskit.quantum_info import partial_trace, DensityMatrix
-
-from qiskit import transpile
+from qiskit.quantum_info import Statevector
+from qiskit import QuantumCircuit, transpile
 from qiskit.transpiler import PassManager
 from LogicalQ.Transpilation.ClearQEC import ClearQEC
 from LogicalQ.Transpilation.UnBox import UnBox
+from LogicalQ.Library.HardwareModels import hardware_models_Quantinuum
 
 from qiskit_aer import AerSimulator
 
@@ -120,6 +124,40 @@ def TestT(qeccs=None):
 
     print(f"WARNING - TestT has not been fully implemented, returning True")
     return True
+
+def TestRx(qeccs=None, shots=5e3, num_steps=16):
+    if qeccs is None:
+        qeccs = implemented_codes
+
+    thetas = np.linspace(0, 2 * np.pi, num_steps)
+    fidelity_per_theta = {}
+
+    for theta in thetas:
+        fidelities = []
+        for qecc in qeccs:
+            n, k, d = qecc["label"]
+
+            lqc_rx = LogicalCircuit(k, **qecc)
+            lqc_rx.encode(0)
+
+            targets = list(range(k))
+            lqc_rx.rx(theta, targets)
+
+            lqc_rx.measure_all()
+    
+            result = execute_circuits(lqc_rx, backend="aer_simulator", shots=shots, save_statevector=True)[0] #hardware_model=hardware_models_Quantinuum["H2-1"], coupling_map=None,
+            sv = result.get_statevector()
+            lsv = LogicalStatevector(sv, lqc_rx, k, qecc["label"], qecc["stabilizer_tableau"])
+            
+            qc_rx = QuantumCircuit(1)
+            qc_rx.rx(theta, 0)
+            target_sv = Statevector(qc_rx)
+            
+            fidelity = logical_state_fidelity(lsv, target_sv)
+            fidelities.append(fidelity)
+        fidelity_per_theta[theta] = fidelities
+
+    return fidelity_per_theta
 
 def TestCX(qeccs=None):
     if qeccs is None:

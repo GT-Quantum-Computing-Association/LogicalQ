@@ -4,6 +4,7 @@ import numpy as np
 from qiskit import QuantumRegister, AncillaRegister, ClassicalRegister, QuantumCircuit
 from qiskit.circuit import Bit, Measure
 from qiskit.circuit.classical import expr
+from qiskit.circuit.library import XGate, YGate, ZGate, RXGate, RYGate, RZGate
 from qiskit.quantum_info import Statevector, DensityMatrix, Pauli, partial_trace, state_fidelity
 from qiskit_addon_utils.slicing import slice_by_depth
 
@@ -1338,7 +1339,6 @@ class LogicalCircuit(QuantumCircuit):
         
         theta in radians
         """
-        
         if hasattr(targets, "__iter__"):
             targets = targets
         else:
@@ -1351,7 +1351,7 @@ class LogicalCircuit(QuantumCircuit):
                     super().rx(theta, self.logical_op_qregs[t][0])
                     super().rx(theta, self.logical_op_qregs[t][1])
                     
-                    # Apply controlled ops to perf. 
+                    # Apply controlled ops to perf.
                     super().compose(self.LogicalXCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
                     super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][1]] + self.logical_qregs[t][:], inplace=True)
 
@@ -1370,7 +1370,94 @@ class LogicalCircuit(QuantumCircuit):
                         self.x(t)
                     with _else:
                         pass
+        elif method == "S-K":
+            pass
+        else:
+            print("lmao this isn't a valid method")
+            
+    def ry(self, targets, theta = 0.0, method = "LCU"):
+        """
+        Logical Single-Target Rotation Gate
+        
+        method = "LCU" or "S-K"
+        
+        theta in radians
+        """
+        if hasattr(targets, "__iter__"):
+            targets = targets
+        else:
+            targets = [targets]
+        
+        if method == "LCU":
+            for t in targets:
+                with self.box(label="logical.logicalop.t.lcu_corrected:$\\hat{T^\\dagger}_{L}$"):
+                    # Prepare the ancilla in the desired state
+                    super().ry(theta, self.logical_op_qregs[t][0])
+                    super().ry(theta, self.logical_op_qregs[t][1])
                     
+                    # Apply controlled ops to perf. 
+                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
+                    super().compose(self.LogicalYCircuit.control(1), [self.logical_op_qregs[t][1]] + self.logical_qregs[t][:], inplace=True)
+
+                    # Return ancillas
+                    super().ry(-theta, self.logical_op_qregs[t][0])
+                    super().ry(-theta, self.logical_op_qregs[t][1])
+
+                    super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
+                    super().append(Measure(), [self.logical_op_qregs[t][1]], [self.logical_op_meas_cregs[t][1]], copy=False)
+                    super().reset(self.logical_op_qregs[t][0])
+                    super().reset(self.logical_op_qregs[t][1])
+
+                    with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as _else:
+                        self.x(t)
+                    with super().if_test((self.logical_op_meas_cregs[t][1], 1)) as _else:
+                        self.y(t)
+                    with _else:
+                        pass
+        elif method == "S-K":
+            pass
+        else:
+            print("lmao this isn't a valid method")
+            
+    def rz(self, targets, theta = 0.0, method = "LCU"):
+        """
+        Logical Single-Target Rotation Gate
+        
+        method = "LCU" or "S-K"
+        
+        theta in radians
+        """
+        if hasattr(targets, "__iter__"):
+            targets = targets
+        else:
+            targets = [targets]
+        
+        if method == "LCU":
+            for t in targets:
+                with self.box(label="logical.logicalop.t.lcu_corrected:$\\hat{T^\\dagger}_{L}$"):
+                    # Prepare the ancilla in the desired state
+                    super().rz(theta, self.logical_op_qregs[t][0])
+                    super().rz(theta, self.logical_op_qregs[t][1])
+                    
+                    # Apply controlled ops to perf. 
+                    super().compose(self.LogicalXCircuit.control(2, ctrl_state='01'), self.logical_op_qregs[t][:] + self.logical_qregs[t][:], inplace=True)
+                    super().compose(self.LogicalZCircuit.control(2, ctrl_state='10'), self.logical_op_qregs[t][:] + self.logical_qregs[t][:], inplace=True)
+
+                    # Return ancillas
+                    super().rz(-theta, self.logical_op_qregs[t][0])
+                    super().rz(-theta, self.logical_op_qregs[t][1])
+
+                    super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
+                    super().append(Measure(), [self.logical_op_qregs[t][1]], [self.logical_op_meas_cregs[t][1]], copy=False)
+                    super().reset(self.logical_op_qregs[t][0])
+                    super().reset(self.logical_op_qregs[t][1])
+
+                    with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as _else:
+                        self.y(t)
+                    with super().if_test((self.logical_op_meas_cregs[t][1], 1)) as _else:
+                        self.z(t)
+                    with _else:
+                        pass
         elif method == "S-K":
             pass
         else:
@@ -1382,29 +1469,7 @@ class LogicalCircuit(QuantumCircuit):
         
         method = "LCU" or "S-K"
         """
-        
-        if hasattr(_targets, "__iter__"):
-            targets = _targets
-        else:
-            targets = [_targets]
-        
-        if method == "LCU":
-            for t in targets:
-                with self.box(label="logical.logicalop.R.ancilla_assisted:$\\hat{CY}_{L}$"):
-                    super().h(self.logical_op_qregs[t][0])
-                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[control][:], inplace=True)
-                    super().h(self.logical_op_qregs[t][0])
-                    super().s(self.logical_op_qregs[t][0])
-                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
-                    super().compose(self.LogicalXCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
-                    super().h(self.logical_op_qregs[t][0])
-                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[control][:], inplace=True)
-                    super().h(self.logical_op_qregs[t][0])
-                    
-        pass
-        
-        
-        
+        # WIP
 
     # Input could be: 1. (CircuitInstruction(name="...", qargs="...", cargs="..."), qargs=None, cargs=None)
     #                 2. (Instruction(name="..."), qargs=[..], cargs=[...])
