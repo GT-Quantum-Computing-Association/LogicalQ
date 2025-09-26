@@ -4,11 +4,8 @@ import copy
 import atexit
 import pickle
 import itertools
-import numpy as np
 from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor as Pool
-
-from qiskit.transpiler.passes import Decompose
 
 from .Logical import LogicalCircuit, LogicalStatevector, LogicalDensityMatrix
 from .NoiseModel import construct_noise_model, construct_noise_model_from_hardware_model
@@ -21,8 +18,10 @@ from qiskit_aer.noise import NoiseModel
 
 from qiskit import transpile
 from qiskit.transpiler import PassManager
+from qiskit.transpiler.passes import Decompose
 from .Transpilation.UnBox import UnBoxTask
 from .Transpilation.DecomposeIfElseOps import DecomposeIfElseOpsTask
+from .Transpilation.InsertOps import insert_before_measurement
 
 from qiskit.providers import Backend
 from qiskit_ibm_runtime import QiskitRuntimeService
@@ -30,14 +29,16 @@ from pytket.extensions.quantinuum import QuantinuumBackend
 from pytket.extensions.qiskit import qiskit_to_tk
 from qbraid.runtime.native.device import QbraidDevice
 
+
 DEFAULT = object()
 
-"""
+def execute_circuits(circuit_input, target=None, backend=None, hardware_model=None, noise_model=DEFAULT, noise_params=DEFAULT, coupling_map=DEFAULT, basis_gates=DEFAULT, method="statevector", optimization_level=0, shots=1024, memory=False, save_statevector=False, save_density_matrix=False, return_circuits_transpiled=False):
+    """
     General function to execute a circuit with smart handling of parameters, especially for circuits with QEC.
 
     The parameters target, backend, and hardware_model are the preferred input type to this function. If specified, noise_model, noise_params, coupling_map, and basis_gates will try to override anything specified in target, backend, or hardware_model.
-"""
-def execute_circuits(circuit_input, target=None, backend=None, hardware_model=None, noise_model=DEFAULT, noise_params=DEFAULT, coupling_map=DEFAULT, basis_gates=DEFAULT, method="statevector", optimization_level=0, shots=1024, memory=False, return_circuits_transpiled=False):
+    """
+
     # Resolve circuits
     circuits = []
     if hasattr(circuit_input, "__iter__"):
@@ -53,8 +54,28 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
 
     # Check that the user has appended a measurement to every circuit
     for c, circuit in enumerate(circuits):
-        if "measure" not in circuit.count_ops():
+        def check_for_measurement(circuit):
+            if isinstance(circuit, LogicalCircuit):
+                for instruction in circuit.data:
+                    if instruction.operation.name == "box" and instruction.operation.label.split(":")[0] == "logical.qec.measure":
+                        return True
+            else:
+                if "measure" in circuit.count_ops():
+                    return True
+
+            return False
+        
+        if not check_for_measurement(circuit):
             raise ValueError(f"No measurements found in circuit with name {circuit.name} at index {c}; all circuits must have measurements in order to be executed.")
+
+    # Save statevector for all circuits if requested
+    if save_statevector:
+        for i, circuit in enumerate(circuits):
+            circuits[i], _ = insert_before_measurement(circuit, "statevector")
+
+    if save_density_matrix:
+        for i, circuit in enumerate(circuits):
+            circuits[i], _ = insert_before_measurement(circuit, "density_matrix")
 
     # Patch to account for backends that do not yet recognize BoxOp's during transpilation
     pm = PassManager([UnBoxTask()])
@@ -142,7 +163,9 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
     # @TODO - instead of relying on the transpile function, which is a thin wrapper around
     #         generate_preset_pass_manager with some type-handling, maybe we can create
     #         backend-specific pass managers here and then just run them later with common settings
-    if isinstance(backend, AerSimulator):
+    if backend is None:
+        raise ValueError("Could not resolve backend - make sure to pass one.")
+    elif isinstance(backend, AerSimulator):
         _transpile = transpile
         _cost = lambda circuits, shots : None
         _run = lambda circuits, **kwargs : backend.run(circuits, **kwargs).result()
@@ -227,7 +250,7 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
                 include_indices = [int(choice) for choice in cost_confirmation.split(",")]
                 circuit_to_run = [circuits[c] for c in range(len(circuits_transpiled)) if c in include_indices]
 
-    # # Run circuits
+    # Run circuits
     results = []
     for circuit_to_run in circuits_to_run:
         if circuit_to_run is None:
@@ -242,17 +265,20 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
     else:
         return results
 
-# Basic core experiment function useful for multiprocessing
-def _basic_experiment_core(task_id, circuit, noise_model, backend, method, shots):
+def _basic_experiment_core(task_id, circuit, noise_model, kwargs):
+    """
+    Basic core experiment function useful for multiprocessing
+    """
+
     print(os.getpid(), "starting")
-    result = execute_circuits(circuit, noise_model=noise_model, backend=backend, method=method, shots=shots)
+    result = execute_circuits(circuit, noise_model=noise_model, **kwargs)
     print(os.getpid(), "stopping")
 
     return task_id, result
 
 # @TODO - implement more experiments
 
-def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubits=1, max_n_qubits=16, min_circuit_length=1, max_circuit_length=16, backend="aer_simulator", method="statevector", shots=1024, with_mp=True, save_dir=None, save_filename=None):
+def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubits=1, max_n_qubits=16, min_circuit_length=1, max_circuit_length=16, with_mp=True, save_dir=None, save_filename=None, **kwargs):
     if isinstance(circuit_input, QuantumCircuit):
         if max_n_qubits != min_n_qubits:
             print("A constant circuit has been provided as the circuit factory, but a non-trivial range of qubit counts has also been provided, so the fixed input will not be scaled in this parameter. If you would like for the number of qubits to be scaled, please provide a callable which takes the number of qubits, n_qubits, as an argument.")
@@ -294,19 +320,18 @@ def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubi
     atexit.register(save_progress)
 
     if with_mp:
-        exp_inputs_list = [
-            (
-                (n_qubits, circuit_length),
-                circuit_factory(n_qubits=n_qubits, circuit_length=circuit_length),
-                noise_model_factory(n_qubits=n_qubits),
-                backend, method, shots
-            )
-            for (n_qubits, circuit_length) in itertools.product(range(min_n_qubits, max_n_qubits+1), range(min_circuit_length, max_circuit_length+1))
-        ]
+        circuit_dimensions_list = list(itertools.product(range(min_n_qubits, max_n_qubits+1), range(min_circuit_length, max_circuit_length+1)))
+        circuit_list = [circuit_factory(n_qubits=n_qubits, circuit_length=circuit_length) for (n_qubits, circuit_length) in circuit_dimensions_list]
+        noise_model_list = [noise_model_factory(n_qubits=n_qubits) for (n_qubits, circuit_length) in circuit_dimensions_list]
+
+        exp_inputs_list = list(zip(
+            circuit_dimensions_list,
+            circuit_list,
+            noise_model_list,
+            [kwargs]*len(circuit_dimensions_list)
+        ))
 
         cpu_count = os.process_cpu_count() or 1
-
-        # batch_size = max(int(np.ceil((max_n_qubits+1-min_n_qubits)*(max_circuit_length+1-min_circuit_length)/cpu_count)), 1)
         print(f"Applying multiprocessing to {len(exp_inputs_list)} samples across {cpu_count} CPUs")
 
         start = time.perf_counter()
@@ -315,12 +340,13 @@ def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubi
             mp_result = pool.map(
                 _basic_experiment_core,
                 *[list(exp_inputs) for exp_inputs in zip(*exp_inputs_list)],
-                # chunksize=batch_size
             )
 
             # Unzip results
+            circuit_map = dict(zip(circuit_dimensions_list, circuit_list))
             for (task_id, result) in mp_result:
-                all_data[task_id[0]][task_id[1]] = result[0]
+                circuit = circuit_map[task_id]
+                all_data[task_id[0]][task_id[1]] = (circuit, result[0])
 
         stop = time.perf_counter()
     else:
@@ -335,12 +361,10 @@ def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubi
             for circuit_length in range(min_circuit_length, max_circuit_length+1):
                 # Construct circuit and benchmark noise
                 circuit_nl = circuit_factory(n_qubits=n_qubits, circuit_length=circuit_length)
-                result = execute_circuits(circuit_nl, noise_model=noise_model_n, backend=backend, method=method, shots=shots)[0]
+                result = execute_circuits(circuit_nl, **kwargs)[0]
 
                 # Save expectation values
-                sub_data[circuit_length] = result
-
-                del circuit_nl
+                sub_data[circuit_length] = (circuit_nl, result)
 
             del noise_model_n
 
@@ -356,7 +380,7 @@ def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubi
 
     return all_data
 
-def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, error_scan_val_lists, basis_gates=None, target=None, backend="aer_simulator", method="density_matrix", compute_exact=False, shots=1024, with_mp=False, save_dir=None, save_filename=None):
+def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, error_scan_val_lists, basis_gates=None, target=None, compute_exact=False, with_mp=False, save_dir=None, save_filename=None, **kwargs):
     if isinstance(circuit_input, QuantumCircuit):
         circuit_input = [circuit_input]
     elif hasattr(circuit_input, "__iter__") and all([isinstance(circuit, QuantumCircuit) for circuit in circuit_input]):
@@ -471,21 +495,18 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
                     nm,
                     circuit,
                     noise_model,
-                    backend, method, shots
+                    kwargs
                 )
                 for nm, noise_model in enumerate(noise_models)
             ]
 
             cpu_count = os.process_cpu_count() or 1
-
-            # batch_size = max(int(np.ceil(len(circuit_input)*len(error_dicts)/cpu_count)), 1)
             print(f"Applying multiprocessing to {len(exp_inputs_list)} samples across {cpu_count} CPUs")
 
             with Pool(cpu_count) as pool:
                 mp_result = pool.map(
                     _basic_experiment_core,
                     *[list(exp_inputs) for exp_inputs in zip(*exp_inputs_list)],
-                    # chunksize=batch_size
                 )
 
             # Unzip results
@@ -667,6 +688,85 @@ def qec_cycle_efficiency_experiment(circuit_input, qecc, constraint_scan_keys, c
         all_data.append(sub_data)
 
     stop = time.perf_counter()
+
+    print(f"Completed experiment in {stop-start} seconds")
+
+    # Run save_progress once for good measure and then unregister save_progress so it doesn't clutter our exit routine
+    save_progress()
+    atexit.unregister(save_progress)
+
+    return all_data
+
+def qec_cycle_circuit_scaling_experiment(circuit_input, qecc, constraint_model=None, min_n_qubits=1, max_n_qubits=16, min_circuit_length=1, max_circuit_length=16, with_mp=True, save_dir=None, save_filename=None, **kwargs):
+    if isinstance(circuit_input, QuantumCircuit):
+        if max_n_qubits != min_n_qubits:
+            print("A constant circuit has been provided as the circuit factory, but a non-trivial range of qubit counts has also been provided, so the fixed input will not be scaled in this parameter. If you would like for the number of qubits to be scaled, please provide a callable which takes the number of qubits, n_qubits, as an argument.")
+        if max_circuit_length != min_circuit_length:
+            print("A constant circuit has been provided as the circuit factory, but a non-trivial range of circuit lengths has also been provided, so the fixed input will not be scaled in this parameter. If you would like for the circuit length to be scaled, please provide a callable which takes the circuit length, circuit_length, as an argument.")
+
+        circuit_factory = lambda n_qubits, circuit_length: circuit_input
+    elif callable(circuit_input):
+        circuit_factory = circuit_input
+    else:
+        raise ValueError("Please provide a QuantumCircuit/LogicalCircuit object or a method for constructing QuantumCircuits/LogicalCircuits.")
+
+    # Form a dict of dicts with the first layer (n_qubits) initialized to make later access faster and more reliable in parallel
+    all_data = dict(zip(range(min_n_qubits, max_n_qubits+1), [{}]*(max_n_qubits+1-min_n_qubits)))
+
+    # Prepare to save progress in the event of program termination
+    if save_dir is None:
+        save_dir = "./data/"
+    if save_filename is None:
+        date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        save_filename = f"circuit_scaling_{date_str}.pkl"
+    save_file = open(save_dir + save_filename, "wb")
+    def save_progress():
+        pickle.dump(all_data, save_file, protocol=5)
+        save_file.close()
+    atexit.register(save_progress)
+
+    if with_mp:
+        raise NotImplementedError("with_mp=True specified, but this functionality is not implemented yet for qec_cycle_circuit_scaling_experiment; ignoring.")
+    else:
+        start = time.perf_counter()
+
+        for n_qubits in range(min_n_qubits, max_n_qubits+1):
+            for circuit_length in range(min_circuit_length, max_circuit_length+1):
+                # Construct physical circuit
+                circuit_nl_physical = circuit_factory(n_qubits=n_qubits, circuit_length=circuit_length)
+                circuit_nl_physical_no_meas = circuit_nl_physical.remove_final_measurements(inplace=False)
+
+                # Exact physical result
+                # @TODO - replicate code from other experiments which have a fallback to the Statevector if an error occurs
+                density_matrix_exact = DensityMatrix(circuit_nl_physical_no_meas)
+
+                # Noisy physical result
+                result_physical = execute_circuits(circuit_nl_physical, **kwargs)[0]
+
+                # Construct LogicalCircuit
+                circuit_nl_logical = LogicalCircuit.from_physical_circuit(circuit_nl_physical, **qecc)
+
+                # Apply QEC according to constraint model
+                qec_cycle_indices = circuit_nl_logical.optimize_qec_cycle_indices(constraint_model=constraint_model)
+                circuit_nl_logical.insert_qec_cycles(qec_cycle_indices=qec_cycle_indices)
+
+                # Noisy logical result
+                result_logical = execute_circuits(circuit_nl_logical, **kwargs)[0]
+
+                # @TODO - determine whether this is a better data structure for this, including a better way to distinguish the data by circuit
+                sub_data = {
+                    "physical_circuit": circuit_nl_physical,
+                    "logical_circuit": circuit_nl_logical,
+                    "density_matrix_exact": density_matrix_exact,
+                    "constraint_model": constraint_model,
+                    "result_physical": result_physical,
+                    "result_logical": result_logical
+                }
+
+                # Save expectation values
+                all_data[n_qubits][circuit_length] = sub_data
+
+        stop = time.perf_counter()
 
     print(f"Completed experiment in {stop-start} seconds")
 
