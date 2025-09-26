@@ -137,7 +137,7 @@ class LogicalCircuit(QuantumCircuit):
             # Classical bits needed to track the Pauli Frame
             pauli_frame_creg_i = ClassicalRegister(2, name=f"cpauli_frame{i}")
             # Classical bits needed to take measurements of logical operation qubits
-            logical_op_meas_creg_i = ClassicalRegister(1, name=f"clogical_op_meas{i}")
+            logical_op_meas_creg_i = ClassicalRegister(2, name=f"clogical_op_meas{i}")
             # Classical bits needed to take measurements of the final state of the logical qubit
             final_measurement_creg_i = ClassicalRegister(self.n_physical_qubits, name=f"cfinal_meas{i}")
 
@@ -1330,7 +1330,7 @@ class LogicalCircuit(QuantumCircuit):
         with self.box(label="logical.logicalop.mcmt.default:$\\hat{MCMT}_{L}$"):
             super().append(gate.control(len(controls)), control_qubits + target_qubits)
 
-    def Rx(self, gate, targets, theta = 0.0, method = "LCU"):
+    def rx(self, targets, theta = 0.0, method = "LCU"):
         """
         Logical Single-Target Rotation Gate
         
@@ -1344,15 +1344,12 @@ class LogicalCircuit(QuantumCircuit):
         else:
             targets = [targets]
         
-        #alpha = np.cos(theta / 2)
-        #beta = -1j * np.sin(theta / 2)
-        
         if method == "LCU":
             for t in targets:
                 with self.box(label="logical.logicalop.t.lcu_corrected:$\\hat{T^\\dagger}_{L}$"):
                     # Prepare the ancilla in the desired state
-                    super().rx(theta, self.logical_op_qregs[t][0]) #.u(theta, -np.pi/2, np.pi/2, ) # Rx
                     super().rx(theta, self.logical_op_qregs[t][0])
+                    super().rx(theta, self.logical_op_qregs[t][1])
                     
                     # Apply controlled ops to perf. 
                     super().compose(self.LogicalXCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
@@ -1360,18 +1357,20 @@ class LogicalCircuit(QuantumCircuit):
 
                     # Return ancillas
                     super().rx(-theta, self.logical_op_qregs[t][0])
-                    super().rx(-theta, self.logical_op_qregs[t][0])
+                    super().rx(-theta, self.logical_op_qregs[t][1])
 
-                    super().append(Measure(), [self.logical_op_qregs[t][:1]], [self.logical_op_meas_cregs[t][:1]], copy=False)
-                    super().reset(self.logical_op_qregs[t][:1])
+                    super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
+                    super().append(Measure(), [self.logical_op_qregs[t][1]], [self.logical_op_meas_cregs[t][1]], copy=False)
+                    super().reset(self.logical_op_qregs[t][0])
+                    super().reset(self.logical_op_qregs[t][1])
 
                     with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as _else:
-                        self.z(t, method='LCU_corrected')
+                        self.z(t)
                     with super().if_test((self.logical_op_meas_cregs[t][1], 1)) as _else:
-                        self.x(t, method='LCU_corrected')
-                        
+                        self.x(t)
                     with _else:
                         pass
+                    
         elif method == "S-K":
             pass
         else:
@@ -1916,7 +1915,7 @@ class LogicalStatevector(Statevector):
             coeffs = [0.] * np.pow(2, self.n_logical_qubits)
             for i in range(len(coeffs)):
                 coeffs[i] = np.vdot(lsvs[i].data, self.data)
-            delta = np.sqrt(1 - np.sum(np.pow(np.abs(coeffs),2)))
+            delta = np.sqrt(np.maximum(0.0, 1 - np.sum(np.pow(np.abs(coeffs),2))))
 
             self._logical_decomposition = np.array([*coeffs, delta])
             real_part = np.real(self._logical_decomposition)
