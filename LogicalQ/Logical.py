@@ -4,9 +4,11 @@ import numpy as np
 from qiskit import QuantumRegister, AncillaRegister, ClassicalRegister, QuantumCircuit
 from qiskit.circuit import Bit, Measure
 from qiskit.circuit.classical import expr
-from qiskit.circuit.library import XGate, YGate, ZGate, RXGate, RYGate, RZGate
+from qiskit.circuit.library import RXGate, RYGate, RZGate, RXXGate, RYYGate, RZZGate
 from qiskit.quantum_info import Statevector, DensityMatrix, Pauli, partial_trace, state_fidelity
 from qiskit_addon_utils.slicing import slice_by_depth
+from qiskit.transpiler.passes import SolovayKitaev
+from qiskit.synthesis import generate_basic_approximations
 
 from qiskit.transpiler import PassManager
 
@@ -1335,7 +1337,7 @@ class LogicalCircuit(QuantumCircuit):
         """
         Logical Single-Target Rotation Gate
         
-        method = "LCU" or "S-K"
+        method = "LCU" -> linear combination of unitaries or "S-K" -> solovay-kitaev algorithm or "OAA" -> oblivious amplitude amplification
         
         theta in radians
         """
@@ -1344,33 +1346,39 @@ class LogicalCircuit(QuantumCircuit):
         else:
             targets = [targets]
         
-        if method == "LCU":
+        if method == "non-FT_LCU":
             for t in targets:
-                with self.box(label="logical.logicalop.t.lcu_corrected:$\\hat{T^\\dagger}_{L}$"):
+                with self.box(label=f"logical.logicalop.t.lcu_corrected:$\\hat{{R}}_{{X,L}}$"):
                     # Prepare the ancilla in the desired state
                     super().rx(theta, self.logical_op_qregs[t][0])
-                    super().rx(theta, self.logical_op_qregs[t][1])
+                    #super().rz(theta, self.logical_op_qregs[t][1])
                     
                     # Apply controlled ops to perf.
-                    super().compose(self.LogicalXCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
-                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][1]] + self.logical_qregs[t][:], inplace=True)
+                    super().compose(self.LogicalXCircuit.control(2, ctrl_state='01'), self.logical_op_qregs[t][:] + self.logical_qregs[t][:], inplace=True)
+                    super().compose(self.LogicalZCircuit.control(2, ctrl_state='10'), self.logical_op_qregs[t][:] + self.logical_qregs[t][:], inplace=True)
 
                     # Return ancillas
-                    super().rx(-theta, self.logical_op_qregs[t][0])
-                    super().rx(-theta, self.logical_op_qregs[t][1])
+                    super().h(self.logical_op_qregs[t][0])
+                    #super().h(self.logical_op_qregs[t][1])
 
                     super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
                     super().append(Measure(), [self.logical_op_qregs[t][1]], [self.logical_op_meas_cregs[t][1]], copy=False)
                     super().reset(self.logical_op_qregs[t][0])
                     super().reset(self.logical_op_qregs[t][1])
 
-                    with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as _else:
-                        self.z(t)
-                    with super().if_test((self.logical_op_meas_cregs[t][1], 1)) as _else:
+                    # good ones - 10, 11, 01
+
+                    with super().if_test(self.cbit_and(self.logical_op_meas_cregs[t][:2], [0, 1])) as _else:
                         self.x(t)
+                    with super().if_test(self.cbit_and(self.logical_op_meas_cregs[t][:2], [1, 0])) as _else:
+                        self.z(t)
+                    with super().if_test(self.cbit_and(self.logical_op_meas_cregs[t][:2], [1, 1])) as _else:
+                        self.ry(t, -np.pi/2)
                     with _else:
                         pass
         elif method == "S-K":
+            pass
+        elif method == "OAA":
             pass
         else:
             print("lmao this isn't a valid method")
@@ -1463,13 +1471,52 @@ class LogicalCircuit(QuantumCircuit):
         else:
             print("lmao this isn't a valid method")
 
-    def R(self, gate, targets, method = "LCU"):
-        """
-        Logical Single-Target Rotation Gate
+    def append_rot_gate(self, axis = "z", theta = 0, qubit_indices = [0], label = None, return_subcircuit = False, depth = 10, recursion_degree = 1, box=True):
+        gates = {"x": (RXGate, 1), "y": (RYGate, 1), "z": (RZGate, 1), "xx": (RXXGate, 2), "yy": (RYYGate, 2), "zz": (RZZGate, 2)}
+        gate_base, num_target_qubits = gates[axis]
+        gate = gate_base(theta)
         
-        method = "LCU" or "S-K"
-        """
-        # WIP
+        sub_qc = QuantumCircuit(num_target_qubits)
+    
+        def apply_Rzz(sub_qc):
+            sub_qc.cx(0, 1)
+            sub_qc.rz(theta, 1)
+            sub_qc.cx(0, 1)
+    
+        match axis:
+            case "xx":
+                sub_qc.h([0, 1])
+                apply_Rzz(sub_qc)
+                sub_qc.h([0, 1])
+            case "yy":
+                sub_qc.rx(np.pi / 2, [0, 1])
+                apply_Rzz(sub_qc)
+                sub_qc.rx(-np.pi / 2, [0, 1])
+            case "zz":
+                apply_Rzz(sub_qc)
+            case _:        
+                sub_qc.append(gate, qargs = list(range(num_target_qubits)))
+        
+        basis = ["s", "sdg", "t", "tdg", "h", "x", "y", "z", "cz"]
+        approx = generate_basic_approximations(basis, depth=depth)
+        skd = SolovayKitaev(recursion_degree=recursion_degree, basic_approximations=approx)
+
+        discretized_sub_qc = skd(sub_qc)
+        box_label = fr"S-K: R$_\text{{{axis}}}$({np.round(theta / np.pi, 2)}$\pi$)" if label == None else label
+        
+        def append_all():
+            for i in range(len(discretized_sub_qc.data)):
+                    circuit_instruction = discretized_sub_qc.data[i]
+                    self.append(circuit_instruction, qargs=qubit_indices)
+        
+        if box:
+            with self.box(label=f"logical.logicalop.R:{box_label}"):
+                append_all()
+        else:
+            append_all()
+            
+        if return_subcircuit:
+            return discretized_sub_qc
 
     # Input could be: 1. (CircuitInstruction(name="...", qargs="...", cargs="..."), qargs=None, cargs=None)
     #                 2. (Instruction(name="..."), qargs=[..], cargs=[...])
@@ -1550,12 +1597,9 @@ class LogicalCircuit(QuantumCircuit):
                 control_qubit = instruction.qubits[0]._index
                 target_qubit = instruction.qubits[1]._index
                 self.cy(control_qubit, target_qubit)
-            case "Rx" | "Ry" | "Rz":
-                
-                
-                
-                
-                pass
+            case "rx":
+                theta = instruction.params[0]
+                self.rx(qubits, theta)
             case "Rxx" | "Ryy" | "Rzz":
                 
                 
