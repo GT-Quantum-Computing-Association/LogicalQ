@@ -51,7 +51,7 @@ def construct_noise_model(basis_gates, n_qubits=None, qubits=None, ignore_qubits
     # Readout errors: models errors in qubit measurement.
     if "readout_error_0|1" and "readout_error_1|0" in noise_params:
         p0given1 = noise_params["readout_error_0|1"]
-        p1given0 = noise_params["readout_error_1|1"]
+        p1given0 = noise_params["readout_error_1|0"]
 
         readout_error = ReadoutError([[1 - p1given0, p1given0], [p0given1, 1 - p0given1]])
         for q in used_qubits:

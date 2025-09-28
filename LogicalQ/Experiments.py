@@ -122,7 +122,7 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
             basis_gates = None
         else:
             basis_gates = list(hardware_model["device_info"].get("basis_gates", None).keys())
-    elif basis_gates is not None:
+    elif not hasattr(basis_gates, "__iter__") and basis_gates is not None:
         raise TypeError(f"Invalid type for basis_gates input: {type(basis_gates)}")
 
     # Resolve backend

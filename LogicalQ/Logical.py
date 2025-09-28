@@ -1557,7 +1557,8 @@ class LogicalRegister(list):
 
 class LogicalStatevector(Statevector):
     """LogicalStatevector class"""
-    def __init__(self, data, n_logical_qubits=None, label=None, stabilizer_tableau=None, dims=None):
+    def __init__(self, data, logical_circuit=None, n_logical_qubits=None, label=None,
+                 stabilizer_tableau=None, dims=None):
         """Initialize a LogicalStatevector object.
 
         Args:
@@ -1583,6 +1584,18 @@ class LogicalStatevector(Statevector):
             self.label = self.logical_circuit.label
             self.stabilizer_tableau = self.logical_circuit.stabilizer_tableau
 
+            # Get a list of non-logical qubits to later partial trace over
+            # This must happen before unboxing because QuantumCircuit does not 
+            # store logical_qreg information.
+            non_data_qubits = []
+            count = 0
+            for qreg in self.logical_circuit.qregs:
+                if qreg in self.logical_circuit.logical_qregs:
+                    count += qreg.size
+                else:
+                    non_data_qubits = non_data_qubits + list(range(count, count+qreg.size))
+                    count += qreg.size
+
             # Circuit-to-instruction conversions can't handle QEC (due to ControlFlowOps and measurements),
             # nor can they handle other BoxOp's that may appear in the circuit (such as logical gates)
             pm_unbox = PassManager([ClearQEC(), UnBox()])
@@ -1596,7 +1609,6 @@ class LogicalStatevector(Statevector):
             sv_full = Statevector(data=self.logical_circuit, dims=dims)
 
             # Then, partial trace over the non-data qubits to obtain a DensityMatrix
-            non_data_qubits = list(range(self.label[0], self.logical_circuit.num_qubits))
             dm_partial = partial_trace(sv_full, non_data_qubits)
 
             try:
@@ -1615,8 +1627,8 @@ class LogicalStatevector(Statevector):
         elif isinstance(data, LogicalStatevector):
             raise TypeError("Cannot construct a LogicalStatevector from another LogicalStatevector in this way; a deepcopy may be more appropriate for this purpose")
         elif isinstance(data, Statevector):
-            if n_logical_qubits and label and stabilizer_tableau:
-                self.logical_circuit = None
+            if n_logical_qubits and label and stabilizer_tableau and logical_circuit:
+                self.logical_circuit = copy.deepcopy(logical_circuit)
                 self.n_logical_qubits = n_logical_qubits
                 self.label = label
                 self.stabilizer_tableau = stabilizer_tableau
@@ -1625,7 +1637,14 @@ class LogicalStatevector(Statevector):
                 sv_full = Statevector(data=data._data, dims=dims)
 
                 # Then, partial trace over the non-data qubits to obtain a DensityMatrix
-                non_data_qubits = list(range(self.label[0], sv_full.num_qubits))
+                non_data_qubits = []
+                count = 0
+                for qreg in self.logical_circuit.qregs:
+                    if qreg in self.logical_circuit.logical_qregs:
+                        count += qreg.size
+                    else:
+                        non_data_qubits = non_data_qubits + list(range(count, count+qreg.size))
+                        count += qreg.size
                 dm_partial = partial_trace(sv_full, non_data_qubits)
 
                 try:
@@ -1636,7 +1655,7 @@ class LogicalStatevector(Statevector):
                 except Exception as e:
                     raise ValueError("Unable to construct LogicalStatevector from Statevector") from e
             else:
-                raise ValueError("LogicalStatevector construction from a Statevector requires n_logical_qubits, label, and stabilizer_tableau to all be specified")
+                raise ValueError("LogicalStatevector construction from a Statevector requires n_logical_qubits, label, stabilizer_tableau, and logical_circuit to all be specified")
         elif hasattr(data, "__iter__"):
             if n_logical_qubits and label and stabilizer_tableau:
                 self.logical_circuit = None
@@ -1650,8 +1669,6 @@ class LogicalStatevector(Statevector):
         else:
             raise TypeError(f"Object of type {type(data)} is not a valid data input for LogicalStatevector")
 
-        if self.n_logical_qubits > 1:
-            raise NotImplementedError("LogicalStatevector does not yet support circuits with multiple logical qubits")
 
         # Defer computation until necessary
         self._logical_decomposition = None
@@ -1761,35 +1778,42 @@ class LogicalStatevector(Statevector):
         lsv = cls(data=basis_vector, n_logical_qubits=n_logical_qubits, label=label, stabilizer_tableau=stabilizer_tableau)
         return lsv
 
-    # @TODO - generalize to multi-qubit circuits
     @property
     def logical_decomposition(self, atol=1E-13):
         """Give a decomposition of a LogicalStatevector into the logical basis.
 
         Args:
             atol (float): Tolerance within which to set probability amplitude to zero.
-
+        
         Returns:
-            `np.ndarray`: The set of coefficients $\\alpha, \\beta, \\delta$, where
-                $|\\psi\\rangle = \\alpha|0\\rangle + \\beta|1\\rangle + \\delta|\\psi^\\perp\\rangle$,
+            `np.ndarray`: The set of coefficients $\\alpha_i, \\delta$, where
+                $|\\psi\\rangle = \\sum_{x=0}^{2^n - 1}\\alpha_x|x\\rangle + \\delta|\\psi^\\perp\\rangle$,
                 where $|\\psi^\\perp\\rangle$ is the component of the state vector not in the
-                codespace.
+                codespace. Note that coefficients are returned in ascending order of value, e.g.,
+                000, 001, 010, 011, 100, 101, etc.
         """
         if self._logical_decomposition is None:
-            lqc_0L = LogicalCircuit(self.n_logical_qubits, self.label, self.stabilizer_tableau)
-            lqc_1L = LogicalCircuit(self.n_logical_qubits, self.label, self.stabilizer_tableau)
+            # generate all possible initial states, in ascending order of value
+            states = [[]]
+            for i in range(self.n_logical_qubits):
+                new_states = []
+                for state in states:
+                    new_states.append([*state, 0])
+                    new_states.append([*state, 1])
+                states = new_states.copy()
+            
+            lqcs = [LogicalCircuit(self.n_logical_qubits, self.label, self.stabilizer_tableau)
+                    for i in range(np.pow(2, self.n_logical_qubits))]
+            for (i, state) in enumerate(states):
+                lqcs[i].encode(range(self.n_logical_qubits), initial_states=state)
+            lsvs = [LogicalStatevector(lqc) for lqc in lqcs]
 
-            lqc_0L.encode(range(self.n_logical_qubits), initial_states=[0])
-            lqc_1L.encode(range(self.n_logical_qubits), initial_states=[1])
+            coeffs = [0.] * np.pow(2, self.n_logical_qubits)
+            for i in range(len(coeffs)):
+                coeffs[i] = np.vdot(lsvs[i].data, self.data)
+            delta = np.sqrt(1 - np.sum(np.pow(np.abs(coeffs),2)))
 
-            lsv_0L = LogicalStatevector(lqc_0L)
-            lsv_1L = LogicalStatevector(lqc_1L)
-
-            alpha = np.vdot(self.data, lsv_0L.data)
-            beta = np.vdot(self.data, lsv_1L.data)
-            delta = np.sqrt(1 - np.pow(np.abs(alpha), 2) - np.pow(np.abs(beta), 2))
-
-            self._logical_decomposition = np.array([alpha, beta, delta])
+            self._logical_decomposition = np.array([*coeffs, delta])
             real_part = np.real(self._logical_decomposition)
             imag_part = np.imag(self._logical_decomposition)
             real_part[np.abs(real_part) < atol] = 0.0
