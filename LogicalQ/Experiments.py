@@ -25,10 +25,9 @@ from .Transpilation.InsertOps import insert_before_measurement
 
 from qiskit.providers import Backend
 from qiskit_ibm_runtime import QiskitRuntimeService
-from pytket.extensions.qiskit import qiskit_to_tk
 from pytket.extensions.quantinuum import QuantinuumBackend
+from pytket.extensions.qiskit import qiskit_to_tk, AerBackend
 from qbraid.runtime.native.device import QbraidDevice
-
 
 DEFAULT = object()
 
@@ -59,12 +58,12 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
                 for instruction in circuit.data:
                     if instruction.operation.name == "box" and instruction.operation.label.split(":")[0] == "logical.qec.measure":
                         return True
-            else:
+            elif isinstance(circuit, QuantumCircuit):
                 if "measure" in circuit.count_ops():
                     return True
 
             return False
-        
+
         if not check_for_measurement(circuit):
             raise ValueError(f"No measurements found in circuit with name {circuit.name} at index {c}; all circuits must have measurements in order to be executed.")
 
@@ -169,6 +168,15 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
         _transpile = transpile
         _cost = lambda circuits, shots : None
         _run = lambda circuits, **kwargs : backend.run(circuits, **kwargs).result()
+    elif isinstance(backend, AerBackend):
+        def _transpile(circuits, backend=None, coupling_map=None, optimization_level=0, **kwargs):
+            pm = PassManager([DecomposeIfElseOpsTask(), Decompose()])
+            circuits_decomposed = pm.run(circuits)
+            tket_circuits_decomposed = [qiskit_to_tk(circuit_decomposed) for circuit_decomposed in circuits_decomposed]
+            return backend.get_compiled_circuits(tket_circuits_decomposed, optimisation_level=optimization_level, **kwargs)
+
+        _cost = lambda circuits, shots : None
+        _run = lambda circuits, shots, memory=None, **kwargs : backend.run_circuits(circuits, n_shots=shots, **kwargs)
     else:
         if noise_model not in [None, DEFAULT]:
             raise ValueError("Cannot pass noise_model to a non-simulator backend")
@@ -183,7 +191,7 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
             # @TODO - implement
             _cost = lambda circuits, shots : None
 
-            _run = lambda circuits, **kwargs : backend.run(circuits, **kwargs).result()
+            _run = lambda circuits, **kwargs : backend.run_circuits(circuits, **kwargs).result()
         elif isinstance(backend, (QuantinuumBackend)):
             def _transpile(circuits, backend=None, coupling_map=None, optimization_level=0, **kwargs):
                 pm = PassManager([FlattenIfElseOpsTask(), Decompose()])
@@ -201,8 +209,62 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
             syntax_checker = backend._device_name.rstrip("LE") + "SC"
             _cost = lambda circuits, shots : [backend.cost(circuit, n_shots=shots, syntax_checker=syntax_checker) for circuit in circuits]
 
-            # @TODO - implement a smarter run function that instead uses process_circuits to get a handle and check its status periodically
-            _run = lambda circuits, shots, memory=None, **kwargs : backend.run_circuits(circuits, n_shots=shots, **kwargs)
+            # @TODO - give the user more control over this callable and its parameters
+            # @TODO - add better logging
+            def _run(circuits, shots, memory=None, **kwargs):
+                # Submit circuits for execution, using process_circuits in order to retrieve handles
+                handles = backend.process_circuits(circuits, n_shots=shots, **kwargs)
+
+                # Save handles to a file
+                save_dir = "./data/"
+                date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                save_filename = f"quantinuum_handles_{date_str}.pkl"
+                save_filepath = save_dir + save_filename
+                save_file = open(save_filepath, "wb")
+                pickle.dump(handles, save_file, protocol=5)
+                save_file.close()
+
+                # Poll handles periodically
+                poll_interval_seconds = 10
+                max_wait_minutes = 60 * 24 * 7
+                max_n_poll_attempts = int(max_wait_minutes * 60 / poll_interval_seconds)
+
+                # @TODO - simplify this portion of the code
+                n_poll_attempts = 0
+                handles_completed = []
+                while n_poll_attempts < max_n_poll_attempts and len(handles_completed) < len(handles):
+                    for h, handle in enumerate(handles):
+                        if h not in handles_completed:
+                            handle_status = backend.circuit_status(handle)
+                            handle_status_str = str(handle_status.status).lower()
+
+                            print(f"Polling attempt {n_poll_attempts} of {max_n_poll_attempts}:")
+                            print(f"- Handle status: {handle_status}")
+
+                            if "completed" in handle_status_str:
+                                handles_completed.append(h)
+                            else:
+                                print(f"- Waiting {poll_interval_seconds} seconds to poll again...")
+                                time.sleep(poll_interval_seconds)
+
+                if len(handles_completed) == len(handles):
+                    for handle in handles:
+                        # Get results
+                        results = backend.get_results(handles)
+
+                        # Save results
+                        save_dir = "./data/"
+                        date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                        save_filename = f"quantinuum_results_{date_str}.pkl"
+                        save_file = open(save_dir + save_filename, "wb")
+                        pickle.dump(results, save_file, protocol=5)
+                        save_file.close()
+
+                        return results
+                else:
+                    print(f"Reached maximum number of handle polling attempts, stopping. All handles are stored at '{save_filepath}' for later access.")
+
+                    return None
         else:
             raise TypeError(f"backend must be None, 'aer_simulator', the name of a backend, or an instance of AerSimulator, Backend, or QuantinuumBackend not type {type(backend)}")
 
