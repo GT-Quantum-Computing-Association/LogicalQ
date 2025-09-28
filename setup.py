@@ -22,5 +22,12 @@ setup(
         "pytket-quantinuum",
         "qbraid",
     ],
+    extras_require={
+        "docs": [
+            "python-markdown-math",
+            "mkdocstrings[python]",
+            "mkdocs-autoapi",
+        ],
+    },
 )
 

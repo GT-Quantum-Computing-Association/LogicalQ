@@ -208,6 +208,16 @@ class LogicalCircuitGeneral(QuantumCircuit):
             if row >= m:
                 break
 
+        # Since G is in RREF, a pivot row is also a pivot column, so find the pivot columns and move them forward
+        pivot_indices = []
+        for row in G[0]:
+            if 1 in row:
+                pivot_indices.append(int(np.where(row == 1)[0][0]))
+        
+        for diagonal_index, pivot_index in enumerate(pivot_indices):
+            if pivot_index > -1:
+                G[:, :, [diagonal_index, pivot_index]] = G[:, :, [pivot_index, diagonal_index]]
+
         self.G = G
 
         # Step 3: Construct logical operators using Pauli vector representations due to Gottesmann (1997)

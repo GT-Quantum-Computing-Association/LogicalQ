@@ -259,6 +259,16 @@ class LogicalCircuit(QuantumCircuit):
             if row >= m:
                 break
 
+        # Since G is in RREF, a pivot row is also a pivot column, so find the pivot columns and move them forward
+        pivot_indices = []
+        for row in G[0]:
+            if 1 in row:
+                pivot_indices.append(int(np.where(row == 1)[0][0]))
+        
+        for diagonal_index, pivot_index in enumerate(pivot_indices):
+            if pivot_index > -1:
+                G[:, :, [diagonal_index, pivot_index]] = G[:, :, [pivot_index, diagonal_index]]
+
         self.G = G
 
         # Step 3: Construct logical operators using Pauli vector representations due to Gottesmann (1997)
@@ -462,7 +472,6 @@ class LogicalCircuit(QuantumCircuit):
                     super().cx(self.logical_qregs[q][5], self.ancilla_qregs[q][0])
 
                     # Measure ancilla(e)
-                    # super().measure(self.ancilla_qregs[q][0], self.enc_verif_cregs[q][0])
                     super().append(Measure(), [self.ancilla_qregs[q][0]], [self.enc_verif_cregs[q][0]], copy=False)
 
                     for _ in range(max_iterations - 1):
@@ -479,7 +488,6 @@ class LogicalCircuit(QuantumCircuit):
                             super().cx(self.logical_qregs[q][5], self.ancilla_qregs[q][0])
 
                             # Measure ancilla
-                            # super().measure(self.ancilla_qregs[q][0], self.enc_verif_cregs[q][0])
                             super().append(Measure(), [self.ancilla_qregs[q][0]], [self.enc_verif_cregs[q][0]], copy=False)
 
                     # Reset ancilla qubit
@@ -585,7 +593,6 @@ class LogicalCircuit(QuantumCircuit):
                 self.measure_stabilizers(logical_qubit_indices=[q], stabilizer_indices=stabilizer_indices)
 
             for n in range(self.n_ancilla_qubits):
-                # super().measure(self.ancilla_qregs[q][n], self.curr_syndrome_cregs[q][n])
                 super().append(Measure(), [self.ancilla_qregs[q][n]], [self.curr_syndrome_cregs[q][n]], copy=False)
 
             # Determine the syndrome difference
@@ -900,14 +907,13 @@ class LogicalCircuit(QuantumCircuit):
             raise ValueError("Number of qubits should equal number of classical bits")
 
         for q, c in zip(logical_qubit_indices, cbit_indices):
-            # Measurement of state
-            for n in range(self.n_physical_qubits):
-                # super().measure(self.logical_qregs[q][n], self.final_measurement_cregs[q][n])
-                super().append(Measure(), [self.logical_qregs[q][n]], [self.final_measurement_cregs[q][n]], copy=False)
-
             with self.box(label="logical.qec.measure:$\\hat{M}_\\text{QEC}$"):
-                # @TODO - use LogicalXVector instead
-                with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][x] for x in [4,5,6]])):
+                # Measurement of state
+                for n in range(self.n_physical_qubits):
+                    super().append(Measure(), [self.logical_qregs[q][n]], [self.final_measurement_cregs[q][n]], copy=False)
+
+                # @TODO - use LogicalZVector instead
+                with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][x] for x in [4,5,6]])) as _else:
                     self.set_cbit(self.output_creg[c], 1)
 
                 if with_error_correction:
@@ -954,17 +960,17 @@ class LogicalCircuit(QuantumCircuit):
 
         return lqc_no_meas
 
-    def get_logical_counts(self, outputs, logical_qubit_indices=None):
-        if logical_qubit_indices == None:
+    def get_logical_counts(self, physical_counts, logical_qubit_indices=None):
+        if logical_qubit_indices is None:
             logical_qubit_indices = range(self.n_logical_qubits)
 
-        counts = {}
-        for output_n in outputs:
-            output = "".join([output_n[self.n_logical_qubits-1-l] for l in logical_qubit_indices])
+        logical_counts = {}
+        for physical_outcome, physical_outcome_counts in physical_counts.items():
+            logical_outcome = "".join([physical_outcome[self.n_logical_qubits-1-l] for l in logical_qubit_indices])
 
-            counts[output] = counts.get(output, 0) + 1
+            logical_counts[logical_outcome] = logical_counts.get(logical_outcome, 0) + physical_outcome_counts
 
-        return counts
+        return logical_counts
 
     ######################################
     ##### Logical quantum operations #####
@@ -1429,10 +1435,8 @@ class LogicalCircuit(QuantumCircuit):
     # Set values of classical bits
     def set_cbit(self, cbit, value):
         if value == 0:
-            # super().measure(self.cbit_setter_qreg[0], cbit)
             super().append(Measure(), [self.cbit_setter_qreg[0]], [cbit], copy=False)
         else:
-            # super().measure(self.cbit_setter_qreg[1], cbit)
             super().append(Measure(), [self.cbit_setter_qreg[1]], [cbit], copy=False)
 
     # Performs a NOT statement on a classical bit
@@ -1549,10 +1553,30 @@ class LogicalRegister(list):
     def __init__(self, qregs=None, cregs=None):
         self.qregs = qregs
         self.cregs = cregs
-        raise NotImplementedError("LogicalRegister is not yet fully implemented")
+        raise NotImplementedError("LogicalRegister is not yet fully implemented")    
 
 class LogicalStatevector(Statevector):
+    """LogicalStatevector class"""
     def __init__(self, data, n_logical_qubits=None, label=None, stabilizer_tableau=None, dims=None):
+        """Initialize a LogicalStatevector object.
+
+        Args:
+            data: The data from which to construct the LogicalStatevector. This can be a
+                `LogicalCircuit` object, a qiskit `Statevector`, or a complex data vector.
+            n_logical_qubits (int): The number of logical qubits encoded in the statevector.
+            label (tuple): The label of the quantum error correction code, i.e., [[n,k,d]] (given as a
+                tuple), with n the number of physical qubits, k the number of logical qubits, and
+                d the distance.
+            stabilizer_tableau (list[str]): The set of stabilizers for the QECC.
+            dims: The subsystem dimension of the state.
+        
+        Raises:
+            ValueError: if `data` is a mixed state or otherwise invalid, or if other parameters
+                are not given when constructing from a complex vector.
+            TypeError: if `data` is not a supported data type.
+            NotImplementedError: if `n_logical_qubits` is greater than 1 or if `data` is a
+                qiskit QuantumCircuit.
+        """
         if isinstance(data, LogicalCircuit):
             self.logical_circuit = copy.deepcopy(data)
             self.n_logical_qubits = self.logical_circuit.n_logical_qubits
@@ -1569,15 +1593,15 @@ class LogicalStatevector(Statevector):
             self.logical_circuit.remove_final_measurements()
 
             # First, construct a Statevector object for the full system
-            lsv_full = Statevector(data=self.logical_circuit, dims=dims)
+            sv_full = Statevector(data=self.logical_circuit, dims=dims)
 
             # Then, partial trace over the non-data qubits to obtain a DensityMatrix
             non_data_qubits = list(range(self.label[0], self.logical_circuit.num_qubits))
-            ldm_partial = partial_trace(lsv_full, non_data_qubits)
+            dm_partial = partial_trace(sv_full, non_data_qubits)
 
             try:
-                lsv_partial = ldm_partial.to_statevector()
-                super().__init__(data=lsv_partial.data, dims=dims)
+                sv_partial = dm_partial.to_statevector()
+                super().__init__(data=sv_partial.data, dims=dims)
             except QiskitError as e:
                 raise ValueError("Unable to construct LogicalStatevector from LogicalCircuit because data qubits are in a mixed state; a LogicalDensityMatrix may be the best alternative") from e
             except Exception as e:
@@ -1597,8 +1621,20 @@ class LogicalStatevector(Statevector):
                 self.label = label
                 self.stabilizer_tableau = stabilizer_tableau
 
-                # @TODO - there's probably a smarter way of doing this
-                super().__init__(data=data._data, dims=dims)
+                # First, construct a Statevector object for the full system
+                sv_full = Statevector(data=data._data, dims=dims)
+
+                # Then, partial trace over the non-data qubits to obtain a DensityMatrix
+                non_data_qubits = list(range(self.label[0], sv_full.num_qubits))
+                dm_partial = partial_trace(sv_full, non_data_qubits)
+
+                try:
+                    sv_partial = dm_partial.to_statevector()
+                    super().__init__(data=sv_partial.data, dims=dims)
+                except QiskitError as e:
+                    raise ValueError("Unable to construct LogicalStatevector from Statevector because data qubits are in a mixed state; a LogicalDensityMatrix may be the best alternative") from e
+                except Exception as e:
+                    raise ValueError("Unable to construct LogicalStatevector from Statevector") from e
             else:
                 raise ValueError("LogicalStatevector construction from a Statevector requires n_logical_qubits, label, and stabilizer_tableau to all be specified")
         elif hasattr(data, "__iter__"):
@@ -1622,13 +1658,43 @@ class LogicalStatevector(Statevector):
 
     @classmethod
     def from_counts(cls, counts, n_logical_qubits, label, stabilizer_tableau, basis="physical"):
+        """Construct a LogicalStatevector from measurement counts.
+
+        Args:
+            counts (dict): The set of counts measured from a circuit execution.
+            n_logical_qubits (int): The number of logical qubits.
+            label (tuple): The quantum error correction code [[n,k,d]] (given as a tuple).
+            stabilizer_tableau (list[str]): The set of stabilizers for the QECC.
+            basis (str): The basis in which each respective count's vector is given, physical or logical.
+        
+        Returns:
+            [`LogicalStatevector`][LogicalQ.Logical.LogicalStatevector]: The normalized LogicalStatevector constructed from the counts.
+        
+        Raises:
+            ValueError: if the counts format could not be parsed or if `basis` is invalid.
+        """
         outcomes_raw = [key.replace(" ", "") for key in counts.keys()]
         outcomes = []
         if basis == "physical":
             for outcome_raw in outcomes_raw:
                 # @TODO - find a more reliable method that does not rely on the current indexing
                 # Get substring corresponding to logical measurement result
-                outcomes.append(outcome_raw[1:1+label[0]])
+                binary = ""
+                if all([char in ["0", "1"] for char in outcome_raw]):
+                    binary = outcome_raw
+                elif outcome_raw.startswith("0b"):
+                    binary = outcome_raw[2:]
+                elif outcome_raw.startswith("0x"):
+                    binary = str(bin(int(outcome_raw, 16)))[2:]
+                else:
+                    raise ValueError("Could not resolve count format")
+
+                # If binary string is short (e.g. 0b0 or 0x0), pad to have length equalling number of data qubits
+                if len(binary) < label[0]:
+                    binary = "0"*(label[0] - len(binary)) + binary
+                    outcomes.append(binary)
+                else:
+                    outcomes.append(binary[1:1+label[0]])
         elif basis == "logical":
             # @TODO - make sure this is correct
             for outcome_raw in outcomes_raw:
@@ -1660,6 +1726,23 @@ class LogicalStatevector(Statevector):
 
     @classmethod
     def from_basis_str(cls, basis_str, n_logical_qubits, label, stabilizer_tableau, basis="physical"):
+        """Construct a LogicalStatevector, an element of the logical computational basis, from
+            a basis string.
+        
+        Args:
+            basis_str (str): Either a binary bitstring or its hex equivalent to identify the basis.
+            n_logical_qubits (int): Number of logical qubits.
+            label (tuple): The label of the quantum error correction code [[n,k,d]] (as a tuple).
+            stabilizer_tableau (list[str]): The set of stabilizers for the QECC.
+            basis (str): The basis in which each respective count's vector is given, physical or logical.
+        
+        Returns:
+            [`LogicalStatevector`][LogicalQ.Logical.LogicalStatevector]: The LogicalStatevector of
+                the given basis state.
+        
+        Raises:
+            ValueError: if the `basis_str` could not be parsed due to improper format.
+        """
         if all([char in ["0", "1"] for char in basis_str]):
             d = 2**(len(basis_str))
             basis_idx = int(basis_str, 2)
@@ -1681,6 +1764,17 @@ class LogicalStatevector(Statevector):
     # @TODO - generalize to multi-qubit circuits
     @property
     def logical_decomposition(self, atol=1E-13):
+        """Give a decomposition of a LogicalStatevector into the logical basis.
+
+        Args:
+            atol (float): Tolerance within which to set probability amplitude to zero.
+
+        Returns:
+            `np.ndarray`: The set of coefficients $\\alpha, \\beta, \\delta$, where
+                $|\\psi\\rangle = \\alpha|0\\rangle + \\beta|1\\rangle + \\delta|\\psi^\\perp\\rangle$,
+                where $|\\psi^\\perp\\rangle$ is the component of the state vector not in the
+                codespace.
+        """
         if self._logical_decomposition is None:
             lqc_0L = LogicalCircuit(self.n_logical_qubits, self.label, self.stabilizer_tableau)
             lqc_1L = LogicalCircuit(self.n_logical_qubits, self.label, self.stabilizer_tableau)
@@ -1693,15 +1787,34 @@ class LogicalStatevector(Statevector):
 
             alpha = np.vdot(self.data, lsv_0L.data)
             beta = np.vdot(self.data, lsv_1L.data)
-            delta = 1 - np.sqrt(np.power(alpha,2) + np.power(beta,2))
+            delta = np.sqrt(1 - np.pow(np.abs(alpha), 2) - np.pow(np.abs(beta), 2))
 
             self._logical_decomposition = np.array([alpha, beta, delta])
-            self._logical_decomposition[np.abs(self._logical_decomposition) < atol] = 0.0
+            real_part = np.real(self._logical_decomposition)
+            imag_part = np.imag(self._logical_decomposition)
+            real_part[np.abs(real_part) < atol] = 0.0
+            imag_part[np.abs(imag_part) < atol] = 0.0
+            self._logical_decomposition = real_part + 1.j*imag_part
+            self._logical_decomposition /= np.linalg.norm(self._logical_decomposition)
 
         return self._logical_decomposition
 
     # @TODO - find a way to let basis="logical" by default but without causing a recursive loop during logical_decomposition computation
     def __array__(self, basis="physical", dtype=None, copy=_numpy_compat.COPY_ONLY_IF_NEEDED):
+        """Return an array representation of the object.
+
+        Args:
+            basis (str): The basis, physical or logical, in which to represent the vector.
+            dtype (data-type): The desired data-type for the array.
+            copy (bool): If `True`, then the array data is copied
+        
+        Returns:
+            `np.ndarray`: The [`logical_decomposition`][LogicalQ.Logical.LogicalStatvector.logical_decomposition]
+                if basis is logical and the statevector data otherwise.
+        
+        Raises:
+            ValueError: if the basis is invalid.
+        """
         dtype = self.data.dtype if dtype is None else dtype
 
         if basis == "logical":
@@ -1712,6 +1825,17 @@ class LogicalStatevector(Statevector):
             raise ValueError(f"'{basis}' is not a valid basis for LogicalStatevector array representation")
 
     def __repr__(self, basis="logical"):
+        """Return a string representation of the statevector.
+
+        Args:
+            basis (str): The basis, logical or physical, in which to return the array.
+        
+        Returns:
+            `np.ndarray`: String representation of the statevector in the requested basis.
+
+        Raises:
+            ValueError: if the basis is invalid.
+        """
         if basis == "logical":
             data = self.logical_decomposition
         elif basis == "physical":
@@ -1727,6 +1851,18 @@ class LogicalStatevector(Statevector):
         )
 
     def draw(self, output=None):
+        """Return a visual representation of the statevector in the logical basis.
+
+        Args:
+            output (str): The method in which to draw. Valid choices are `text`, `latex`, and
+                `latex_source`.
+            
+        Returns:
+            `str` or `IPython.display.Latex`: String or LaTeX representation of the statevector.
+
+        Raises:
+            ValueError: if the draw method is invalid.
+        """
         if output is None: output = "text"
 
         # @TODO - display scientific notation correctly in string formatting
@@ -1788,6 +1924,8 @@ class LogicalDensityMatrix(DensityMatrix):
 
             raise NotImplementedError("LogicalDensityMatrix construction from QuantumCircuit is not yet supported; please provide a LogicalCircuit or an amplitude iterable")
         elif hasattr(data, "__iter__"):
+            if not (np.log2(len(data)).is_integer() and data.shape == (len(data), len(data))):
+                raise ValueError("LogicalDensityMatrix data must be a square matrix whose dimension is a power of 2.")
             if n_logical_qubits and label and stabilizer_tableau:
                 self.logical_circuit = None
                 self.n_logical_qubits = n_logical_qubits

@@ -12,6 +12,7 @@ To install LogicalQ, clone this repository and install via `pip`:
 ```py
 git clone https://github.com/GT-Quantum-Computing-Association/LogicalQ.git
 cd LogicalQ
+python -m pip install virtualenv
 python -m virtualenv .venv
 .venv/bin/activate
 python -m pip install -e .
