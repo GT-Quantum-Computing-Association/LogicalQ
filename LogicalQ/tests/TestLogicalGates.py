@@ -30,7 +30,7 @@ def TestX(qeccs=None):
         lqc_x.x(targets)
 
         simulator = AerSimulator()
-        tqc = transpile(qc, simulator)
+        lqc_x_transpiled = transpile(lqc_x_transpiled, simulator)
         result = simulator.run(tqc).result()
         final_dm = result.data(0)["density_matrix"]
 
@@ -125,40 +125,6 @@ def TestT(qeccs=None):
     print(f"WARNING - TestT has not been fully implemented, returning True")
     return True
 
-def TestRx(qeccs=None, shots=5e3, num_steps=16):
-    if qeccs is None:
-        qeccs = implemented_codes
-
-    thetas = np.linspace(0, 2 * np.pi, num_steps)
-    fidelity_per_theta = {}
-
-    for theta in thetas:
-        fidelities = []
-        for qecc in qeccs:
-            n, k, d = qecc["label"]
-
-            lqc_rx = LogicalCircuit(k, **qecc)
-            lqc_rx.encode(0)
-
-            targets = list(range(k))
-            lqc_rx.rx(theta, targets)
-
-            lqc_rx.measure_all()
-    
-            result = execute_circuits(lqc_rx, backend="aer_simulator", shots=shots, save_statevector=True)[0] #hardware_model=hardware_models_Quantinuum["H2-1"], coupling_map=None,
-            sv = result.get_statevector()
-            lsv = LogicalStatevector(sv, lqc_rx, k, qecc["label"], qecc["stabilizer_tableau"])
-            
-            qc_rx = QuantumCircuit(1)
-            qc_rx.rx(theta, 0)
-            target_sv = Statevector(qc_rx)
-            
-            fidelity = logical_state_fidelity(lsv, target_sv)
-            fidelities.append(fidelity)
-        fidelity_per_theta[theta] = fidelities
-
-    return fidelity_per_theta
-
 def TestCX(qeccs=None):
     if qeccs is None:
         qeccs = implemented_codes
@@ -176,6 +142,66 @@ def TestCX(qeccs=None):
 
     print(f"WARNING - TestCX has not been fully implemented, returning True")
     return True
+
+def TestRX(qeccs=None):
+    if qeccs is None:
+        qeccs = implemented_codes
+
+    for qecc in qeccs:
+        n, k, d = qecc["label"]
+
+        for theta in np.linspace(0, 2*np.pi, 1024):
+            lqc_rx = LogicalCircuit(k, **qecc)
+
+            targets = list(range(k))
+
+            lqc_rx.rx(theta, 0)
+
+            simulator = AerSimulator()
+            lqc_rx_transpiled = transpile(lqc_rx, simulator)
+            result = simulator.run(lqc_rx_transpiled).result()
+            final_dm = result.data(0)["density_matrix"]
+
+            rho = DensityMatrix(final_dm)
+            reduced = partial_trace(rho, list(range(k, n)))
+
+    print(f"WARNING - TestX has not been fully implemented, returning True")
+    return True
+
+def TestRY(qeccs=None):
+    print(f"WARNING - TestRY has not been fully implemented, returning True")
+    return True
+
+def TestRZ(qeccs=None):
+    print(f"WARNING - TestRZ has not been fully implemented, returning True")
+    return True
+
+def TestRXX(qeccs=None):
+    print(f"WARNING - TestRXX has not been fully implemented, returning True")
+    return True
+
+def TestRYY(qeccs=None):
+    print(f"WARNING - TestRYY has not been fully implemented, returning True")
+    return True
+
+def TestRZZ(qeccs=None):
+    print(f"WARNING - TestRZZ has not been fully implemented, returning True")
+    return True
+
+def TestRotationGates(qeccs=None):
+    if all([
+        TestRX(qeccs),
+        TestRY(qeccs),
+        TestRZ(qeccs),
+        TestRXX(qeccs),
+        TestRYY(qeccs),
+        TestRZZ(qeccs),
+    ]):
+        print(f"TestRotationGates succeeded")
+        return True
+    else:
+        print(f"TestRotationGates failed")
+        return False
 
 def TestPauliGates(qeccs=None):
     if all([
