@@ -10,7 +10,7 @@ class DecomposeIfElseOps(TransformationPass):
 
     def __init__(self, method=None):
         if method == None:
-            self.method == "nested"
+            self.method = "nested"
         else:
             self.method = method
 
