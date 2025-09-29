@@ -20,7 +20,7 @@ from qiskit import transpile
 from qiskit.transpiler import PassManager
 from qiskit.transpiler.passes import Decompose
 from .Transpilation.UnBox import UnBoxTask
-from .Transpilation.FlattenIfElseOps import FlattenIfElseOpsTask
+from .Transpilation.DecomposeIfElseOps import DecomposeIfElseOpsTask
 from .Transpilation.InsertOps import insert_before_measurement
 
 from qiskit.providers import Backend
@@ -194,7 +194,7 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
             _run = lambda circuits, **kwargs : backend.run_circuits(circuits, **kwargs).result()
         elif isinstance(backend, (QuantinuumBackend)):
             def _transpile(circuits, backend=None, coupling_map=None, optimization_level=0, **kwargs):
-                pm = PassManager([FlattenIfElseOpsTask(), Decompose()])
+                pm = PassManager([DecomposeIfElseOpsTask(), Decompose()])
                 circuits_decomposed = pm.run(circuits)
                 tket_circuits_decomposed = [qiskit_to_tk(circuit_decomposed) for circuit_decomposed in circuits_decomposed]
                 return backend.get_compiled_circuits(tket_circuits_decomposed, optimisation_level=optimization_level, **kwargs)
