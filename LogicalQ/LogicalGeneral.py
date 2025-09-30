@@ -13,6 +13,12 @@ from .Transpilation.ClearQEC import ClearQEC
 from .Transpilation.UnBox import UnBox
 
 class LogicalCircuitGeneral(QuantumCircuit):
+    """
+    Core LogicalQ representation of a logical quantum circuit.
+
+    Prototyping class for implementing and testing generalized functionality.
+    """
+
     def __init__(
         self,
         n_logical_qubits,

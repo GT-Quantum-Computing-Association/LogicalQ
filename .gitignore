@@ -113,8 +113,10 @@ venv.bak/
 # Rope project settings
 .ropeproject
 
-# mkdocs documentation
-docs/site/
+# Sphinx documentation
+doc/_build/
+doc/source/_static
+doc/source/_template
 
 # mypy
 .mypy_cache/

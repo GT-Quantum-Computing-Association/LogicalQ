@@ -19,6 +19,10 @@ from typing import TYPE_CHECKING
 from typing import Iterable
 
 class LogicalCircuit(QuantumCircuit):
+    # """
+    # Core LogicalQ representation of a logical quantum circuit.
+    # """
+    #
     def __init__(
         self,
         n_logical_qubits,
@@ -1701,7 +1705,7 @@ class LogicalStatevector(Statevector):
         label: Iterable[int],
         stabilizer_tableau: list[str],
         basis: str = "physical"
-    ) -> LogicalStatevector:
+    ):
         """Construct a LogicalStatevector from measurement counts.
 
         Args:
