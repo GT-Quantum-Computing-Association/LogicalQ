@@ -19,10 +19,10 @@ from typing import TYPE_CHECKING
 from typing import Iterable
 
 class LogicalCircuit(QuantumCircuit):
-    # """
-    # Core LogicalQ representation of a logical quantum circuit.
-    # """
-    #
+    """
+    Core LogicalQ representation of a logical quantum circuit.
+    """
+
     def __init__(
         self,
         n_logical_qubits,
@@ -1534,6 +1534,10 @@ class LogicalCircuit(QuantumCircuit):
         )
 
 class LogicalQubit(list):
+    """
+    A single LogicalQubit
+    """
+
     def __init__(self, regs=None, qregs=None, cregs=None):
         self._data = []
         self.qregs = []
@@ -1566,13 +1570,20 @@ class LogicalQubit(list):
         raise NotImplementedError("LogicalQubit is not yet fully implemented")
 
 class LogicalRegister(list):
+    """
+    A register containing LogicalQubits
+    """
+
     def __init__(self, qregs=None, cregs=None):
         self.qregs = qregs
         self.cregs = cregs
         raise NotImplementedError("LogicalRegister is not yet fully implemented")    
 
 class LogicalStatevector(Statevector):
-    """LogicalStatevector class"""
+    """
+    A LogicalStatevector
+    """
+
     def __init__(
             self,
             data: np.ndarray | QuantumCircuit | LogicalCircuit | Statevector,
@@ -1948,6 +1959,10 @@ class LogicalStatevector(Statevector):
             raise ValueError(f"'{output}' is not a valid LogicalStatevector draw method, please choose from 'text', 'latex', or 'latex_source'")
 
 class LogicalDensityMatrix(DensityMatrix):
+    """
+    A LogicalDensityMatrix
+    """
+
     def __init__(self, data, n_logical_qubits=None, label=None, stabilizer_tableau=None, dims=None):
         if isinstance(data, LogicalCircuit):
             self.logical_circuit = copy.deepcopy(data)
