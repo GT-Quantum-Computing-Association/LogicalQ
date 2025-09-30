@@ -26,6 +26,7 @@ setup(
         "docs": [
             "sphinx",
             "sphinx-autoapi",
+            "sphinx-rtd-theme",
             "python-markdown-math",
         ],
     },
