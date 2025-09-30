@@ -8,7 +8,7 @@ build:
     python: "3.13"
 
 sphinx:
-  configuration: ./source/conf.py
+  configuration: ./doc/source/conf.py
 
 # Build documentation in additional formats
 formats:
