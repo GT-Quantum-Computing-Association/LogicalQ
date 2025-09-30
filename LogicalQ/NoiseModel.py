@@ -9,8 +9,19 @@ from qiskit.circuit.library import Measure
 from .Library.Gates import gates_1q, gates_2q, get_num_params
 from .Library.HardwareModels import hardware_models_Quantinuum
 
+from typing import TYPE_CHECKING
+from typing import Iterable
+
+from .Utilities import Default
+
 # General function for constructing a Qiskit NoiseModel
-def construct_noise_model(basis_gates, n_qubits=None, qubits=None, ignore_qubits=None, **noise_params):
+def construct_noise_model(
+        basis_gates: list[str],
+        n_qubits: int = None,
+        qubits: Iterable[int] = None,
+        ignore_qubits: Iterable[int] = None,
+        **noise_params
+    ) -> NoiseModel:
     if qubits is None and n_qubits is None:
         qubits = [0]
         n_qubits = 1

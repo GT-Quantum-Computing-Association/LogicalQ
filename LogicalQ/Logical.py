@@ -15,6 +15,9 @@ from .Transpilation.UnBox import UnBox
 from qiskit import _numpy_compat
 from qiskit.exceptions import QiskitError
 
+from typing import TYPE_CHECKING
+from typing import Iterable
+
 class LogicalCircuit(QuantumCircuit):
     def __init__(
         self,
@@ -1566,18 +1569,26 @@ class LogicalRegister(list):
 
 class LogicalStatevector(Statevector):
     """LogicalStatevector class"""
-    def __init__(self, data, logical_circuit=None, n_logical_qubits=None, label=None,
-                 stabilizer_tableau=None, dims=None):
+    def __init__(
+            self,
+            data: np.ndarray | QuantumCircuit | LogicalCircuit | Statevector,
+            logical_circuit: LogicalCircuit = None,
+            n_logical_qubits: int = None,
+            label: Iterable[int] = None,
+            stabilizer_tableau: list[str] = None,
+            dims: int = None
+        ):
         """Initialize a LogicalStatevector object.
 
         Args:
             data: The data from which to construct the LogicalStatevector. This can be a
                 `LogicalCircuit` object, a qiskit `Statevector`, or a complex data vector.
-            n_logical_qubits (int): The number of logical qubits encoded in the statevector.
-            label (tuple): The label of the quantum error correction code, i.e., [[n,k,d]] (given as a
+            logical_circuit: 
+            n_logical_qubits: The number of logical qubits encoded in the statevector.
+            label: The label of the quantum error correction code, i.e., [[n,k,d]] (given as a
                 tuple), with n the number of physical qubits, k the number of logical qubits, and
                 d the distance.
-            stabilizer_tableau (list[str]): The set of stabilizers for the QECC.
+            stabilizer_tableau: The set of stabilizers for the QECC.
             dims: The subsystem dimension of the state.
         
         Raises:
@@ -1683,7 +1694,14 @@ class LogicalStatevector(Statevector):
         self._logical_decomposition = None
 
     @classmethod
-    def from_counts(cls, counts, n_logical_qubits, label, stabilizer_tableau, basis="physical"):
+    def from_counts(
+        cls,
+        counts: dict[str, int],
+        n_logical_qubits: int,
+        label: Iterable[int],
+        stabilizer_tableau: list[str],
+        basis: str = "physical"
+    ) -> LogicalStatevector:
         """Construct a LogicalStatevector from measurement counts.
 
         Args:
