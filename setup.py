@@ -16,7 +16,7 @@ setup(
         "qiskit>=2.1.0",
         "qiskit-aer",
         "qiskit_addon_utils",
-        "qiskit_ibm_runtime",
+        "qiskit_ibm_runtime==0.41.1",
         "pytket",
         "pytket-qiskit",
         "pytket-quantinuum",
