@@ -24,9 +24,9 @@ setup(
     ],
     extras_require={
         "docs": [
+            "sphinx",
+            "sphinx-autoapi",
             "python-markdown-math",
-            "mkdocstrings[python]",
-            "mkdocs-autoapi",
         ],
     },
 )
