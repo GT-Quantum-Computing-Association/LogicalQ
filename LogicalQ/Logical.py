@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import copy
 import numpy as np
 
@@ -25,10 +27,10 @@ class LogicalCircuit(QuantumCircuit):
 
     def __init__(
         self,
-        n_logical_qubits,
-        label,
-        stabilizer_tableau,
-        name=None,
+        n_logical_qubits: int,
+        label: Iterable[int],
+        stabilizer_tableau: list[str],
+        name: str = None,
     ):
         # Quantum error correcting code preparation
         self.n_logical_qubits = n_logical_qubits
@@ -107,7 +109,26 @@ class LogicalCircuit(QuantumCircuit):
 
     # @TODO - this completely ignores QEC (besides encoding), do we want to have some sort of default QEC behavior?
     @classmethod
-    def from_physical_circuit(cls, physical_circuit, label, stabilizer_tableau, name=None, max_iterations=1):
+    def from_physical_circuit(
+        cls,
+        physical_circuit: QuantumCircuit,
+        label: Iterable[int],
+        stabilizer_tableau: list[str],
+        name: str = None,
+        max_iterations: int = 1
+    ) -> LogicalCircuit:
+        """Construct a LogicalCircuit from a physical qiskit circuit.
+        
+        Args:
+            physical_circuit: The QuantumCircuit to construct from.
+            label: The QECC label.
+            stabilizer_tableau: The set of stabilizers for the QECC.
+            name: An optional name for the circuit.
+            max_iterations: Number of iterations for encoding cubits.
+        
+        Returns:
+            :py:class:`~LogicalQ.Logical.LogicalCircuit`
+        """
         logical_circuit = cls(physical_circuit.num_qubits, label, stabilizer_tableau, name)
 
         logical_circuit.encode(*list(range(physical_circuit.num_qubits)), max_iterations=max_iterations)
@@ -119,8 +140,15 @@ class LogicalCircuit(QuantumCircuit):
 
         return logical_circuit
 
-    # Add logical qubit(s) to the LogicalCircuit
-    def add_logical_qubits(self, logical_qubit_count):
+    def add_logical_qubits(
+            self,
+            logical_qubit_count: int
+        ):
+        """Add logical qubit(s) to the LogicalCircuit.
+
+        Args:
+            logical_qubit_count: The number of logical qubits to add.
+        """
         current_logical_qubit_count = len(self.logical_qregs)
 
         # @TODO - refactor to use LogicalQubit
@@ -432,10 +460,22 @@ class LogicalCircuit(QuantumCircuit):
 
         self.encoding_gate = self.encoding_circuit.to_gate(label="$U_{enc}$")
 
-    # Encodes logical qubits for a given number of iterations
-    def encode(self, *qubits, max_iterations=1, initial_states=None):
+    def encode(
+            self,
+            *qubits: Iterable[int],
+            max_iterations: int = 1,
+            initial_states: Iterable[list[int]] = None
+        ) -> bool:
         """
-        Prepare logical qubit(s) in the specified initial state
+        Prepare logical qubit(s) in the specified initial state.
+
+        Args:
+            qubits: Qubits to encode.
+            max_iterations: Number of iterations to encode.
+            initial_states: Initial states to encode in each qubit.
+        
+        Returns:
+            :py:type:`bool`: True, always
         """
 
         if self.encoding_circuit is None:
@@ -510,8 +550,15 @@ class LogicalCircuit(QuantumCircuit):
 
         return True
 
-    # Reset all ancillas associated with specified logical qubits
-    def reset_ancillas(self, logical_qubit_indices=None):
+    def reset_ancillas(
+            self,
+            logical_qubit_indices: Iterable[int] = None
+    ):
+        """Reset all ancillas associated with specified logical qubits.
+
+        Args:
+            logical_qubit_indices: Indices of logical qubits to reset. If None, then reset all.
+        """
         if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
             logical_qubit_indices = list(range(self.n_logical_qubits))
 
@@ -612,8 +659,24 @@ class LogicalCircuit(QuantumCircuit):
 
         self.reset_ancillas(logical_qubit_indices=logical_qubit_indices)
 
-    # Compute optimal QEC cycle indices
-    def optimize_qec_cycle_indices(self, logical_qubit_indices=None, constraint_model=None, ignore_existing_qec=False, clear_existing_qec=False):
+    def optimize_qec_cycle_indices(
+            self,
+            logical_qubit_indices: Iterable[int] = None,
+            constraint_model: dict[str, float] = None,
+            ignore_existing_qec: bool = False,
+            clear_existing_qec: bool = False
+    ) -> dict:
+        """Compute optimal QEC cycle indices.
+
+        Args:
+            logical_qubit_indices: Logical qubits for which to compute optimal QEC cycle indices.
+            constraint_model: Constraint model, i.e., dictionary of gadget costs for the circuit.
+            ignore_existing_qec: Whether to ignore QEC-related parameters in the constraint model.
+            clear_existing_qec: Whether to remove existing QEC cycles.
+        
+        Returns:
+            :py:type:`dict[int]`: Dictionary with optimal QEC cycle indices for each requested qubit.
+        """
         if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
             logical_qubit_indices = list(range(self.n_logical_qubits))
 
@@ -756,7 +819,22 @@ class LogicalCircuit(QuantumCircuit):
 
     # Insert QEC cycles at specified indices in the circuit data
     # @TODO - Extend the method to process qubit-specific indices for user-friendliness
-    def insert_qec_cycles(self, logical_qubit_indices=None, qec_cycle_indices=None, clear_existing_qec=False):
+    def insert_qec_cycles(
+            self,
+            logical_qubit_indices: Iterable[int] = None,
+            qec_cycle_indices: dict[int, list] | list[list] = None,
+            clear_existing_qec: bool = False
+        ) -> tuple[np.ndarray, np.ndarray]:
+        """Insert QEC cycles at specified indices in the circuit data.
+
+        logical_qubit_indices: Logical qubits for which to insert QEC cycles.
+        qec_cycle_indices: Indices at which to insert QEC cycles for each logical qubit.
+        clear_existing_qec: Whether to clear the existing QEC cycles.
+
+        Returns:
+            :py:type:`tuple[np.ndarray, np.ndarray]`: Original circuit data and data after
+                appending QEC cycles.
+        """
         # Carefully perform all checks beforehand because it's very difficult to catch errors mid-execution
 
         if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
@@ -1727,7 +1805,7 @@ class LogicalStatevector(Statevector):
             basis (str): The basis in which each respective count's vector is given, physical or logical.
         
         Returns:
-            [`LogicalStatevector`][LogicalQ.Logical.LogicalStatevector]: The normalized LogicalStatevector constructed from the counts.
+            :py:class:`~LogicalQ.Logical.LogicalStatevector` The normalized LogicalStatevector constructed from the counts.
         
         Raises:
             ValueError: if the counts format could not be parsed or if `basis` is invalid.
@@ -1796,7 +1874,7 @@ class LogicalStatevector(Statevector):
             basis (str): The basis in which each respective count's vector is given, physical or logical.
         
         Returns:
-            [`LogicalStatevector`][LogicalQ.Logical.LogicalStatevector]: The LogicalStatevector of
+            :py:class:`~LogicalQ.Logical.LogicalStatevector`: The LogicalStatevector of
                 the given basis state.
         
         Raises:
@@ -1828,9 +1906,9 @@ class LogicalStatevector(Statevector):
             atol (float): Tolerance within which to set probability amplitude to zero.
         
         Returns:
-            `np.ndarray`: The set of coefficients $\\alpha_i, \\delta$, where
-                $|\\psi\\rangle = \\sum_{x=0}^{2^n - 1}\\alpha_x|x\\rangle + \\delta|\\psi^\\perp\\rangle$,
-                where $|\\psi^\\perp\\rangle$ is the component of the state vector not in the
+            :py:type:`np.ndarray`: The set of coefficients :math:`\\alpha_i, \\delta`, where
+                :math:`|\\psi\\rangle = \\sum_{x=0}^{2^n - 1}\\alpha_x|x\\rangle + \\delta|\\psi^\\perp\\rangle`,
+                where :math:`|\\psi^\\perp\\rangle` is the component of the state vector not in the
                 codespace. Note that coefficients are returned in ascending order of value, e.g.,
                 000, 001, 010, 011, 100, 101, etc.
         """
@@ -1875,7 +1953,7 @@ class LogicalStatevector(Statevector):
             copy (bool): If `True`, then the array data is copied
         
         Returns:
-            `np.ndarray`: The [`logical_decomposition`][LogicalQ.Logical.LogicalStatvector.logical_decomposition]
+            :py:type:`np.ndarray`: The :py:meth:`~LogicalQ.Logical.LogicalStatevector.logical_decomposition`
                 if basis is logical and the statevector data otherwise.
         
         Raises:
@@ -1897,7 +1975,7 @@ class LogicalStatevector(Statevector):
             basis (str): The basis, logical or physical, in which to return the array.
         
         Returns:
-            `np.ndarray`: String representation of the statevector in the requested basis.
+            :py:type:`np.ndarray`: String representation of the statevector in the requested basis.
 
         Raises:
             ValueError: if the basis is invalid.
@@ -1924,7 +2002,7 @@ class LogicalStatevector(Statevector):
                 `latex_source`.
             
         Returns:
-            `str` or `IPython.display.Latex`: String or LaTeX representation of the statevector.
+            :py:type:`str` or :py:class:`IPython.display.Latex`: String or LaTeX representation of the statevector.
 
         Raises:
             ValueError: if the draw method is invalid.
