@@ -20,6 +20,65 @@ from qiskit.exceptions import QiskitError
 from typing import TYPE_CHECKING
 from typing import Iterable
 
+class AncillaReservoir:
+    
+    def __init__(
+        self,
+        num_ancillas,
+        label = "reservoir_qreg",
+        algorithm = "cyclic"
+    ):
+        """_summary_
+        
+        I think AncillaReservoir can support multiple allocation strategies. Below are 3 that I came up with.
+        
+        The first, "manual", is best in funky scenarios when there is an analytically optimal approach to ancilla allocation or the heuristic method fails. NOTE: probably don't need to add this as option to algorithm since request() is always available. Only allocate() needs to inherit that behavior. Maybe make it so that users will use:
+        
+        with reservoir.allocate(num_qubits):
+            code that needs ancillas
+        
+        so that the deallocation is automatic as well.
+        
+        
+        "cyclic" algorithm allocates ancillas cyclically, attempting to maximize the number of parallel gates which can be executed at once. "coupling_depdendent" algorithm accepts a coupling map and generates a heuristic algorithm to allocate based on factors such as proximity between the ancillas / target qubits.
+
+        Args:
+            num_ancillas (_type_): _description_
+            label (str, optional): _description_. Defaults to "reservoir_qreg".
+            algorithm (str, optional): _description_. Defaults to "cyclic".
+        """
+        
+        self.num_ancillas = num_ancillas
+        self.reservoir = AncillaRegister(self.num_ancillas, name=label)
+        self.allocated = self.num_ancillas * [0]
+        
+    def request(indices):
+        """
+        Manual request of ancillas by index. Supports integers or lists.
+        """
+        
+        pass
+    
+    def allocate(num_ancillas):
+        """
+        Automatic allocation of ancillas according to algorithm.
+        """
+        
+        
+        pass
+    
+    def free(indices):
+        """
+        Manually free ancillas by index. Supports integers or lists.
+        """
+        pass
+        
+    def next(num):
+        """
+        Retrieves next available ancilla (counting in ascending order of index).
+        """
+        pass
+
 class LogicalCircuit(QuantumCircuit):
     """
     Core LogicalQ representation of a logical quantum circuit.
@@ -30,6 +89,7 @@ class LogicalCircuit(QuantumCircuit):
         n_logical_qubits,
         label,
         stabilizer_tableau,
+        ancilla_budget = "default",
         name=None,
     ):
         # Quantum error correcting code preparation
@@ -46,7 +106,15 @@ class LogicalCircuit(QuantumCircuit):
             raise ValueError(f"Stabilizer lengths do not all equal the code label n ({self.n})")
 
         # @TODO - obtain an exact estimate for the number of ancilla qubits
-        self.n_ancilla_qubits = self.n_stabilizers//2
+        if ancilla_budget == "default":
+            self.n_ancilla_qubits = self.n_stabilizers//2
+        elif isinstance(ancilla_budget, int):
+            if ancilla_budget <= 2:
+                raise AssertionError("LogicalCircuit must reserve at least 2 ancilla qubits.")
+            self.n_ancilla_qubits = ancilla_budget
+        else:
+            AssertionError(f"'{ancilla_budget}' is not a valid value for argument 'ancilla_budget'.")
+            
         self.n_measure_qubits = self.n_ancilla_qubits
 
         self.flagged_stabilizers_1 = []
@@ -125,6 +193,10 @@ class LogicalCircuit(QuantumCircuit):
     def add_logical_qubits(self, logical_qubit_count):
         current_logical_qubit_count = len(self.logical_qregs)
 
+        # Create master ancilla register instead of individual ancilla registers
+        self.logical_op_reservoir = AncillaReservoir(self.num_ancillas)
+        super().add_register(self.logical_op_reservoir.get_register())
+
         # @TODO - refactor to use LogicalQubit
         for i in range(current_logical_qubit_count, current_logical_qubit_count + logical_qubit_count):
             # Physical qubits for logical qubit
@@ -132,7 +204,7 @@ class LogicalCircuit(QuantumCircuit):
             # Ancilla qubits needed for measurements
             ancilla_qreg_i = AncillaRegister(self.n_ancilla_qubits, name=f"qanc{i}")
             # Ancilla qubits needed for logical operations
-            logical_op_qreg_i = AncillaRegister(2, name=f"qlogical_op{i}")
+            #logical_op_qreg_i = AncillaRegister(2, name=f"qlogical_op{i}")
             # Classical bits needed for encoding verification
             enc_verif_creg_i = ClassicalRegister(1, name=f"cenc_verif{i}")
             # Classical bits needed for measurements
@@ -153,7 +225,7 @@ class LogicalCircuit(QuantumCircuit):
             # Add new registers to storage lists
             self.logical_qregs.append(logical_qreg_i)
             self.ancilla_qregs.append(ancilla_qreg_i)
-            self.logical_op_qregs.append(logical_op_qreg_i)
+            #self.logical_op_qregs.append(logical_op_qreg_i)
             self.enc_verif_cregs.append(enc_verif_creg_i)
             self.curr_syndrome_cregs.append(curr_syndrome_creg_i)
             self.prev_syndrome_cregs.append(prev_syndrome_creg_i)
@@ -166,7 +238,7 @@ class LogicalCircuit(QuantumCircuit):
             # Add new registers to quantum circuit
             super().add_register(logical_qreg_i)
             super().add_register(ancilla_qreg_i)
-            super().add_register(logical_op_qreg_i)
+            #super().add_register(logical_op_qreg_i)
             super().add_register(enc_verif_creg_i)
             super().add_register(curr_syndrome_creg_i)
             super().add_register(prev_syndrome_creg_i)
