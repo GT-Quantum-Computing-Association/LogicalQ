@@ -1333,7 +1333,7 @@ class LogicalCircuit(QuantumCircuit):
         with self.box(label="logical.logicalop.mcmt.default:$\\hat{MCMT}_{L}$"):
             super().append(gate.control(len(controls)), control_qubits + target_qubits)
 
-    def rx(self, targets, theta = 0.0, method = "LCU"):
+    def rx(self, targets, theta = 0.0, method = "LCU", depth = 10, recursion_degree = 1, box=True):
         """
         Logical Single-Target Rotation Gate
         
@@ -1471,7 +1471,26 @@ class LogicalCircuit(QuantumCircuit):
         else:
             print("lmao this isn't a valid method")
 
-    def append_rot_gate(self, axis = "z", theta = 0, qubit_indices = [0], label = None, return_subcircuit = False, depth = 10, recursion_degree = 1, box=True):
+    def append_S_K_approximation(self, gate, qubit_indices, recursion_degree=1, depth=10, box=True, return_subcircuit=False):
+        basis = ["s", "sdg", "t", "tdg", "h", "x", "y", "z", "cz"]
+        approx = generate_basic_approximations(basis, depth=depth)
+        skd = SolovayKitaev(recursion_degree=recursion_degree, basic_approximations=approx)
+
+        sub_qc = QuantumCircuit(len(qubit_indices))
+        sub_qc.append(gate())
+        discretized_sub_qc = skd(sub_qc)
+        box_label = #fr"S-K: R$_\text{{{axis}}}$({np.round(theta / np.pi, 2)}$\pi$)" if label == None else label    
+        
+        if box:
+            with self.box(label=f"logical.logicalop.R:{box_label}"):
+                self.compose(discretized_sub_qc, qargs=qubit_indices, inplace=True)
+        else:
+            self.compose(discretized_sub_qc, qargs=qubit_indices, inplace=True)
+            
+        if return_subcircuit:
+            return discretized_sub_qc
+
+    def _append_rot_gate_S_K(self, axis = "z", theta = 0, qubit_indices = [0], label = None, return_subcircuit = False, depth = 10, recursion_degree = 1, box=True):
         gates = {"x": (RXGate, 1), "y": (RYGate, 1), "z": (RZGate, 1), "xx": (RXXGate, 2), "yy": (RYYGate, 2), "zz": (RZZGate, 2)}
         gate_base, num_target_qubits = gates[axis]
         gate = gate_base(theta)
