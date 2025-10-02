@@ -963,7 +963,7 @@ class LogicalCircuit(QuantumCircuit):
             self.measure(range(self.n_logical_qubits), range(self.n_logical_qubits), with_error_correction=with_error_correction)
         else:
             _lqc = copy.deepcopy(self)
-            _lqc.measure_all(inplace=True, with_error_correction=True)
+            _lqc.measure_all(inplace=True, with_error_correction=with_error_correction)
             return _lqc
 
     def remove_final_measurements(self, inplace=False):
