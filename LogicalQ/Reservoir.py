@@ -1,39 +1,32 @@
 
 import numpy as np
 
-from typing import List, Iterator
+from typing import List, Iterator, Optional
 import contextlib
 
 from qiskit import AncillaRegister
 from qiskit.circuit import AncillaQubit
 
+import rustworkx as rx
+
 class AncillaReservoir:
     
     def __init__(
         self,
-        num_ancillas,
-        label = "reservoir_qreg",
-        algorithm = "cyclic",
+        num_ancillas: int,
+        label: str = "reservoir_qreg",
+        algorithm: str = "cyclic",
         backend = None
     ):
-        """_summary_
-        
-        I think AncillaReservoir can support multiple allocation strategies. Below are 3 that I came up with.
-        
-        The first, "manual", is best in funky scenarios when there is an analytically optimal approach to ancilla allocation or the heuristic method fails. NOTE: probably don't need to add this as option to algorithm since request() is always available. Only allocate() needs to inherit that behavior. Maybe make it so that users will use:
-        
-        with reservoir.allocate(num_qubits):
-            code that needs ancillas
-        
-        so that the deallocation is automatic as well.
-        
-        
-        "cyclic" algorithm allocates ancillas cyclically, attempting to maximize the number of parallel gates which can be executed at once. "coupling_depdendent" algorithm accepts a coupling map and generates a heuristic algorithm to allocate based on factors such as proximity between the ancillas / target qubits.
+        """
+        Wrapper for AncillaRegister that allows for intelligent qubit allocation. Currently supports manual allocation, as well as two automatic algorithms:
+            - "cyclic": allocates ancillas cyclically, attempting to maximize the number of parallel gates which can be executed at once
+            - "min_path": when a coupling map is specified, we calculate the ancillas that are the minimum distance to the targets to in an attempt to minimize the necessary number of SWAP operations during compilation
 
         Args:
-            num_ancillas (_type_): _description_
-            label (str, optional): _description_. Defaults to "reservoir_qreg".
-            algorithm (str, optional): _description_. Defaults to "cyclic".
+            num_ancillas (int): Number of ancillas in reservoir.
+            label (str, optional): Name of the internal AncillaRegister object. Defaults to "reservoir_qreg".
+            algorithm (str, optional): Algorithm used by allocate(). Defaults to "cyclic".
         """
         
         # Saving kwargs from __init__
@@ -49,10 +42,25 @@ class AncillaReservoir:
         # Cyclic algorithm
         self._flag = 0 # Track which index is currently first free
         
+        # Coupling-map heuristic
+        self._distance_matrix = None
+        if backend:
+            coupling_list = backend.configuration().coupling_map
+            self._coupling_map = rx.PyGraph()
+            self._coupling_map.add_nodes_from(range(backend.configuration().num_qubits))
+            self._coupling_map.add_edges_from_no_data([(c[0], c[1]) for c in coupling_list])
+            
+            # pre-calculate all-pairs shortest paths (i think this scales poorly? may remove)
+            self._distance_matrix = rx.graph_all_pairs_shortest_path_lengths(self._coupling_map)
+        
     @contextlib.contextmanager
-    def allocate(self, num_qubits) -> Iterator[List[AncillaQubit]]:
+    def allocate(self, num_qubits, targets: Optional[List[int]] = None) -> Iterator[List[AncillaQubit]]:
         """
         Context manager to safely allocate and free ancilla qubits according to automatic algorithm.
+        
+        Args:
+            num_qubits (int): Number of qubits to allocate.
+            targets (Optional[List[int]]): If working with a choice of algorithm that is context-dependent (e.g. 'min_path'), provide a list of targets that informs the algorithm.
         
         Example:
         | reservoir = AncillaReservoir(10)
@@ -61,13 +69,10 @@ class AncillaReservoir:
         |     # Do whatever with your ancilla qubits...
         |     # Ancillas are automatically deallocated when out of scope.
         """
-        
-        if self._algorithm != "cyclic":
-            raise NotImplementedError(f"Allocation algorithm '{self._algorithm}' is not implemented.")
          
         allocated_indices = []
          
-        if self._algorithm == "cyclic":
+        if self._algorithm == "cyclic" or targets == None:
             # Get all free indices
             free_indices = np.where(self.status == "free")[0]
             
@@ -82,17 +87,35 @@ class AncillaReservoir:
             indices_to_take = [(start_offset + i) % num_free for i in range(num_qubits)]
             
             allocated_indices = free_indices[indices_to_take]
-        
-        if self._algorithm == "coupling_based":
-            # @TODO develop some sort of heuristic based on coupling map
             
-            pass
-        
-        try:
-            self.status[allocated_indices] = "busy"
+            # Move flag
             last_allocated_index = allocated_indices[-1]
             self._flag = (last_allocated_index + 1) % self._num_ancillas
+        
+        elif self._algorithm == "min_path":
+            if self._distance_matrix is None:
+                raise ValueError("Cannot use 'min_path' algorithm without a backend.")
+            if targets is None:
+                raise ValueError("'min_path' algorithm requires target data qubit indices.")
             
+            # Score each free ancilla based on its total distance to all targets
+            costs = []
+            for ancilla_idx in free_indices:
+                # Assuming reservoir indices map directly to the backend's physical qubit indices?
+                # @TODO: check above is true
+                total_distance = sum(self._distance_matrix[ancilla_idx][target_idx] for target_idx in targets)
+                costs.append((ancilla_idx, total_distance))
+            
+            # Sort by cost (lower is better) and take the top N
+            costs.sort(key=lambda x: x[1])
+            allocated_indices = [idx for idx, cost in costs[:num_qubits]]
+            
+        else:
+            raise NotImplementedError(f"Allocation algorithm '{algorithm}' is not implemented.")
+        
+        # Handle allocation
+        try:
+            self.status[allocated_indices] = "busy"
             yield [self._reservoir[i] for i in allocated_indices]
         finally:
             self.status[allocated_indices] = "free"
@@ -105,8 +128,7 @@ class AncillaReservoir:
             indices = [indices]
         
         # Check that user is not requesting qubit that has already been allocated
-        is_requesting_busy_qubit = np.isin(self.status[indices], "busy")
-        if is_requesting_busy_qubit:
+        if np.any(self.status[indices] == "busy"):
             raise ValueError(f"Failure to return requested qubits, as one or more requested qubits reports status 'busy'.")
             
         for i in indices:
@@ -116,14 +138,13 @@ class AncillaReservoir:
     
     def free(self, indices):
         """
-        Manually free ancillas by index. Supports integers or lists. Not recommended, users should use allocate() when possible. Using free() incorrectly can result in ancillas which are unintentionally accessed by multiple subcircuits simultaneously.
+        Manually free ancillas by index. Supports integers or lists. Not recommended, users should use allocate() when possible. Using free() incorrectly may result in a race condition.
         """
         if isinstance(indices, int):
             indices = [indices]
         
         # Check that user is not trying to free an already free qubit
-        is_requesting_free_qubit = np.isin(self.status[indices], "free")
-        if is_requesting_free_qubit:
+        if np.any(self.status[indices] == "free"):
             print("WARNING: Attempting to free qubits which are already free. This will not throw an error, but perhaps check that you are freeing the correct index?")
         
         for i in indices:
@@ -136,7 +157,7 @@ class AncillaReservoir:
 
         free_indices = np.nonzero(self.status == "free")[0]
 
-        if free_indices == []:
+        if free_indices.size == 0:
             raise ValueError("Not enough free ancillas available.")
         else:
             next_free = free_indices[0]
