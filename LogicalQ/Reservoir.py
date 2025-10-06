@@ -39,43 +39,63 @@ class AncillaReservoir:
         # Saving kwargs from __init__
         self._num_ancillas = num_ancillas
         self._algorithm = algorithm
-        self._reservoir = AncillaRegister(self.num_ancillas, name=label)
+        self._reservoir = AncillaRegister(self._num_ancillas, name=label)
         self._coupling_map = None if (backend is None) else backend.configuration().coupling_map
         
         # Metadata
-        self.status = np.array(self.num_ancillas * ["free"])
+        self.status = np.array(self._num_ancillas * ["free"])
         self._allocation_history = []
         
         # Cyclic algorithm
         self._flag = 0 # Track which index is currently first free
         
     @contextlib.contextmanager
-    def allocate(self, num_ancillas) -> Iterator[List[AncillaQubit]]:
-        """Context manager to safely allocate and free ancilla qubits according to automatic algorithm."""
+    def allocate(self, num_qubits) -> Iterator[List[AncillaQubit]]:
+        """
+        Context manager to safely allocate and free ancilla qubits according to automatic algorithm.
         
-        alloc_indices = []
-        alloc_qubits = []
+        Example:
+        | reservoir = AncillaReservoir(10)
+        | with reservoir.allocate(2) as ancillas:
+        |     ancilla_A, ancilla_B = ancillas
+        |     # Do whatever with your ancilla qubits...
+        |     # Ancillas are automatically deallocated when out of scope.
+        """
         
-        if self.algorithm == "cyclic":
+        if self._algorithm != "cyclic":
+            raise NotImplementedError(f"Allocation algorithm '{self._algorithm}' is not implemented.")
+         
+        allocated_indices = []
+         
+        if self._algorithm == "cyclic":
+            # Get all free indices
+            free_indices = np.where(self.status == "free")[0]
             
-            alloc_indices = list(range(self.flag, self.flag + num_ancillas))
-            alloc_qubits = [self._reservoir[idx % self.num_ancillas] for idx in alloc_indices]
+            if len(free_indices) < num_qubits:
+                raise ValueError(f"Cannot allocate {num_qubits} qubits, only {len(free_indices)} are free.")
+
+            # Find first free after flag
+            start_offset = np.searchsorted(free_indices, self._flag)
             
-            self.flag = (self.flag + num_ancillas) % self.num_ancillas
-            #return self.reservoir[*alloc_qubits]
+            # Select indices to allocate
+            num_free = len(free_indices)
+            indices_to_take = [(start_offset + i) % num_free for i in range(num_qubits)]
+            
+            allocated_indices = free_indices[indices_to_take]
         
-        if self.algorithm == "coupling_based":
+        if self._algorithm == "coupling_based":
             # @TODO develop some sort of heuristic based on coupling map
             
             pass
         
         try:
-            for i in alloc_indices:
-                self._status[i] = "busy"
-            yield alloc_qubits
+            self.status[allocated_indices] = "busy"
+            last_allocated_index = allocated_indices[-1]
+            self._flag = (last_allocated_index + 1) % self._num_ancillas
+            
+            yield [self._reservoir[i] for i in allocated_indices]
         finally:
-            for i in alloc_indices:
-                self._status[i] = "free"
+            self.status[allocated_indices] = "free"
         
     def request(self, indices) -> List[AncillaQubit]:
         """
@@ -85,12 +105,12 @@ class AncillaReservoir:
             indices = [indices]
         
         # Check that user is not requesting qubit that has already been allocated
-        is_requesting_busy_qubit = np.isin(self._status[indices], "busy")
+        is_requesting_busy_qubit = np.isin(self.status[indices], "busy")
         if is_requesting_busy_qubit:
             raise ValueError(f"Failure to return requested qubits, as one or more requested qubits reports status 'busy'.")
             
         for i in indices:
-            self._status[i] = "busy"
+            self.status[i] = "busy"
         
         return self.reservoir[indices]
     
@@ -102,23 +122,28 @@ class AncillaReservoir:
             indices = [indices]
         
         # Check that user is not trying to free an already free qubit
-        is_requesting_free_qubit = np.isin(self._status[indices], "free")
+        is_requesting_free_qubit = np.isin(self.status[indices], "free")
         if is_requesting_free_qubit:
             print("WARNING: Attempting to free qubits which are already free. This will not throw an error, but perhaps check that you are freeing the correct index?")
         
         for i in indices:
-            self._status[i] = "free"
+            self.status[i] = "free"
         
     def next(self) -> AncillaQubit:
         """
         Retrieves next available ancilla (counting in ascending order of index).
         """
 
-        free_indices = np.nonzero(self._status == "free")[0]
+        free_indices = np.nonzero(self.status == "free")[0]
 
         if free_indices == []:
             raise ValueError("Not enough free ancillas available.")
         else:
             next_free = free_indices[0]
-            self._status[next_free] = "busy"
+            self.status[next_free] = "busy"
             return self._reservoir[next_free]
+        
+    def get_free_indices(self):
+        """Returns a list of indices that have not yet been allocated."""
+        
+        return np.where(self.status == "free")[0]
