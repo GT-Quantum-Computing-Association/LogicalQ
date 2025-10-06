@@ -20,65 +20,6 @@ from qiskit.exceptions import QiskitError
 from typing import TYPE_CHECKING
 from typing import Iterable
 
-class AncillaReservoir:
-    
-    def __init__(
-        self,
-        num_ancillas,
-        label = "reservoir_qreg",
-        algorithm = "cyclic"
-    ):
-        """_summary_
-        
-        I think AncillaReservoir can support multiple allocation strategies. Below are 3 that I came up with.
-        
-        The first, "manual", is best in funky scenarios when there is an analytically optimal approach to ancilla allocation or the heuristic method fails. NOTE: probably don't need to add this as option to algorithm since request() is always available. Only allocate() needs to inherit that behavior. Maybe make it so that users will use:
-        
-        with reservoir.allocate(num_qubits):
-            code that needs ancillas
-        
-        so that the deallocation is automatic as well.
-        
-        
-        "cyclic" algorithm allocates ancillas cyclically, attempting to maximize the number of parallel gates which can be executed at once. "coupling_depdendent" algorithm accepts a coupling map and generates a heuristic algorithm to allocate based on factors such as proximity between the ancillas / target qubits.
-
-        Args:
-            num_ancillas (_type_): _description_
-            label (str, optional): _description_. Defaults to "reservoir_qreg".
-            algorithm (str, optional): _description_. Defaults to "cyclic".
-        """
-        
-        self.num_ancillas = num_ancillas
-        self.reservoir = AncillaRegister(self.num_ancillas, name=label)
-        self.allocated = self.num_ancillas * [0]
-        
-    def request(indices):
-        """
-        Manual request of ancillas by index. Supports integers or lists.
-        """
-        
-        pass
-    
-    def allocate(num_ancillas):
-        """
-        Automatic allocation of ancillas according to algorithm.
-        """
-        
-        
-        pass
-    
-    def free(indices):
-        """
-        Manually free ancillas by index. Supports integers or lists.
-        """
-        pass
-        
-    def next(num):
-        """
-        Retrieves next available ancilla (counting in ascending order of index).
-        """
-        pass
-
 class LogicalCircuit(QuantumCircuit):
     """
     Core LogicalQ representation of a logical quantum circuit.
