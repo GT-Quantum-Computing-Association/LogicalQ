@@ -776,7 +776,7 @@ def qec_cycle_circuit_scaling_experiment(circuit_input, qecc, constraint_model=N
 
     return all_data
 
-def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, qecc, constraint_scan_keys, constraint_scan_val_lists, error_scan_keys, error_scan_val_lists, backend="aer_simulator", method="density_matrix", compute_exact=False, shots=1024, with_mp=False, save_dir=None, save_filename=None):
+def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, qecc, constraint_scan_keys, constraint_scan_val_lists, error_scan_keys, error_scan_val_lists, compute_exact=False, with_mp=False, save_dir=None, save_filename=None, **kwargs):
     if isinstance(circuit_input, LogicalCircuit):
         raise NotImplementedError("LogicalCircuit inputs are not accepted because the original physical circuit(s) are also necessary for this experiment.")
     elif isinstance(circuit_input, QuantumCircuit):
@@ -827,12 +827,8 @@ def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, qecc, c
     atexit.register(save_progress)
 
     for c, constraint_model in enumerate(constraint_models):
-        sub_data = {
-            "circuit": circuit_input,
-            "constraint_model": constraint_model,
-            "results_physical": None,
-            "results_logical": None,
-        }
+        all_data[c]["circuit_physical"] = circuit_input
+        all_data[c]["constraint_model"] = constraint_model
 
         # Benchmark physical circuit
         results_physical = noise_scaling_experiment(
@@ -857,7 +853,8 @@ def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, qecc, c
             noise_model_input=noise_model_input,
             error_scan_keys=error_scan_keys,
             error_scan_val_lists=error_scan_val_lists,
-            backend=backend, method=method, compute_exact=False, shots=shots
+            compute_exact=False,
+            **kwargs
         )
         all_data[c]["results_logical"] = results_logical
 
