@@ -30,7 +30,7 @@ class LogicalCircuit(QuantumCircuit):
         self,
         n_logical_qubits: int,
         label: Iterable[int],
-        stabilizer_tableau: list[str],
+        stabilizer_tableau: Iterable[str],
         name: str = None,
     ):
         # Quantum error correcting code preparation
@@ -114,7 +114,7 @@ class LogicalCircuit(QuantumCircuit):
         cls,
         physical_circuit: QuantumCircuit,
         label: Iterable[int],
-        stabilizer_tableau: list[str],
+        stabilizer_tableau: Iterable[str],
         name: str = None,
         max_iterations: int = 1
     ) -> LogicalCircuit:
@@ -1796,7 +1796,7 @@ class LogicalStatevector(Statevector):
             logical_circuit: LogicalCircuit = None,
             n_logical_qubits: int = None,
             label: Iterable[int] = None,
-            stabilizer_tableau: list[str] = None,
+            stabilizer_tableau: Iterable[str] = None,
             dims: int = None
         ):
         """Initialize a LogicalStatevector object.
@@ -1920,7 +1920,7 @@ class LogicalStatevector(Statevector):
         counts: dict[str, int],
         n_logical_qubits: int,
         label: Iterable[int],
-        stabilizer_tableau: list[str],
+        stabilizer_tableau: Iterable[str],
         basis: str = "physical"
     ) -> LogicalStatevector:
         """Construct a LogicalStatevector from measurement counts.
@@ -1929,7 +1929,7 @@ class LogicalStatevector(Statevector):
             counts (dict): The set of counts measured from a circuit execution.
             n_logical_qubits (int): The number of logical qubits.
             label (tuple): The quantum error correction code [[n,k,d]] (given as a tuple).
-            stabilizer_tableau (list[str]): The set of stabilizers for the QECC.
+            stabilizer_tableau (Iterable[str]): The set of stabilizers for the QECC.
             basis (str): The basis in which each respective count's vector is given, physical or logical.
         
         Returns:
@@ -1998,7 +1998,7 @@ class LogicalStatevector(Statevector):
             basis_str (str): Either a binary bitstring or its hex equivalent to identify the basis.
             n_logical_qubits (int): Number of logical qubits.
             label (tuple): The label of the quantum error correction code [[n,k,d]] (as a tuple).
-            stabilizer_tableau (list[str]): The set of stabilizers for the QECC.
+            stabilizer_tableau (Iterable[str]): The set of stabilizers for the QECC.
             basis (str): The basis in which each respective count's vector is given, physical or logical.
         
         Returns:
