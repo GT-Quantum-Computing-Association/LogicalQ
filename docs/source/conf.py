@@ -16,6 +16,7 @@ release = "7.1.3"
 
 extensions = [
     "autoapi.extension",
+    "sphinx.ext.napoleon",
 ]
 
 templates_path = ["_templates"]
@@ -53,6 +54,8 @@ autoapi_ignore = [
 autodoc_inherit_docstrings = False
 
 autoapi_python_class_content = "class"
+
+autodoc_typehints = 'description'
 
 import inspect
 from qiskit.circuit import QuantumCircuit # We need this to check its module path

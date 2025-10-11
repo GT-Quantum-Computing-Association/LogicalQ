@@ -5,6 +5,7 @@ import numpy as np
 
 from qiskit import QuantumRegister, AncillaRegister, ClassicalRegister, QuantumCircuit
 from qiskit.circuit import Bit, Measure
+from qiskit.circuit.quantumcircuitdata import QuantumCircuitData
 from qiskit.circuit.classical import expr
 from qiskit.quantum_info import Statevector, DensityMatrix, Pauli, partial_trace, state_fidelity
 from qiskit_addon_utils.slicing import slice_by_depth
@@ -27,10 +28,10 @@ class LogicalCircuit(QuantumCircuit):
 
     def __init__(
         self,
-        n_logical_qubits,
-        label,
-        stabilizer_tableau,
-        name=None,
+        n_logical_qubits: int,
+        label: Iterable[int],
+        stabilizer_tableau: Iterable[str],
+        name: str = None,
     ):
         # Quantum error correcting code preparation
         self.n_logical_qubits = n_logical_qubits
@@ -109,7 +110,26 @@ class LogicalCircuit(QuantumCircuit):
 
     # @TODO - this completely ignores QEC (besides encoding), do we want to have some sort of default QEC behavior?
     @classmethod
-    def from_physical_circuit(cls, physical_circuit, label, stabilizer_tableau, name=None, max_iterations=1):
+    def from_physical_circuit(
+        cls,
+        physical_circuit: QuantumCircuit,
+        label: Iterable[int],
+        stabilizer_tableau: Iterable[str],
+        name: str = None,
+        max_iterations: int = 1
+    ) -> LogicalCircuit:
+        """Construct a LogicalCircuit from a physical qiskit circuit.
+        
+        Args:
+            physical_circuit: The QuantumCircuit to construct from.
+            label: The QECC label.
+            stabilizer_tableau: The set of stabilizers for the QECC.
+            name: An optional name for the circuit.
+            max_iterations: Number of times, to attempt to encod qubits.
+        
+        Returns:
+            The LogicalCircuit constructed from the physical.
+        """
         logical_circuit = cls(physical_circuit.num_qubits, label, stabilizer_tableau, name)
 
         logical_circuit.encode(*list(range(physical_circuit.num_qubits)), max_iterations=max_iterations)
@@ -121,8 +141,15 @@ class LogicalCircuit(QuantumCircuit):
 
         return logical_circuit
 
-    # Add logical qubit(s) to the LogicalCircuit
-    def add_logical_qubits(self, logical_qubit_count):
+    def add_logical_qubits(
+            self,
+            logical_qubit_count: int
+        ):
+        """Add logical qubit(s) to the LogicalCircuit.
+
+        Args:
+            logical_qubit_count: The number of logical qubits to add.
+        """
         current_logical_qubit_count = len(self.logical_qregs)
 
         # @TODO - refactor to use LogicalQubit
@@ -185,6 +212,8 @@ class LogicalCircuit(QuantumCircuit):
     ####################################
 
     def group_stabilizers(self):
+        """Generate the stabilizers for the code.
+        """
         # @TODO - determine how stabilizers are generally selected for flagged measurements
         #       - the below is a heuristic which happens to work for the Steane code and potentially all CSS codes, but maybe not all stabilizer codes in general
 
@@ -199,8 +228,9 @@ class LogicalCircuit(QuantumCircuit):
             if 'Z' in self.stabilizer_tableau[i]:
                 self.z_stabilizers.append(i)
 
-    # Function which generates encoding circuit and logical operators for a given tableau
     def generate_code(self):
+        """Generate the encoding circuit and logical operators for the selected tableau.
+        """
         m = len(self.stabilizer_tableau)
 
         # Step 1: Assemble generator matrix
@@ -434,10 +464,22 @@ class LogicalCircuit(QuantumCircuit):
 
         self.encoding_gate = self.encoding_circuit.to_gate(label="$U_{enc}$")
 
-    # Encodes logical qubits for a given number of iterations
-    def encode(self, *qubits, max_iterations=1, initial_states=None):
+    def encode(
+            self,
+            *qubits: Iterable[int],
+            max_iterations: int = 1,
+            initial_states: Iterable[list[int]] = None
+    ) -> bool:
         """
-        Prepare logical qubit(s) in the specified initial state
+        Prepare logical qubit(s) in the specified initial state.
+
+        Args:
+            qubits: Qubits to encode.
+            max_iterations: Maximum number of times, to try to encode data.
+            initial_states: Initial states to encode in each qubit.
+        
+        Returns:
+            :py:type:`bool`: True, always
         """
 
         if self.encoding_circuit is None:
@@ -512,15 +554,27 @@ class LogicalCircuit(QuantumCircuit):
 
         return True
 
-    # Reset all ancillas associated with specified logical qubits
-    def reset_ancillas(self, logical_qubit_indices=None):
+    def reset_ancillas(
+            self,
+            logical_qubit_indices: Iterable[int] = None
+    ):
+        """Reset all ancillas associated with specified logical qubits.
+
+        Args:
+            logical_qubit_indices: Indices of logical qubits to reset. If None, then reset all.
+        """
         if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
             logical_qubit_indices = list(range(self.n_logical_qubits))
 
         for q in logical_qubit_indices:
             self.reset(self.ancilla_qregs[q])
 
-    def steane_flagged_circuit1(self, logical_qubit_indices):
+    def steane_flagged_circuit1(
+            self,
+            logical_qubit_indices: Iterable[int]
+    ):
+        """Measure first set of flagged syndromes for the Steane code.
+        """
         for q in logical_qubit_indices:
             super().barrier()
             super().h(self.ancilla_qregs[q][0])
@@ -541,7 +595,12 @@ class LogicalCircuit(QuantumCircuit):
             super().h(self.ancilla_qregs[q][0])
             super().barrier()
 
-    def steane_flagged_circuit2(self, logical_qubit_indices):
+    def steane_flagged_circuit2(
+            self,
+            logical_qubit_indices: Iterable[int]
+    ):
+        """Measure second set of flagged syndromes for the Steane code.
+        """
         for q in logical_qubit_indices:
             super().barrier()
             super().h(self.ancilla_qregs[q][1])
@@ -564,8 +623,17 @@ class LogicalCircuit(QuantumCircuit):
             super().h(self.ancilla_qregs[q][2])
             super().barrier()
 
-    # Measure specified specifiers to the circuit as controlled Pauli operators
-    def measure_stabilizers(self, logical_qubit_indices=None, stabilizer_indices=None):
+    def measure_stabilizers(
+            self,
+            logical_qubit_indices: Iterable[int] = None,
+            stabilizer_indices: Iterable[int] = None
+    ):
+        """Measure specified stabilizers to the circuit as controlled Pauli operators.
+
+        Args:
+            logical_qubit_indices: Indices of logical qubits for which to measure stabilizers.
+            stabilizer_indices: Indices of stabilizers to measure.
+        """
         if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
             logical_qubit_indices = list(range(self.n_logical_qubits))
 
@@ -584,8 +652,23 @@ class LogicalCircuit(QuantumCircuit):
                         super().append(CPauliInstruction, [self.ancilla_qregs[q][s], self.logical_qregs[q][p]])
                 super().h(self.ancilla_qregs[q][s])
 
-    # Measure flagged or unflagged syndrome differences for specified logical qubits and stabilizers
-    def measure_syndrome_diff(self, logical_qubit_indices=None, stabilizer_indices=None, flagged=False, steane_flag_1=False, steane_flag_2=False):
+    def measure_syndrome_diff(
+            self,
+            logical_qubit_indices: Iterable[int] = None,
+            stabilizer_indices: Iterable[int] = None,
+            flagged: bool = False,
+            steane_flag_1: bool = False,
+            steane_flag_2: bool = False
+    ):
+        """Measure flagged or unflagged syndrome differences for specified logical qubits and stabilizers.
+
+        Args:
+            logical_qubit_indices: Logical qubits for which to measure indices.
+            stabilizer_indices: Stabilizers for which to measure indices.
+            flagged: Whether to measure flagged or unflagged differences.
+            steane_flag_1: Whether to measure the first Steane code syndrome. Takes priority over `steane_flag_2`.
+            steane_flag_2: Whether to measure the second Steane code syndrome. Ignored if `steane_flag_1` is True.
+        """
         if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
             logical_qubit_indices = list(range(self.n_logical_qubits))
 
@@ -614,8 +697,24 @@ class LogicalCircuit(QuantumCircuit):
 
         self.reset_ancillas(logical_qubit_indices=logical_qubit_indices)
 
-    # Compute optimal QEC cycle indices
-    def optimize_qec_cycle_indices(self, logical_qubit_indices=None, constraint_model=None, ignore_existing_qec=False, clear_existing_qec=False):
+    def optimize_qec_cycle_indices(
+            self,
+            logical_qubit_indices: Iterable[int] = None,
+            constraint_model: dict[str, float] = None,
+            ignore_existing_qec: bool = False,
+            clear_existing_qec: bool = False
+    ) -> dict[int,int]:
+        """Compute optimal QEC cycle indices.
+
+        Args:
+            logical_qubit_indices: Logical qubits for which to compute optimal QEC cycle indices.
+            constraint_model: Constraint model, i.e., dictionary of gadget costs for the circuit.
+            ignore_existing_qec: Whether to ignore QEC-related parameters in the constraint model.
+            clear_existing_qec: Whether to remove existing QEC cycles.
+        
+        Returns:
+            Dictionary with optimal QEC cycle indices for each requested qubit.
+        """
         if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
             logical_qubit_indices = list(range(self.n_logical_qubits))
 
@@ -758,7 +857,22 @@ class LogicalCircuit(QuantumCircuit):
 
     # Insert QEC cycles at specified indices in the circuit data
     # @TODO - Extend the method to process qubit-specific indices for user-friendliness
-    def insert_qec_cycles(self, logical_qubit_indices=None, qec_cycle_indices=None, clear_existing_qec=False):
+    def insert_qec_cycles(
+            self,
+            logical_qubit_indices: Iterable[int] = None,
+            qec_cycle_indices: dict[int, list] | list[list] = None,
+            clear_existing_qec: bool = False
+        ) -> tuple[QuantumCircuitData, QuantumCircuitData]:
+        """Insert QEC cycles at specified indices in the circuit data.
+
+        Args:
+            logical_qubit_indices: Logical qubits for which to insert QEC cycles.
+            qec_cycle_indices: Indices at which to insert QEC cycles for each logical qubit.
+            clear_existing_qec: Whether to clear the existing QEC cycles.
+
+        Returns:
+            Original circuit data and data after appending QEC cycles.
+        """
         # Carefully perform all checks beforehand because it's very difficult to catch errors mid-execution
 
         if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
@@ -811,8 +925,18 @@ class LogicalCircuit(QuantumCircuit):
 
         return _data, self.data
 
-    # Append a QEC cycle to the end of the circuit
-    def append_qec_cycle(self, logical_qubit_indices=None):
+    def append_qec_cycle(
+            self,
+            logical_qubit_indices: Iterable[int] = None
+    ) -> tuple[dict[int,int], dict[int,int]]:
+        """Append a QEC cycle to the end of the circuit.
+
+        Args:
+            logical_qubit_indices: Logical qubits for which to add QEC cycles.
+        
+        Returns:
+            Qubits and indices with QEC cycles, before and after appending.
+        """
         # Use hardcoded flagged circuits for Steane code
         use_steane_flagged_circuits = True if (self.n, self.k, self.d) == (7,1,3) else False
 
@@ -866,12 +990,36 @@ class LogicalCircuit(QuantumCircuit):
 
         return self.qec_cycle_indices_initial, self.qec_cycle_indices_final
 
-    # Clear QEC cycles (either specified or all) on specified logical qubits
-    def clear_qec_cycles(self, logical_qubit_indices=None, qec_cycle_indices=None):
+    def clear_qec_cycles(
+            self,
+            logical_qubit_indices: Iterable[int] = None,
+            qec_cycle_indices: Iterable[int ] = None
+    ) -> NotImplementedError:
+        """Clear QEC cycles (either specified or all) on specified logical qubits.
+
+        Args:
+            logical_qubit_indices: Logical qubits from which to clear QEC cycles. Clears all if :py:type:`None`.
+            qec_cycle_indices: QEC cycles to clear. Clears all if :py:type:`None`
+        
+        Returns:
+            This method is not yet implemented.
+        """
         return NotImplementedError("clear_qec_cycles is not yet implemented")
 
     # @TODO - determine appropriate syndrome decoding mappings dynamically
-    def apply_decoding(self, logical_qubit_indices, stabilizer_indices, with_flagged):
+    def apply_decoding(
+            self,
+            logical_qubit_indices: Iterable[int],
+            stabilizer_indices: Iterable[int],
+            with_flagged: bool
+    ):
+        """Decode the syndrome measurements to determine the correction to apply.
+
+        Args:
+            logical_qubit_indices: Logical qubits to apply decoding to.
+            stabilizer_indices: Stabilizers for which to decode syndromes.
+            with_flagged: Whether to decode with flagged or unflagged syndrome differences.
+        """
         for q in logical_qubit_indices:
             syn_diff = [self.unflagged_syndrome_diff_cregs[q][x] for x in stabilizer_indices]
             # Determines index of pauli frame to be modified
@@ -908,7 +1056,23 @@ class LogicalCircuit(QuantumCircuit):
                 with _else:
                     pass
 
-    def measure(self, logical_qubit_indices, cbit_indices, with_error_correction=True):
+    def measure(
+            self,
+            logical_qubit_indices: Iterable[int],
+            cbit_indices: Iterable[int],
+            with_error_correction: bool = True
+    ):
+        """Measure specified qubits (in the Z basis) into classical bits.
+
+        Args:
+            logical_qubit_indices: Logical qubits to measure.
+            cbit_indices: Classical bits in which to record measurements.
+            with_error_correction: Whether to apply QEC.
+        
+        Raises:
+            :class:`ValueError`: if `logical_qubit_indices` or `cbit_indices` is not an iterable or
+                if number of qubits and cbits does not match. 
+        """
         if not hasattr(logical_qubit_indices, "__iter__"):
             raise ValueError("Logical qubit indices must be an iterable!")
 
@@ -958,7 +1122,20 @@ class LogicalCircuit(QuantumCircuit):
                     with _else:
                         pass
 
-    def measure_all(self, inplace=True, with_error_correction=True):
+    def measure_all(
+            self,
+            inplace: bool = True,
+            with_error_correction: bool = True
+    ) -> LogicalCircuit:
+        """Add measurements to all qubits.
+
+        Args:
+            inplace: Whether to perform measurements on this circuit or a copy. If `False`, a new circuit is returned.
+            with_error_correction: Whether to perform measurements with QEC.
+        
+        Returns:
+            Circuit with measurements, if `inplace = False`.
+        """
         if inplace:
             self.measure(range(self.n_logical_qubits), range(self.n_logical_qubits), with_error_correction=with_error_correction)
         else:
@@ -966,7 +1143,21 @@ class LogicalCircuit(QuantumCircuit):
             _lqc.measure_all(inplace=True, with_error_correction=with_error_correction)
             return _lqc
 
-    def remove_final_measurements(self, inplace=False):
+    def remove_final_measurements(
+            self,
+            inplace: bool = False
+    ) -> LogicalCircuit:
+        """Remove final measurements from circuit.
+
+        Args:
+            inplace: Whether to remove measurements in place, i.e., for this circuit (not supported).
+
+        Raises:
+            `NotImplementedError`: if in-place measurement is attempted.
+        
+        Returns:
+            The circuit without measurements.
+        """
         if inplace:
             raise NotImplementedError("Inplace measurement removal is not supported")
 
@@ -978,7 +1169,20 @@ class LogicalCircuit(QuantumCircuit):
 
         return lqc_no_meas
 
-    def get_logical_counts(self, physical_counts, logical_qubit_indices=None):
+    def get_logical_counts(
+            self,
+            physical_counts: Iterable[int],
+            logical_qubit_indices: Iterable[int] = None
+    ) -> dict[str, int]:
+        """Get logical counts from physical counts.
+
+        Args:
+            physical_counts: Physical counts to convert to logical counts.
+            logical_qubit_indices: Logical qubits to get counts for. If `None`, then get counts for all.
+
+        Returns:
+            Logical qubit counts.
+        """
         if logical_qubit_indices is None:
             logical_qubit_indices = range(self.n_logical_qubits)
 
@@ -1592,7 +1796,7 @@ class LogicalStatevector(Statevector):
             logical_circuit: LogicalCircuit = None,
             n_logical_qubits: int = None,
             label: Iterable[int] = None,
-            stabilizer_tableau: list[str] = None,
+            stabilizer_tableau: Iterable[str] = None,
             dims: int = None
         ):
         """Initialize a LogicalStatevector object.
@@ -1716,20 +1920,20 @@ class LogicalStatevector(Statevector):
         counts: dict[str, int],
         n_logical_qubits: int,
         label: Iterable[int],
-        stabilizer_tableau: list[str],
+        stabilizer_tableau: Iterable[str],
         basis: str = "physical"
-    ):
+    ) -> LogicalStatevector:
         """Construct a LogicalStatevector from measurement counts.
 
         Args:
             counts (dict): The set of counts measured from a circuit execution.
             n_logical_qubits (int): The number of logical qubits.
             label (tuple): The quantum error correction code [[n,k,d]] (given as a tuple).
-            stabilizer_tableau (list[str]): The set of stabilizers for the QECC.
+            stabilizer_tableau (Iterable[str]): The set of stabilizers for the QECC.
             basis (str): The basis in which each respective count's vector is given, physical or logical.
         
         Returns:
-            [`LogicalStatevector`][LogicalQ.Logical.LogicalStatevector]: The normalized LogicalStatevector constructed from the counts.
+            The normalized LogicalStatevector constructed from the counts.
         
         Raises:
             ValueError: if the counts format could not be parsed or if `basis` is invalid.
@@ -1794,11 +1998,11 @@ class LogicalStatevector(Statevector):
             basis_str (str): Either a binary bitstring or its hex equivalent to identify the basis.
             n_logical_qubits (int): Number of logical qubits.
             label (tuple): The label of the quantum error correction code [[n,k,d]] (as a tuple).
-            stabilizer_tableau (list[str]): The set of stabilizers for the QECC.
+            stabilizer_tableau (Iterable[str]): The set of stabilizers for the QECC.
             basis (str): The basis in which each respective count's vector is given, physical or logical.
         
         Returns:
-            [`LogicalStatevector`][LogicalQ.Logical.LogicalStatevector]: The LogicalStatevector of
+            :py:class:`~LogicalQ.Logical.LogicalStatevector`: The LogicalStatevector of
                 the given basis state.
         
         Raises:
@@ -1830,9 +2034,9 @@ class LogicalStatevector(Statevector):
             atol (float): Tolerance within which to set probability amplitude to zero.
         
         Returns:
-            `np.ndarray`: The set of coefficients $\\alpha_i, \\delta$, where
-                $|\\psi\\rangle = \\sum_{x=0}^{2^n - 1}\\alpha_x|x\\rangle + \\delta|\\psi^\\perp\\rangle$,
-                where $|\\psi^\\perp\\rangle$ is the component of the state vector not in the
+            :py:type:`np.ndarray`: The set of coefficients :math:`\\alpha_i, \\delta`, where
+                :math:`|\\psi\\rangle = \\sum_{x=0}^{2^n - 1}\\alpha_x|x\\rangle + \\delta|\\psi^\\perp\\rangle`,
+                where :math:`|\\psi^\\perp\\rangle` is the component of the state vector not in the
                 codespace. Note that coefficients are returned in ascending order of value, e.g.,
                 000, 001, 010, 011, 100, 101, etc.
         """
@@ -1877,7 +2081,7 @@ class LogicalStatevector(Statevector):
             copy (bool): If `True`, then the array data is copied
         
         Returns:
-            `np.ndarray`: The [`logical_decomposition`][LogicalQ.Logical.LogicalStatvector.logical_decomposition]
+            :py:type:`np.ndarray`: The :py:meth:`~LogicalQ.Logical.LogicalStatevector.logical_decomposition`
                 if basis is logical and the statevector data otherwise.
         
         Raises:
@@ -1899,7 +2103,7 @@ class LogicalStatevector(Statevector):
             basis (str): The basis, logical or physical, in which to return the array.
         
         Returns:
-            `np.ndarray`: String representation of the statevector in the requested basis.
+            :py:type:`np.ndarray`: String representation of the statevector in the requested basis.
 
         Raises:
             ValueError: if the basis is invalid.
@@ -1926,7 +2130,7 @@ class LogicalStatevector(Statevector):
                 `latex_source`.
             
         Returns:
-            `str` or `IPython.display.Latex`: String or LaTeX representation of the statevector.
+            :py:type:`str` or :py:class:`IPython.display.Latex`: String or LaTeX representation of the statevector.
 
         Raises:
             ValueError: if the draw method is invalid.
