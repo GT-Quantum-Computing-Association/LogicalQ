@@ -5,17 +5,35 @@ from LogicalQ.Library.Gates import clifford_gates, clifford_gates_1q, string_to_
 from qiskit import QuantumCircuit, ClassicalRegister
 from qiskit.circuit import Gate
 from qiskit.circuit.library import UnitaryGate
-from qiskit.quantum_info import Operator
+from qiskit.quantum_info import Statevector, Operator
 from qiskit_experiments.library import QuantumVolume
 
-def mirror_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sample=None, measure=False, seed=None):
-    """
-    Constructs circuits composed of various Clifford gates and the full inverse, such that the composite operation is the identity if no errors occur.
+from typing import TYPE_CHECKING
+from typing import Iterable
+
+def mirror_benchmarking(
+    n_qubits: int = None,
+    qubits: Iterable[int] = None,
+    circuit_length : int = 2,
+    gate_sample: str | Iterable[str | Gate] = None,
+    measure: bool = False,
+    seed: int = None
+) -> QuantumCircuit:
+    """Constructs circuits composed of various gates and composes the full inverse as a circuit, such that the composite operation is the identity if no errors occur.
+
+    Args:
+        n_qubits: The number of qubits in the circuit.
+        qubits: A list of qubit indices in the circuit (default: ``list(range(n_qubits))``).
+        circuit_length: The desired total number of layers in the circuit.
+        gate_sample: An optional gate class, list of gate names, or list of Gates to sample from (default: Clifford gates).
+        measure: An optional bool to specify whether to append measurements at the end of the circuit (default: ``True``).
+        seed: An optional seed used during random choices (default: ``None``).
     """
 
     if seed is not None:
         np.random.seed(seed)
 
+    # @TODO - this variable doesn't actually make sense to me, was it supposed to be unused?
     if n_qubits is not None:
         qubits = list(range(n_qubits))
 
@@ -69,7 +87,25 @@ def mirror_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sampl
 
     return mb_circuit
 
-def randomized_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_sample=None, measure=False, seed=None):
+def randomized_benchmarking(
+    n_qubits: int = None,
+    qubits: Iterable[int] = None,
+    circuit_length : int = 2,
+    gate_sample: str | Iterable[str | Gate] = None,
+    measure: bool = False,
+    seed: int = None
+) -> QuantumCircuit:
+    """Constructs circuits composed of various gates and the full inverse as a single gate, such that the composite operation is the identity if no errors occur.
+
+    Args:
+        n_qubits: The number of qubits in the circuit.
+        qubits: An optional list of qubit indices in the circuit (default: ``list(range(n_qubits))``).
+        circuit_length: The desired total number of layers in the circuit.
+        gate_sample: An optional gate class, list of gate names, or list of Gates to sample from (default: Clifford gates).
+        measure: An optional bool to specify whether to append measurements at the end of the circuit (default: ``True``).
+        seed: An optional seed used during random choices (default: ``None``).
+    """
+
     if seed is not None:
         np.random.seed(seed)
 
@@ -126,16 +162,16 @@ def randomized_benchmarking(n_qubits=None, qubits=None, circuit_length=2, gate_s
 
     return rb_circuit
 
-def quantum_volume(n_qubits=1, seed=None):
+def quantum_volume(
+    n_qubits=1,
+    seed=None
+) -> QuantumCircuit:
     """
     Generate quantum volume benchmark circuits.
 
-    Parameters
-    ----------
-    n_qubits : int
-        Number of qubits available for the benchmark (sets a maximum iteration limit on the circuit width).
-    seed : int
-        Random seed for reproducibility. Defaults to 1234.
+    Args:
+        n_qubits: Number of qubits available for the benchmark (sets a maximum iteration limit on the circuit width).
+        seed: Random seed for reproducibility (default: ``None``).
     """
 
     qubits = list(range(n_qubits))
@@ -145,14 +181,16 @@ def quantum_volume(n_qubits=1, seed=None):
 
     return qv_circuits
 
-def quantum_teleportation(statevector, barriers=False):
+def quantum_teleportation(
+    statevector: Statevector | Iterable,
+    barriers=False
+) -> QuantumCircuit:
     """
     Generate a quantum teleportation circuit.
 
-    Parameters
-    ----------
-    statevector : iterable
-        Arbitrary input state
+    Args:
+        statevector: An arbitrary input state.
+        barriers: A bool specifying whether to append barriers between sections of the circuit (default: ``False``).
     """
 
     creg0 = ClassicalRegister(1, 'cr0')
@@ -191,16 +229,16 @@ def quantum_teleportation(statevector, barriers=False):
 
     return qc
 
-def n_qubit_ghz_generation(n_qubits=3, barriers=False):
+def n_qubit_ghz_generation(
+    n_qubits=3,
+    barriers=False
+) -> QuantumCircuit:
     """
     Generate an n-qubit GHZ state generation circuit.
 
-    Parameters
-    ----------
-    n_qubits : int
-        Number of qubits in the GHZ state.
-    barriers : boolean
-        If True, apply barriers between sections of the circuit.
+    Args:
+        n_qubits: Number of qubits in the GHZ state.
+        barriers: A bool specifying whether to append barriers between sections of the circuit (default: ``False``).
     """
 
     qc = QuantumCircuit(n_qubits, n_qubits)
