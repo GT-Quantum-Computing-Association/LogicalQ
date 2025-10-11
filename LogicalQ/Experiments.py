@@ -380,7 +380,7 @@ def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubi
 
     return all_data
 
-def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, error_scan_val_lists, basis_gates=None, target=None, compute_exact=False, with_mp=False, save_dir=None, save_filename=None, **kwargs):
+def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, error_scan_val_lists, basis_gates=None, compute_exact=False, with_mp=False, save_dir=None, save_filename=None, **kwargs):
     if isinstance(circuit_input, QuantumCircuit):
         circuit_input = [circuit_input]
     elif hasattr(circuit_input, "__iter__") and all([isinstance(circuit, QuantumCircuit) for circuit in circuit_input]):
@@ -554,7 +554,7 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
             }
 
             for error_dict, noise_model in zip(error_dicts, noise_models):
-                result = execute_circuits(circuit, target=target, backend=backend, noise_model=noise_model, method=method, shots=shots)
+                result = execute_circuits(circuit, noise_model=noise_model, **kwargs)
 
                 sub_data["results"].append({
                     "error_dict": error_dict,
