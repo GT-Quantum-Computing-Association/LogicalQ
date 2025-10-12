@@ -43,7 +43,7 @@ bibliography: paper.bib
 
 # Summary
 
-`LogicalQ` is a Python toolkit for quantum circuit development with built-in, generalized quantum error mitigation, detection, and correction (QEMDAC). `LogicalQ` inherits many of its data structures from, and thus is designed to interface well with, the `Qiskit` and `Qiskit Aer` packages [@Javadi-Abhari:2024].
+`LogicalQ` is a Python toolkit for quantum circuit development with built-in, generalized quantum error mitigation, detection, and correction (QEMDAC). `LogicalQ` inherits many of its data structures from, and thus is designed to interface well with, the `Qiskit` and `Qiskit Aer` packages [@Javadi-Abhari2024].
 
 The source code for `LogicalQ` is available on GitHub at https://github.com/GT-Quantum-Computing-Association/LogicalQ/. It can be installed via `pip` from the `pypi` index at https://pypi.org/project/LogicalQ/. Its documentation is hosted publicly at https://logicalq.readthedocs.io/.
 
@@ -53,8 +53,15 @@ Quantum computing presents a new model for computation which may significantly a
 
 Many of the necessary components for quantum error control have been formalized mathematically such that algorithms can be designed to construct these components for general classes of error control techniques.
 
-`LogicalQ` was designed to accelerate the quantum error correction workflow.
-The combination of generalized quantum error correction functionality, compatibility with libraries such as Qiskit, existence of numerous demo notebooks, and overall usability will increase accessibility to quantum error corrected-research and enable deeper study into the application of quantum error correction.
+The `Stim` library is notable for its high-performance stabilizer-based simulations involving Pauli operators, but this limits its applicability to utility-algorithms which require arbitrary Clifford and non-Clifford operators which the library does not support. In contrast, `LogicalQ` supports multiple basis gate sets for universal quantum computation.
+
+The `mqt-qecc` library, part of the Munich Quantum Toolkit, is similar to LogicalQ in its interoperability with other libraries such as `Stim` and `Qiskit`, but its functionality focuses on state preparation for CSS codes and decoding for various classes of codes. Although an important area of research within QEC, it lacks sufficient functionality for algorithm development and experiment design.
+
+The `PECOS` library is closer to `LogicalQ` in that it features support for a complete QEC protocol for general stabilizer codes and more general noise models, but it is limited in native gate support and its lack of built-in interoperability with standard libraries for quantum circuit development introduces friction in the application of QEC to quantum algorithms research.
+
+The `stac` library is even closer to `LogicalQ` in that it has many of the above features while also supporting non-stabilizer circuits with non-Clifford operators such as arbitrary rotations.
+
+`LogicalQ` was designed to accelerate the application of QEMDAC in quantum algorithm development. Thus, its core design principle is maximizing user capability in implementing complex algorithms. The combination of generalized quantum error correction functionality, compatibility with libraries such as Qiskit, existence of numerous demo notebooks, and overall usability will increase accessibility to quantum error corrected-research and enable deeper study into the application of quantum error correction.
 
 Furthermore, QEMDAC techniques can make analysis of quantum computation results difficult because they utilize overhead resources which exponentially increase the size of experiment outputs. There is a need for tools which can parse QEMDAC results without requiring researchers to understand the often-complex mathematics of these techniques.
 
