@@ -48,6 +48,20 @@ eight_qubit_code = {
     ],
 },
 
+shor_code = {
+    "label": (9,1,3),
+    "stabilizer_tableau": [
+        "ZZIIIIIII",
+        "IZZIIIIII",
+        "IIIZZIIII",
+        "IIIIZZIII",
+        "IIIIIIZZI",
+        "IIIIIIIZZ",
+        "XXXXXXIII",
+        "IIIXXXXXX"
+    ],
+}
+
 stabilizer_codes = [
     phase_flip_code,
     four_qubit_code,
