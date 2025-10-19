@@ -11,6 +11,7 @@ authors:
   - name: Ben Hagan
     affiliation: 3
   - name: Noah Song
+    orcid: 0009-0008-5561-6853
     affiliation: 2
   - name: Zhixin Song
     affiliation: 1
