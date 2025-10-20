@@ -836,7 +836,8 @@ def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, qecc, c
             noise_model_input=noise_model_input,
             error_scan_keys=error_scan_keys,
             error_scan_val_lists=error_scan_val_lists,
-            compute_exact=compute_exact
+            compute_exact=compute_exact,
+            **kwargs
         )
         all_data[c]["results_physical"] = results_physical
 
@@ -853,7 +854,7 @@ def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, qecc, c
             noise_model_input=noise_model_input,
             error_scan_keys=error_scan_keys,
             error_scan_val_lists=error_scan_val_lists,
-            compute_exact=False,
+            compute_exact=compute_exact,
             **kwargs
         )
         all_data[c]["results_logical"] = results_logical
