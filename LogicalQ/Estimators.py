@@ -8,16 +8,24 @@ from qiskit.quantum_info import Statevector, DensityMatrix, state_fidelity
 
 from .Logical import LogicalCircuit, LogicalStatevector, logical_state_fidelity
 from .Experiments import execute_circuits
-from .Library.Gates import string_to_gate_set, gates_1q, gates_2q
+from .Library.Gates import string_to_gate_set
+
+from typing import TYPE_CHECKING, Callable
+from typing import Iterable
+from .Typing import Number, QuantumBackend
 
 def compute_constraint_model(
-    hardware_model,
-    label, stabilizer_tableau,
-    optimizer=True,
-    effective_threshold=None,
-    gadget_costs=None,
-    constraint_model=None,
-):
+    hardware_model: dict,
+    label: Iterable[int],
+    stabilizer_tableau: Iterable[str],
+    optimizer: bool = True,
+    effective_threshold: Number | None = None,
+    gadget_costs: dict | None = None,
+    constraint_model: dict | None = None,
+) -> dict:
+    """Compute constraint model for a given quantum error correction code.
+    """
+
     if constraint_model is None:
         constraint_model = {}
 
@@ -49,14 +57,23 @@ def compute_constraint_model(
     return constraint_model
 
 def compute_effective_threshold(
-    hardware_model,
-    label, stabilizer_tableau,
-    initial_states=None,
-    min_theta=0, max_theta=np.pi/2, n_theta=16,
-    min_phi=0, max_phi=np.pi, n_phi=32,
-    max_n_qec_cycles=1,
-    threshold_conditions=None
-):
+    hardware_model: dict,
+    label: Iterable[int],
+    stabilizer_tableau: Iterable[str],
+    initial_states: Iterable[str] | None = None,
+    min_theta: Number = 0,
+    max_theta: Number = np.pi/2,
+    n_theta: int = 16,
+    min_phi: Number = 0,
+    max_phi: Number = np.pi,
+    n_phi: int = 32,
+    max_n_qec_cycles: int = 1,
+    shots: Number = 1E4,
+    threshold_conditions: Iterable[Callable[[float, float], bool]] | None = None,
+) -> tuple[dict, dict, float]:
+    """Compute effective threshold for a given quantum error correction code.
+    """
+
     if initial_states is None:
         initial_states = ["0"]
     else:
@@ -72,8 +89,14 @@ def compute_effective_threshold(
             state_prep_gates.append(YGate())
         elif initial_state in ["+", "h"]:
             state_prep_gates.append(HGate())
-        elif initial_state in ["magic", "t"]:
+        elif initial_state in ["t"]:
             state_prep_gates.append(TGate())
+
+    if threshold_conditions is None:
+        # By default, check whether infidelity ratio is greater than 1.0
+        threshold_conditions = [
+            lambda fidelity_noqec, fidelity_qec : (1-fidelity_noqec)/(1-fidelity_qec) >= 1.0,
+        ]
 
     qc_list = []
     lqc_list = []
@@ -111,32 +134,39 @@ def compute_effective_threshold(
                 lqc._append(rgate, [data_qubit])
 
             corrected = False
-            fidelity = 0.0
+            fidelity_noqec = fidelity_qec = None
             for n_qec_cycles in range(max_n_qec_cycles):
-                lqc.append_qec_cycle()
-                
-                lqc_meas = lqc.copy()
-                lqc_meas.measure_all()
+                # Without QEC
+                lqc_noqec = lqc.copy()
+                lqc_noqec.measure_all()
 
-                # @TODO - not sure whether it makes sense to use a hardware model for this,
-                #         I think that the effective threshold should really be independent of hardware model
-                #       - also not sure what shot count we should use
-                result = execute_circuits(lqc_meas, backend="aer_simulator", coupling_map=None, method="statevector", shots=int(1E4))[0]
+                result_noqec = execute_circuits(lqc_noqec, backend="aer_simulator", method="statevector", shots=shots)[0]
+
+                lsv_noqec = LogicalStatevector.from_counts(result_noqec.get_counts(), k, label, stabilizer_tableau)
+
+                # With QEC
+                lqc_qec = lqc.copy()
+                for _ in range(n_qec_cycles): lqc_qec.append_qec_cycle()
+                lqc_qec.measure_all()
+
+                # @TODO - I feel like density-matrix sims are preferable
+                result_qec = execute_circuits(lqc_qec, backend="aer_simulator", method="statevector", shots=shots)[0]
 
                 # @TODO - use a saved statevector instead
-                lsv = LogicalStatevector.from_counts(result.get_counts(), k, label, stabilizer_tableau)
+                lsv_qec = LogicalStatevector.from_counts(result_qec.get_counts(), k, label, stabilizer_tableau)
 
-                fidelity = logical_state_fidelity(sv, lsv)
+                fidelity_noqec = logical_state_fidelity(sv, lsv_noqec)
+                fidelity_qec = logical_state_fidelity(sv, lsv_qec)
 
-                # @TEST - not sure what atol to use, 1E-2 is definitely too high if QEC is supposed to produce higher fidelities
-                if np.isclose(fidelity, 1.0, atol=1E-2):
-                    corrected = True
-                    break
+                for threshold_condition in threshold_conditions:
+                    if threshold_condition(fidelity_noqec, fidelity_qec):
+                        corrected = True
+                        break
 
             if corrected:
                 interior_points[initial_state] = interior_points.get(initial_state, []) + [(theta, phi)]
 
-            fidelities[initial_state][(theta,phi)] = fidelity
+            fidelities[initial_state][(theta,phi)] = (fidelity_noqec, fidelity_qec)
 
     # @TODO - make this support scans with multiple initial_states based on threshold_conditions
     # @TODO - verify that this computation makes sense
@@ -154,10 +184,13 @@ def compute_effective_threshold(
     return interior_points, fidelities, effective_threshold
 
 def compute_gadget_costs(
-    gadgets_library=None,
-    backend=None,
-    hardware_model=None,
-):
+    gadgets_library: dict | None = None,
+    backend: QuantumBackend | None = None,
+    hardware_model: dict | None = None,
+) -> tuple[dict, dict, dict]:
+    """Compute the costs of a gadgets library based on a hardware model or a backend.
+    """
+
     if gadgets_library is None:
         gadgets_library = build_gadgets_library(min_depth=2, max_depth=2+1, step_depth=1, min_n_qubits=1, max_n_qubits=1+1, step_n_qubits=1)
 
@@ -226,10 +259,18 @@ def compute_gadget_costs(
     return gadgets_library, gadget_infidelities, gadget_costs
 
 def build_gadgets_library(
-    min_depth, max_depth, step_depth,
-    min_n_qubits, max_n_qubits, step_n_qubits
-):
+    min_depth: int,
+    max_depth: int,
+    step_depth: int,
+    min_n_qubits: int,
+    max_n_qubits: int,
+    step_n_qubits: int
+) -> dict:
+    """Build a library of gadgets within the specified depth and qubit count parameters.
+    """
+
     gadgets_library = {}
+    
     for depth in range(min_depth, max_depth, step_depth):
         gadgets_library[depth] = {}
 
