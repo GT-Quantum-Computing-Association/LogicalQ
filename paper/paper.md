@@ -66,6 +66,17 @@ The `PECOS` library is closer to `LogicalQ` in that it features support for a co
 
 The `stac` library also has many of the above features but also supports non-stabilizer circuit simulations with non-Clifford operators, such as arbitrary rotations. Due to the Gottesman-Knill theorem, stabilizer circuits cannot produce quantum advantage over classical computers, so this functionality is necessary for advances in quantum algorithm research.
 
+| Feature                        | `LogicalQ`    | `mqt-qecc` | `PEC0S` | `stac` | `stim` |
+| ------------------------------ | ------------- | ---------- | ------- | ------ | ------ |
+| Stabilizer code QEC             | ✔ | ✔ | ✔ | ✔ | ✔ |
+| Arb. Clifford Ops               | ✔ | ✘ | ✔ | ✘ | ✔ |
+| Arb. Non-Clifford Ops           |   | ✘ | ✘ | ✘ | ✘ |
+| Optimized QEC Cycle Scheduling  | ✔ | ✘ | ✘ | ✘ | ✘ |
+| Two-way Qiskit transpilation    | ✔ | ✘ | ✘ |   | ✔ QASM |
+| QASM export                     | ✘ | ✘ | ✘ | ✔ | ✔ |
+| Encoding of custom circuits     | ✔ | ✘ |   | ✘ |   |
+| FT gate implementation          | ✔ | ✘ |   | ✘ | ✘ |
+
 `LogicalQ` was designed to accelerate the application of QEMDAC in quantum algorithm development. Thus, its core design principle is maximizing user capability for implementing complex quantum circuits and using QEMDAC. The combination of generalized quantum error correction functionality, compatibility with libraries such as Qiskit, existence of numerous demo notebooks, and overall usability will increase accessibility to quantum error corrected-research and enable deeper study into the application of quantum error correction.
 
 Furthermore, QEMDAC techniques can make analysis of quantum computation results difficult because they utilize overhead resources which exponentially increase the size of experiment outputs. There is a need for tools which can parse QEMDAC results without requiring researchers to understand the often-complex mathematics of these techniques.
