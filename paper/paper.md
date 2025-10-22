@@ -101,7 +101,7 @@ The `Estimators` module contains special experiments which are used in QEC cycle
 
 # Scholarly Work
 
-`LogicalQ` development has largely been driven by an ongoing research project to optimize the scheduling of QECDAM components in quantum circuits, with the motivation of performing fault-tolerant Hamiltonian simulations of physical theories on quantum hardware.
+`LogicalQ` development has largely been driven by an ongoing research project to optimize the scheduling of QEMDAC components in quantum circuits, with the motivation of performing fault-tolerant Hamiltonian simulations of physical theories on quantum hardware.
 
 # Acknowledgements
 
