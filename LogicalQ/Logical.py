@@ -1640,22 +1640,22 @@ class LogicalCircuit(QuantumCircuit):
                 self.cy(control_qubit, target_qubit)
             case "rx":
                 theta = instruction.params[0]
-                self.rx(qubits, theta)
+                self.rx(theta, qubits)
             case "ry":
                 theta = instruction.params[0]
-                self.ry(qubits, theta)
+                self.ry(theta, qubits)
             case "rz":
                 theta = instruction.params[0]
-                self.ry(qubits, theta)
+                self.ry(theta, qubits)
             case "Rxx":
                 theta = instruction.params[0]
-                self.rxx(qubits, theta)
+                self.rxx(theta, qubits)
             case "Ryy":
                 theta = instruction.params[0]
-                self.ryy(qubits, theta)    
+                self.ryy(theta, qubits)    
             case "Rzz":
                 theta = instruction.params[0]
-                self.rzz(qubits, theta)
+                self.rzz(theta, qubits)
             # @TODO Fix code to initialize LogicalCircuit to arbitrary logical state.
             #case "initialize":
             #    sv = instruction.params
