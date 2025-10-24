@@ -960,14 +960,13 @@ class LogicalCircuit(QuantumCircuit):
             with self.box(label="logical.qec.qec_cycle:$\\hat U_{QEC}$"):
                 super().reset(self.ancilla_qregs[q])
                 
-                if flagged:
-                    # Flagged qec cycle
+                if flagged: # Flagged qec cycle
                     
                     # Perform first flagged syndrome measurements
                     self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_1, flagged=True, steane_flag_1=True)
 
+                    # If no change in syndrome, perform second flagged syndrome measurement
                     with self.if_test(self.cbit_and(self.flagged_syndrome_diff_cregs[q], [0]*self.flagged_syndrome_diff_cregs[q].size)) as _else:
-                        # If no change in syndrome, perform second flagged syndrome measurement
                         self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_2, flagged=True, steane_flag_2=True)
                     with _else:
                         pass
