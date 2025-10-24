@@ -398,6 +398,10 @@ class LogicalCircuitGeneral(QuantumCircuit):
                 self.pauli_frame_z_syndromes.append(self.G_non_standard[0].T[i])
             if self.LogicalZVector[1][0][i] == 1:
                 self.pauli_frame_z_syndromes.append(self.G_non_standard[1].T[i])
+                
+        # Reduce to unique syndromes
+        self.pauli_frame_x_syndromes = np.unique(self.pauli_frame_x_syndromes, axis=0)
+        self.pauli_frame_z_syndromes = np.unique(self.pauli_frame_z_syndromes, axis=0)
 
     # Encodes logical qubits for a given number of iterations
     def encode(self, *qubits, max_iterations=1, initial_states=None):
