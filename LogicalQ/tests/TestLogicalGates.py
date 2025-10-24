@@ -18,6 +18,8 @@ from qiskit_aer import AerSimulator
 # @TODO - find expected results in the form of statevectors, density matrices, etc.
 
 def TestX(qeccs=None):
+    # @TODO Test if this works. (I don't know where it came from)
+    
     if qeccs is None:
         qeccs = implemented_codes
 
@@ -31,7 +33,7 @@ def TestX(qeccs=None):
 
         simulator = AerSimulator()
         lqc_x_transpiled = transpile(lqc_x_transpiled, simulator)
-        result = simulator.run(tqc).result()
+        result = simulator.run(lqc_x_transpiled).result()
         final_dm = result.data(0)["density_matrix"]
 
         rho = DensityMatrix(final_dm)

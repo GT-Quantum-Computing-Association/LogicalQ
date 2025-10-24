@@ -1347,7 +1347,7 @@ class LogicalCircuit(QuantumCircuit):
             targets = [targets]
         
         if method == "S-K":
-            self._append_rot_gate_S_K(
+            self.r(
                 "x", 
                 targets,
                 theta,
@@ -1356,9 +1356,9 @@ class LogicalCircuit(QuantumCircuit):
                 recursion_degree = recursion_degree, 
                 box = box)
         elif method == "OAA":
-            pass
+            raise NotImplementedError("Method not implemented.")
         else:
-            print(f"Invalid input '{method}' for argument 'method'.")
+            raise ValueError("{method} is not a valid method.")
             
     def ry(self, theta: float, targets, method = "S-K", depth = 10, recursion_degree = 1, box=True):
         """
@@ -1374,7 +1374,7 @@ class LogicalCircuit(QuantumCircuit):
             targets = [targets]
         
         if method == "S-K":
-            self._append_rot_gate_S_K(
+            self.r(
                 "y", 
                 targets,
                 theta,
@@ -1383,9 +1383,9 @@ class LogicalCircuit(QuantumCircuit):
                 recursion_degree = recursion_degree, 
                 box = box)
         elif method == "OAA":
-            pass
+            raise NotImplementedError("Method not implemented.")
         else:
-            print(f"Invalid input '{method}' for argument 'method'.")
+            raise ValueError("{method} is not a valid method.")
             
     def rz(self, theta: float, targets, method = "S-K", depth = 10, recursion_degree = 1, box=True):
         """
@@ -1401,7 +1401,7 @@ class LogicalCircuit(QuantumCircuit):
             targets = [targets]
         
         if method == "S-K":
-            self._append_rot_gate_S_K(
+            self.r(
                 "z", 
                 targets,
                 theta,
@@ -1410,9 +1410,9 @@ class LogicalCircuit(QuantumCircuit):
                 recursion_degree = recursion_degree, 
                 box = box)
         elif method == "OAA":
-            pass
+            raise NotImplementedError("Method not implemented.")
         else:
-            print(f"Invalid input '{method}' for argument 'method'.")
+            raise ValueError("{method} is not a valid method.")
             
     def rxx(self, theta: float, targets, method = "S-K", depth = 10, recursion_degree = 1, box=True):
         if hasattr(targets, "__iter__"):
@@ -1424,7 +1424,7 @@ class LogicalCircuit(QuantumCircuit):
             raise AssertionError("Number of target qubits must be 2.")
         
         if method == "S-K":
-            self._append_rot_gate_S_K(
+            self.r(
                 "xx", 
                 targets,
                 theta,
@@ -1433,9 +1433,9 @@ class LogicalCircuit(QuantumCircuit):
                 recursion_degree = recursion_degree, 
                 box = box)
         elif method == "OAA":
-            pass
+            raise NotImplementedError("Method not implemented.")
         else:
-            print(f"Invalid input '{method}' for argument 'method'.")
+            raise ValueError("{method} is not a valid method.")
             
     def ryy(self, theta: float, targets, method = "S-K", depth = 10, recursion_degree = 1, box=True):
         if hasattr(targets, "__iter__"):
@@ -1447,7 +1447,7 @@ class LogicalCircuit(QuantumCircuit):
             raise AssertionError("Number of target qubits must be 2.")
         
         if method == "S-K":
-            self._append_rot_gate_S_K(
+            self.r(
                 "yy", 
                 targets,
                 theta,
@@ -1456,9 +1456,9 @@ class LogicalCircuit(QuantumCircuit):
                 recursion_degree = recursion_degree, 
                 box = box)
         elif method == "OAA":
-            pass
+            raise NotImplementedError("Method not implemented.")
         else:
-            print(f"Invalid input '{method}' for argument 'method'.")
+            raise ValueError("{method} is not a valid method.")
             
     def rzz(self, theta: float, targets, method = "S-K", depth = 10, recursion_degree = 1, box=True):
         if hasattr(targets, "__iter__"):
@@ -1470,7 +1470,7 @@ class LogicalCircuit(QuantumCircuit):
             raise AssertionError("Number of target qubits must be 2.")
         
         if method == "S-K":
-            self._append_rot_gate_S_K(
+            self.r(
                 "zz", 
                 targets,
                 theta,
@@ -1480,11 +1480,11 @@ class LogicalCircuit(QuantumCircuit):
                 box = box
                 )
         elif method == "OAA":
-            pass
+            raise NotImplementedError("Method not implemented.")
         else:
-            print(f"Invalid input '{method}' for argument 'method'.")
+            raise ValueError("{method} is not a valid method.")
 
-    def _append_S_K_approximation(self, circuit, targets, label="U", depth=10, recursion_degree=1, box=False, return_subcircuit=False):
+    def append_sk_decomposition(self, circuit, targets, label="U", depth=10, recursion_degree=1, box=False, return_subcircuit=False):
         
         basis = ["s", "sdg", "t", "tdg", "h", "x", "y", "z", "cz"]
         approx = generate_basic_approximations(basis, depth=depth)
@@ -1495,9 +1495,7 @@ class LogicalCircuit(QuantumCircuit):
         def append_all():
             for i in range(len(discretized_sub_qc.data)):
                 circuit_instruction = discretized_sub_qc.data[i]
-                #print(circuit_instruction)
                 qargs = [targets[discretized_sub_qc.qubits.index(qubit)] for qubit in circuit_instruction.qubits]
-                #print(qargs)
                 self.append(circuit_instruction, qargs=qargs)
         
         if box:
@@ -1509,60 +1507,57 @@ class LogicalCircuit(QuantumCircuit):
         if return_subcircuit:
             return discretized_sub_qc
 
-    def _append_rot_gate_S_K(self, axis, targets, theta = 0, label = "R", depth = 10, recursion_degree = 1, box=True):
+    def r(self, axis, targets, theta = 0, label = "R", depth = 10, recursion_degree = 1, box=True, method = "S-K"):
+        if isinstance(axis, str):        
+            # In form "instruction.name: (Gate, num_targets_per_gate)"
+            valid_gates = {"x": (RXGate, 1), "y": (RYGate, 1), "z": (RZGate, 1), "xx": (RXXGate, 2), "yy": (RYYGate, 2), "zz": (RZZGate, 2)} 
+            
+            if axis not in list(valid_gates.keys()):
+                raise NotImplementedError(f"Invalid input '{axis}' for argument 'axis'.")
+            
+            if label == "R":
+                label = label + axis
+                
+        elif isinstance(axis, list):
+            if len(axis) == 3:
+                raise NotImplementedError("Arbitrary rotation axes are not yet implemented.")
+            else:
+                raise ValueError(f"'axis' is list of invalid length ({len(axis)}). 'axis' must have length 3.")
+            
+        else:
+            raise TypeError(f"Provided 'axis' is not an instance of an allowed type (str, int).")
         
-        # In form "instruction.name: (Gate, num_targets_per_gate)"
-        valid_gates = {"x": (RXGate, 1), "y": (RYGate, 1), "z": (RZGate, 1), "xx": (RXXGate, 2), "yy": (RYYGate, 2), "zz": (RZZGate, 2)} 
+        if method == "S-K":
+            gate_base, num_target_qubits = valid_gates[axis]
+            gate = gate_base(theta)
+            
+            sub_qc = QuantumCircuit(num_target_qubits)
         
-        if axis not in list(valid_gates.keys()):
-            raise AssertionError(f"Invalid input '{axis}' for argument 'axis'.")
+            def apply_Rzz(sub_qc):
+                sub_qc.cx(0, 1)
+                sub_qc.rz(theta, 1)
+                sub_qc.cx(0, 1)
         
-        if label == "R":
-            label = label + axis
-        
-        gate_base, num_target_qubits = valid_gates[axis]
-        gate = gate_base(theta)
-        
-        sub_qc = QuantumCircuit(num_target_qubits)
-    
-        def apply_Rzz(sub_qc):
-            sub_qc.cx(0, 1)
-            sub_qc.rz(theta, 1)
-            sub_qc.cx(0, 1)
-    
-        match axis:
-            case "xx":
-                sub_qc.h([0, 1])
-                apply_Rzz(sub_qc)
-                sub_qc.h([0, 1])
-            case "yy":
-                sub_qc.rx(np.pi / 2, [0, 1])
-                apply_Rzz(sub_qc)
-                sub_qc.rx(-np.pi / 2, [0, 1])
-            case "zz":
-                apply_Rzz(sub_qc)
-            case _:        
-                sub_qc.append(gate, qargs = list(range(num_target_qubits)))
-        
-        #basis = ["s", "sdg", "t", "tdg", "h", "x", "y", "z", "cz"]
-        #approx = generate_basic_approximations(basis, depth=depth)
-        #skd = SolovayKitaev(recursion_degree=recursion_degree, basic_approximations=approx)
-
-        #discretized_sub_qc = skd(sub_qc)
-        #box_label = fr"S-K: R$_\text{{{axis}}}$({np.round(theta / np.pi, 2)}$\pi$)" if label == None else label
-        
-        #def append_all():
-        #    for i in range(len(discretized_sub_qc.data)):
-        #        circuit_instruction = discretized_sub_qc.data[i]
-        #        self.append(circuit_instruction, qargs=targets)
-        
-        #if box:
-        #    with self.box(label=f"logical.logicalop.R:{box_label}"):
-        #        append_all()
-        #else:
-        #    append_all()
-        
-        self._append_S_K_approximation(sub_qc, targets, label=label, depth=depth, recursion_degree=recursion_degree, box=box)
+            match axis:
+                case "xx":
+                    sub_qc.h([0, 1])
+                    apply_Rzz(sub_qc)
+                    sub_qc.h([0, 1])
+                case "yy":
+                    sub_qc.rx(np.pi / 2, [0, 1])
+                    apply_Rzz(sub_qc)
+                    sub_qc.rx(-np.pi / 2, [0, 1])
+                case "zz":
+                    apply_Rzz(sub_qc)
+                case _:        
+                    sub_qc.append(gate, qargs = list(range(num_target_qubits)))
+            
+            self.append_sk_decomposition(sub_qc, targets, label=label, depth=depth, recursion_degree=recursion_degree, box=box)
+            
+        elif method == "OAA":
+            raise NotImplementedError("Method not implemented.")
+        else:
+            raise ValueError("{method} is not a valid method.")
 
     # Input could be: 1. (CircuitInstruction(name="...", qargs="...", cargs="..."), qargs=None, cargs=None)
     #                 2. (Instruction(name="..."), qargs=[..], cargs=[...])
