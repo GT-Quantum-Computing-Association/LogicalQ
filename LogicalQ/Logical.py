@@ -967,6 +967,9 @@ class LogicalCircuit(QuantumCircuit):
                     # If no change in syndrome, perform second flagged syndrome measurement
                     self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_2, flagged=True, steane_flag_2=use_steane_flagged_circuits)
                 with _else:
+                    pass
+                
+                with self.if_test(self.cbit_and(self.flagged_syndrome_diff_cregs[q], [0]*self.flagged_syndrome_diff_cregs[q].size)) as _else:
                     # If change in syndrome, perform unflagged syndrome measurement, decode, and correct
                     self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, flagged=False)
                     self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, flagged=False)
@@ -982,6 +985,8 @@ class LogicalCircuit(QuantumCircuit):
                             self.cbit_not(self.prev_syndrome_cregs[q][n])
                         with _else_inner:
                             pass
+                with _else:
+                    pass
 
             index_final = len(self.data)-1
 
