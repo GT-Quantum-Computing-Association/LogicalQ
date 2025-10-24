@@ -227,9 +227,6 @@ class LogicalCircuit(QuantumCircuit):
                 self.x_stabilizers.append(i)
             if 'Z' in self.stabilizer_tableau[i]:
                 self.z_stabilizers.append(i)
-        
-        print(self.x_stabilizers)
-        print(self.z_stabilizers)
 
     def generate_code(self):
         """Generate the encoding circuit and logical operators for the selected tableau.
@@ -942,9 +939,7 @@ class LogicalCircuit(QuantumCircuit):
         Returns:
             Qubits and indices with QEC cycles, before and after appending.
         """
-        # Use hardcoded flagged circuits for Steane code
-        use_steane_flagged_circuits = flagged #True if (self.n, self.k, self.d) == (7,1,3) else False
-
+        
         if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
             logical_qubit_indices = list(range(self.n_logical_qubits))
 
@@ -965,7 +960,7 @@ class LogicalCircuit(QuantumCircuit):
             with self.box(label="logical.qec.qec_cycle:$\\hat U_{QEC}$"):
                 super().reset(self.ancilla_qregs[q])
                 
-                if use_steane_flagged_circuits:
+                if flagged:
                     # Flagged qec cycle
                     
                     # Perform first flagged syndrome measurements
@@ -1113,27 +1108,15 @@ class LogicalCircuit(QuantumCircuit):
         for q, c in zip(logical_qubit_indices, cbit_indices):
             with self.box(label="logical.qec.measure:$\\hat{M}_\\text{QEC}$"):
                 # Measurement of state
-                #for n in range(self.n_physical_qubits):
-                #    super().append(Measure(), [self.logical_qregs[q][n]], [self.final_measurement_cregs[q][n]], copy=False)
-                    
-                # @TODO - use LogicalZVector instead
-                #with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][x] for x in [4,5,6]])) as _else:
-                #    self.set_cbit(self.output_creg[c], 1)
-                #with _else:
-                #    pass
-                meas_inds = []
-                for i in range(self.n_physical_qubits):
-                    if self.LogicalZVector[1][0][i] == 1.:
-                        meas_inds.append(i)
-                        
-                # Measurement of state
                 for n in range(self.n_physical_qubits):
                     super().append(Measure(), [self.logical_qregs[q][n]], [self.final_measurement_cregs[q][n]], copy=False)
                     
-                #Determining logical state
-                with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][m] for m in meas_inds])):
+                # @TODO - use LogicalZVector instead
+                with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][x] for x in [4,5,6]])) as _else:
                     self.set_cbit(self.output_creg[c], 1)
-
+                with _else:
+                    pass
+                
                 if with_error_correction:
                     # Final syndrome
                     for n in range(self.n_ancilla_qubits):
