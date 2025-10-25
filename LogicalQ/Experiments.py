@@ -29,7 +29,6 @@ from pytket.extensions.quantinuum import QuantinuumBackend
 from pytket.extensions.qiskit import qiskit_to_tk
 from qbraid.runtime.native.device import QbraidDevice
 
-
 DEFAULT = object()
 
 def execute_circuits(circuit_input, target=None, backend=None, hardware_model=None, noise_model=DEFAULT, noise_params=DEFAULT, coupling_map=DEFAULT, basis_gates=DEFAULT, method="statevector", optimization_level=0, shots=1024, memory=False, save_statevector=False, save_density_matrix=False, return_circuits_transpiled=False):
@@ -198,11 +197,66 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
             ):
                 raise TypeError(f"Invalid type for shots input: {type(shots)}; must be int or iterable of ints")
 
+            # @TODO - this part of the code seems buggy, needs fixing
             syntax_checker = backend._device_name.rstrip("LE") + "SC"
             _cost = lambda circuits, shots : [backend.cost(circuit, n_shots=shots, syntax_checker=syntax_checker) for circuit in circuits]
 
-            # @TODO - implement a smarter run function that instead uses process_circuits to get a handle and check its status periodically
-            _run = lambda circuits, shots, memory=None, **kwargs : backend.run_circuits(circuits, n_shots=shots, **kwargs)
+            # @TODO - give the user more control over this callable and its parameters
+            # @TODO - add better logging
+            def _run(circuits, shots, memory=None, **kwargs):
+                # Submit circuits for execution, using process_circuits in order to retrieve handles
+                handles = backend.process_circuits(circuits, n_shots=shots, **kwargs)
+
+                # Save handles to a file
+                save_dir = "./data/"
+                date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                save_filename = f"quantinuum_handles_{date_str}.pkl"
+                save_filepath = save_dir + save_filename
+                save_file = open(save_filepath, "wb")
+                pickle.dump(handles, save_file, protocol=5)
+                save_file.close()
+
+                # Poll handles periodically
+                poll_interval_seconds = 10
+                max_wait_minutes = 60 * 24 * 7
+                max_n_poll_attempts = int(max_wait_minutes * 60 / poll_interval_seconds)
+                
+                # @TODO - simplify this portion of the code
+                n_poll_attempts = 0
+                handles_completed = []
+                while n_poll_attempts < max_n_poll_attempts and len(handles_completed) < len(handles):
+                    for h, handle in enumerate(handles):
+                        if h not in handles_completed:
+                            handle_status = backend.circuit_status(handle)
+                            handle_status_str = str(handle_status.status).lower()
+                            
+                            print(f"Polling attempt {n_poll_attempts} of {max_n_poll_attempts}:")
+                            print(f"- Handle status: {handle_status}")
+
+                            if "completed" in handle_status_str:
+                                handles_completed.append(h)
+                            else:
+                                print(f"- Waiting {poll_interval_seconds} seconds to poll again...")
+                                time.sleep(poll_interval_seconds)
+
+                if len(handles_completed) == len(handles):
+                    for handle in handles:
+                        # Get results
+                        results = backend.get_results(handles)
+
+                        # Save results
+                        save_dir = "./data/"
+                        date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                        save_filename = f"quantinuum_results_{date_str}.pkl"
+                        save_file = open(save_dir + save_filename, "wb")
+                        pickle.dump(results, save_file, protocol=5)
+                        save_file.close()
+
+                        return results
+                else:
+                    print(f"Reached maximum number of handle polling attempts, stopping. All handles are stored at '{save_filepath}' for later access.")
+
+                    return None
         else:
             raise TypeError(f"backend must be None, 'aer_simulator', the name of a backend, or an instance of AerSimulator, Backend, or QuantinuumBackend not type {type(backend)}")
 
