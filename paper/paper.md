@@ -30,17 +30,17 @@ authors:
   - name: Arhan Deshpande
     affiliation: 1
 affiliations:
- - name: School of Physics, College of Sciences, Georgia Institute of Technology, Atlanta, GA 30332, USA
+ - name: School of Physics, College of Sciences, Georgia Institute of Technology, Atlanta, GA
    index: 1
- - name: School of Mathematics, College of Science, Georgia Institute of Technology, Atlanta, GA 30332, USA
+ - name: School of Mathematics, College of Science, Georgia Institute of Technology, Atlanta, GA
    index: 2
- - name: Ming Hsieh Department of Electrical and Computer Engineering, Viterbi School of Engineering, University of Southern California, Los Angeles, CA 90089, United States
+ - name: Ming Hsieh Department of Electrical and Computer Engineering, Viterbi School of Engineering, University of Southern California, Los Angeles, CA
    index: 3
- - name: Department of Physics, Duke University, Durham, North Carolina 27708, United States
+ - name: Department of Physics, Duke University, Durham, NC
    index: 4
- - name: School of Electrical and Computer Engineering, College of Engineering, Georgia Institute of Technology, Atlanta, GA 30332, USA
+ - name: School of Electrical and Computer Engineering, College of Engineering, Georgia Institute of Technology, Atlanta, GA
    index: 5
- - name: School of Computer Science, College of Computing, Georgia Institute of Technology, Atlanta, GA 30332, USA
+ - name: School of Computer Science, College of Computing, Georgia Institute of Technology, Atlanta, GA
    index: 6
 date: XX October 2025
 bibliography: paper.bib
@@ -66,16 +66,16 @@ The `PECOS` library is closer to `LogicalQ` in that it features support for a co
 
 The `stac` library also has many of the above features but also supports non-stabilizer circuit simulations with non-Clifford operators, such as arbitrary rotations. Due to the Gottesman-Knill theorem, stabilizer circuits cannot produce quantum advantage over classical computers, so this functionality is necessary for advances in quantum algorithm research.
 
-| Feature                        | `LogicalQ`    | `mqt-qecc` | `PEC0S` | `stac` | `stim` |
-| ------------------------------ | ------------- | ---------- | ------- | ------ | ------ |
-| Stabilizer code QEC             | ✔ | ✔ | ✔ | ✔ | ✔ |
-| Arb. Clifford Ops               | ✔ | ✘ | ✔ | ✘ | ✔ |
-| Arb. Non-Clifford Ops           |   | ✘ | ✘ | ✘ | ✘ |
-| Optimized QEC Cycle Scheduling  | ✔ | ✘ | ✘ | ✘ | ✘ |
-| Two-way Qiskit transpilation    | ✔ | ✘ | ✘ |   | ✔ QASM |
-| QASM export                     | ✘ | ✘ | ✘ | ✔ | ✔ |
-| Encoding of custom circuits     | ✔ | ✘ |   | ✘ |   |
-| FT gate implementation          | ✔ | ✘ |   | ✘ | ✘ |
+| Feature                        | `LogicalQ`    | `mqt-qecc`   | `PEC0S`      | `stac`       | `stim`       |
+| ------------------------------ | ------------- | ----------   | -------      | ------       | ------       |
+| Stabilizer code QEC            | $\checkmark$  | $\checkmark$ | $\checkmark$ | $\checkmark$ | $\checkmark$ |
+| Arb. Clifford Ops              | $\checkmark$  | $\times$     | $\checkmark$ | $\times$     | $\checkmark$ |
+| Arb. Non-Clifford Ops          |               | $\times$     | $\times$     | $\times$     | $\times$     |
+| Optimized QEC Cycle Scheduling | $\checkmark$  | $\times$     | $\times$     | $\times$     | $\times$     |
+| Two-way Qiskit transpilation   | $\checkmark$  | $\times$     | $\times$     |              | $\checkmark$ |
+| QASM export                    | $\times$      | $\times$     | $\times$     | $\checkmark$ | $\checkmark$ |
+| Encoding of custom circuits    | $\checkmark$  | $\times$     |              | $\times$     |              |
+| FT gate implementation         | $\checkmark$  | $\times$     |              | $\times$     | $\times$     |
 
 `LogicalQ` was designed to accelerate the application of QEMDAC in quantum algorithm development. Thus, its core design principle is maximizing user capability for implementing complex quantum circuits and using QEMDAC. The combination of generalized quantum error correction functionality, compatibility with libraries such as Qiskit, existence of numerous demo notebooks, and overall usability will increase accessibility to quantum error corrected-research and enable deeper study into the application of quantum error correction.
 
@@ -101,7 +101,7 @@ The `Estimators` module contains special experiments which are used in QEC cycle
 
 # Scholarly Work
 
-`LogicalQ` development has largely been driven by an ongoing research project to optimize the scheduling of QECDAM components in quantum circuits, with the motivation of performing fault-tolerant Hamiltonian simulations of physical theories on quantum hardware.
+`LogicalQ` development has largely been driven by an ongoing research project to optimize the scheduling of QEMDAC components in quantum circuits, with the motivation of performing fault-tolerant Hamiltonian simulations of lattice gauge theories and other physical models on quantum hardware. This involves code switching between QEC and QED codes depending on the error-criticality of a part of a circuit, made less complex by `LogicalQ`'s generalized framework for stabilizer codes. There is also ongoing work on genetic algorithm-based optimization of physical and logical dynamical decoupling sequences for these applications and others in science.
 
 # Acknowledgements
 
