@@ -928,8 +928,8 @@ class LogicalCircuit(QuantumCircuit):
 
     def append_qec_cycle(
             self,
-            logical_qubit_indices: Iterable[int] = None,
-            flagged = True,
+            logical_qubit_indices: Iterable[int] | None = None,
+            perform_flagged_syndrome_measurements: bool = True
     ) -> tuple[dict[int,int], dict[int,int]]:
         """Append a QEC cycle to the end of the circuit.
 
@@ -960,8 +960,7 @@ class LogicalCircuit(QuantumCircuit):
             with self.box(label="logical.qec.qec_cycle:$\\hat U_{QEC}$"):
                 super().reset(self.ancilla_qregs[q])
                 
-                if flagged: # Flagged qec cycle
-                    
+                if perform_flagged_syndrome_measurements:
                     # Perform first flagged syndrome measurements
                     self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_1, flagged=True, steane_flag_1=True)
 
@@ -991,7 +990,7 @@ class LogicalCircuit(QuantumCircuit):
                             with _else_inner:
                                 pass
                 else:
-                    # Perform unflagged syndrome measurements / decoding
+                    # Perform unflagged syndrome measurements, decode, and correct
                     self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, flagged=False)
                     self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, flagged=False)
 
