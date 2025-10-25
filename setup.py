@@ -2,13 +2,14 @@ from setuptools import setup, find_packages
 
 setup(
     name="LogicalQ",
-    version="7.1.3",
+    version="0.1.1",
     author="GT-QCA",
     author_email="aliceandbob@gatechquantum.com",
     url="https://github.com/GT-Quantum-Computing-Association/LogicalQ/",
     license="LICENSE",
-    description="A toolkit for quantum circuit development with built-in, generalized quantum error correction.",
+    description="A toolkit for quantum circuit development with built-in, generalized quantum error mitigation, detection, and correction.",
     long_description=open("README.md").read(),
+    long_description_content_type="text/markdown",
     packages=find_packages(),
     install_requires=[
         "numpy",
