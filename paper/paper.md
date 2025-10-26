@@ -63,20 +63,22 @@ Quantum computing presents a new model for computation which may significantly a
 
 Many of the necessary components for QEMDAC have been formalized mathematically such that algorithms can be designed to construct these components for general classes of error control techniques [@Gottesman1997]. `LogicalQ`, like many existing QEMDAC libraries, uses such generalized constructions to meet any use case and application.
 
-A comparison of existing libraries is made in Table 1.
+A comparison of existing libraries is made in Table 1. We choose to compare features which may be desirable to researchers in quantum algorithms. Note that we define external two-way interoperability to be with any external general-purpose quantum computing tool such as `QASM` or `Qiskit`, but not just another QEMDAC tool.
 
-| Feature                        | `LogicalQ`    | `stim`       | `mqt-qecc`     | `PEC0S`      | `stac`       |
-| ------------------------------ | ------------- | ------------ | -------------- | ------------ | ------------ |
-| Stabilizer code QEC            | $\checkmark$  | $\checkmark$ | $\checkmark$   | $\checkmark$ | $\checkmark$ |
-| Arbitrary Clifford gates       | $\checkmark$  | $\checkmark$ | $\times$       | $\checkmark$ | $\checkmark$ |
-| Arbitrary non-Clifford gates   | $\checkmark$  | $\times$     | $\times$       | $\checkmark$ | $\checkmark$ |
-| Fault-tolerant gates           | $\checkmark$  | $\times$     | $\times$       | $ checkmark$ | $\times$     |
-| Two-way interoperability       | $\checkmark$  | $\checkmark$ | $\times$       | $\times$     | $\checkmark$ |
-| General noise model support    | $\checkmark$  | $\times$     | $\times$       | $\checkmark$ | $\times$     |
-| Cloud hardware interfaces      | $\checkmark$  | $\times$     | $\times$       | $\times$     | $\times$     |
-| Experiment suite               | $\checkmark$  | $\times$     | $\times$       | $\times$     | $\times$     |
-| Optimized QEC cycle scheduling | $\checkmark$  | $\times$     | $\times$       | $\times$     | $\times$     |
-Table: Comparison of `LogicalQ` with other major QEMDAC packages; `stim` is due to [@Gidney2021], `mqt-qecc` is due to [@Wille2024], `PECOS` is due to [@RyanAndersonPECOS], and `stac` is due to [@KhalidStac].
+| Feature                              | `LogicalQ`    | `stim`       | `mqt-qecc`     | `PEC0S`      | `stac`       | `tqec`       |
+| ------------------------------       | ------------- | ------------ | -------------- | ------------ | ------------ | ------------ |
+| Stabilizer code QEC                  | $\checkmark$  | $\checkmark$ | $\checkmark$   | $\checkmark$ | $\checkmark$ | $\checkmark$ |
+| qLDPC-oriented QEC                   | $\checkmark$  | $\times$     | $\checkmark$   | $\times$     | $\times$     | $\times$     |
+| Arbitrary logical Clifford gates     | $\checkmark$  | $\times$     | $\times$       | $\checkmark$ | $\checkmark$ | $\times$     |
+| Arbitrary logical non-Clifford gates | $\checkmark$  | $\times$     | $\times$       | $\checkmark$ | $\checkmark$ | $\times$     |
+| Advanced decoders                    | $\times$      | $\checkmark$ | $\checkmark$   | $\checkmark$ | $\times$     | $\checkmark$ |
+| Arbitrary noise model support        | $\checkmark$  | $\times$     | $\times$       | $\checkmark$ | $\times$     | $\checkmark$ |
+| Optimized QEC cycle scheduling       | $\checkmark$  | $\times$     | $\times$       | $\times$     | $\times$     | $\times$     |
+| Experiment suite                     | $\checkmark$  | $\times$     | $\times$       | $\checkmark$ | $\times$     | $\checkmark$ |
+| Logical state analysis               | $\checkmark$  | $\times$     | $\times$       | $\times$     | $\times$     | $\checkmark$ |
+| External two-way interoperability    | $\checkmark$  | $\checkmark$ | $\times$       | $\times$     | $\checkmark$ | $\times$     |
+| Cloud hardware interfaces            | $\checkmark$  | $\times$     | $\times$       | $\times$     | $\times$     | $\times$     |
+Table: Comparison of `LogicalQ` with other major QEMDAC packages; `stim` is due to [@Gidney2021], `mqt-qecc` is due to [@Wille2024], `PECOS` is due to [@RyanAndersonPECOS], `stac` is due to [@KhalidStac], and `tqec` is due to [@TQEC].
 
 In summary, many of the existing libraries are notable for their high-performance simulations and advanced implementations of certain features, but none support the full functionality required for QECDAM applied to quantum algorithms research, especially on cloud hardware. `LogicalQ` is also unique in that it has a suite of experiments for testing QECDAM which serves as a quick set of tests for researchers studying noise control.
 
@@ -94,17 +96,17 @@ A general flowchart of library usage is shown in Figure \ref{fig:flowchart}.
 
 ![LogicalQ Architecture\label{fig:flowchart}](./flowchart.svg){ width=100% }
 
-The `Logical` module lies at the heart of the library with the `LogicalCircuit` class, which inherits from the `QuantumCircuit` class in `Qiskit` and extends it with a variety of QEMDAC features. A `LogicalCircuit` can be constructed from a `Qiskit` `QuantumCircuit` via the `from_physical_circuit` method, which enables easy integration of `LogicalQ` into existing workflows. The `optimize_qec_cycle_indices` method of `LogicalCircuit` performs cost accounting based on a user-provided constraint model and effective threshold in order to construct an optimal list of QEC cycle indices.
+The `Logical` module lies at the heart of the library with the `LogicalCircuit` class, which inherits from the `QuantumCircuit` class in `Qiskit` and extends it with a variety of QEMDAC features. A `LogicalCircuit` can be constructed from a `Qiskit` `QuantumCircuit` via the `from_physical_circuit` method, which enables easy integration of `LogicalQ` into existing workflows. The `optimize_qec_cycle_indices` method of `LogicalCircuit` performs cost accounting based on a constraint model and effective threshold in order to construct an optimal list of QEC cycle indices.
 
-The `Logical` module also contains the `LogicalStatevector` and `LogicalDensityMatrix` classes, which inherit from the `Statevector` and `DensityMatrix` classes in `Qiskit` respectively and enable representation and analysis of quantum states at either the logical level or physical level. `Logical` also contains the `logical_state_fidelity` function which is designed to support complex fidelity comparisons, such as the fidelity of a physical density matrix and a logical statevector.
+The `Logical` module also contains the `LogicalStatevector` and `LogicalDensityMatrix` classes, which inherit from the `Statevector` and `DensityMatrix` classes in `Qiskit` respectively and enable representation and analysis of quantum states at either the logical level or physical level. `Logical` also contains the `logical_state_fidelity` function which is designed to support mixed-type fidelity comparisons, such as the fidelity of a physical density matrix and a logical statevector.
 
 The `Benchmarks` module contains constructors for many of the most commonly-used benchmarking circuits in quantum computation, including randomized benchmarking and quantum volume. These functions expose parameters such as qubit counts, circuit lengths, and random selection seeds to the user so that they can be directly integrated into controlled tests and experiments.
 
 The `Experiments` module contains a variety of experiments which can be used to study QEMDAC techniques. Experiment data can be analyzed with functions from the `Analysis` module.
 
-The `Execution` module contains the `execute_circuits` method, which provides a single interface for both simulator and hardware backends with smart handling of complex aspects such as backend communication, hardware models, and transpilation.
+The `Execution` module contains the `execute_circuits` function, which provides a single interface for both simulator and hardware backends with smart handling of complex aspects such as backend communication, hardware models, and transpilation.
 
-The `Estimators` module contains special experiments which are used in QEC cycle scheduling. In particular, this includes effective threshold estimation and constraint model construction.
+The `Estimators` module contains special experiments which are used in QED and QEC cycle scheduling. In particular, this includes effective threshold estimation and constraint model construction.
 
 The `Library` modules contain utilties such as quantum codes for QED and QEC, hardware models for modelling quantum devices, special gates for benchmarking, and dynamical decoupling sequences for QEM.
 
