@@ -84,7 +84,16 @@ def circuit_scaling_bar3d(data, title=None, save=False, filename=None, save_dir=
 
     return plt
 
-def noise_model_scaling_bar(all_data, scan_keys=None, separate_plots=False, save=False, filename=None, save_dir=None, show=False):
+def noise_scaling_scatter(all_data, scan_keys=None, separate_plots=False, save=False, filename=None, save_dir=None, show=False):
+    """Accepts the results of a noise_scaling_experiment and plots in bar graph / scatter plot format.
+
+    Args:
+        all_data: Output of a noise_scaling_experiment() run.
+
+    Returns:
+        plt
+    """
+    
     # @TODO - sanitize save inputs
 
     for c, circuit_sub_data in all_data.items():
@@ -153,7 +162,7 @@ def noise_model_scaling_bar(all_data, scan_keys=None, separate_plots=False, save
                 if show: plt.show()
 
         if not separate_plots:
-            ax.bar(xdata, ydata)
+            ax.scatter(xdata, ydata)
 
             title = getattr(qc, "name", f"Circuit {c}")
             ax.set_title(f"{title}: Fidelity vs. noise parameters")
