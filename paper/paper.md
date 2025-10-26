@@ -1,10 +1,22 @@
 ---
-title: "LogicalQ: A toolkit for quantum circuit development with built-in, generalized quantum error mitigation, detection, and correction"
+title: "LogicalQ: A toolkit for quantum circuit development with generalized quantum error mitigation, detection, and correction"
 tags:
   - Python
+  - quantum
   - quantum information
   - quantum computing
+  - quantum computation
+  - quantum computer
+  - quantum algorithms
+  - quantum simulation
   - quantum error correction
+  - quantum error-correcting code
+  - quantum stabilizer code
+  - css code
+  - qecc
+  - qiskit
+  - optimization
+  - physics
 authors:
   - name: Rasmit Devkota
     orcid: 0009-0009-3294-638X
@@ -47,15 +59,15 @@ affiliations:
    index: 5
  - name: Department of Physics, Duke University, Durham, NC
    index: 6
-date: XX October 2025
+date: 26 October 2025
 bibliography: paper.bib
 ---
 
 # Summary
 
-`LogicalQ` is a Python toolkit for quantum circuit development with built-in, generalized quantum error mitigation, detection, and correction (QEMDAC). `LogicalQ` inherits many of its data structures from, and thus is designed to interface well with, the `Qiskit` and `Qiskit Aer` packages [@Javadi-Abhari2024].
+`LogicalQ` is a Python toolkit for quantum circuit development with generalized quantum error mitigation, detection, and correction (QEMDAC). `LogicalQ` inherits many of its data structures from, and thus is designed to interface well with, the `Qiskit` and `Qiskit Aer` packages [@Javadi-Abhari2024].
 
-The source code for `LogicalQ` is available on GitHub at [https://github.com/GT-Quantum-Computing-Association/LogicalQ/](https://github.com/GT-Quantum-Computing-Association/LogicalQ/). It can be installed via `pip` from the `pypi` index at [https://pypi.org/project/LogicalQ/](https://pypi.org/project/LogicalQ/). Its documentation is hosted publicly at [https://logicalq.readthedocs.io/](https://logicalq.readthedocs.io/).
+The source code for `LogicalQ` is available on [GitHub](https://github.com/GT-Quantum-Computing-Association/LogicalQ/). It can be installed via `pip` from the [`pypi` index](https://pypi.org/project/LogicalQ/). Its [documentation](https://logicalq.readthedocs.io/) is hosted publicly.
 
 # Statement of need
 
@@ -80,9 +92,9 @@ A comparison of existing libraries is made in Table 1. We choose to compare feat
 | Cloud hardware interfaces            | $\checkmark$  | $\times$     | $\times$       | $\times$     | $\times$     | $\times$     |
 Table: Comparison of `LogicalQ` with other major QEMDAC packages; `stim` is due to [@Gidney2021], `mqt-qecc` is due to [@Wille2024], `PECOS` is due to [@RyanAndersonPECOS], `stac` is due to [@KhalidStac], and `tqec` is due to [@TQEC].
 
-In summary, many of the existing libraries are notable for their high-performance simulations and advanced implementations of certain features, but none support the full functionality required for QECDAM applied to quantum algorithms research, especially on cloud hardware. `LogicalQ` is also unique in that it has a suite of experiments for testing QECDAM which serves as a quick set of tests for researchers studying noise control.
+In summary, many of the existing libraries are notable for their high-performance simulations and advanced implementations of certain features, but none support the full functionality required for QEMDAC applied to quantum algorithms research, especially on cloud hardware. `LogicalQ` is also unique in that it has a suite of experiments for testing QEMDAC which serves as a quick set of tests for researchers studying noise control.
 
-`LogicalQ` was designed to accelerate the application of QEMDAC in quantum algorithm development, so its core design principle is maximizing user capability for implementing complex quantum circuits and using QEMDAC. The combination of generalized quantum error correction functionality, compatibility with libraries such as Qiskit, existence of numerous demo notebooks, and overall usability will increase accessibility to quantum error corrected-research and enable deeper study into the application of quantum error correction.
+`LogicalQ` was designed to accelerate the application of QEMDAC in quantum algorithm development, so its core design principle is maximizing user capability for implementing complex quantum circuits and using QEMDAC. The combination of generalized quantum error correction functionality, compatibility with libraries such as Qiskit, existence of numerous demo notebooks, and overall usability will increase accessibility to quantum error-corrected research and enable deeper study into the application of quantum error correction.
 
 Furthermore, QEMDAC techniques can make analysis of quantum computation results difficult because they utilize overhead resources which exponentially increase the size of experiment outputs. There is a need for tools which can parse QEMDAC results without requiring researchers to understand the often-complex mathematics of these techniques.
 
@@ -92,7 +104,7 @@ Although many of the necessary tools are not particularly lengthy or convoluted 
 
 `LogicalQ` consists of various modules which provide functionality for the construction of QEMDAC components as well as their application and analysis.
 
-A general flowchart of library usage is shown in Figure \ref{fig:flowchart}.
+A general flowchart of library structure is shown in Figure \ref{fig:flowchart}.
 
 ![LogicalQ Architecture\label{fig:flowchart}](./flowchart.svg){ width=100% }
 
