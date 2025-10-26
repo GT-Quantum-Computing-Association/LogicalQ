@@ -4,7 +4,7 @@ LogicalQ Documentation
 LogicalQ
 -----
 
-**LogicalQ** is a free/open-source toolkit for quantum circuit development with built-in, generalized quantum error mitigation, detection, and correction, developed by Georgia Tech students and alumni. It is distributed under the `MIT License`_.
+**LogicalQ** is a free/open-source toolkit for quantum circuit development with generalized quantum error mitigation, detection, and correction, developed by Georgia Tech students and alumni. It is distributed under the `MIT License`_.
 
 .. _MIT License: https://en.wikipedia.org/wiki/MIT_License
 
@@ -36,6 +36,13 @@ Documentation is hosted online on ReadtheDocs at `https://logicalq.readthedocs.i
 Acknowledgements
 ----------------
 LogicalQ wouldn't've been possible without the amazing members of Georgia Tech Quantum Computing Association who contributed to its development. We are also very grateful to all the developers of Qiskit, Stim, Stac, PECOS, MQT, and tqec, all of which have been invaluable references in developing this codebase. We are especially grateful to IBM Quantum for maintaining Qiskit as an open-source library which we use as the parent class for many of our own classes. *Please cite these authors* if you use their code or parts of their code which are present in LogicalQ.
+
+Contributing
+--------------------
+
+We welcome contributions from anyone! A GitHub Issue may be used for making requests or reporting bugs. Any contributions should be merged from a branch (preferred for internal contributors from GT QCA) or forks (default for external contributors outside GT QCA). Please read our `contributing guidelines`_.
+
+.. _contributing guidelines: https://github.com/GT-Quantum-Computing-Association/LogicalQ/blob/main/CONTRIBUTING.md
 
 Contact and Feedback
 --------------------
