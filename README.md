@@ -4,7 +4,9 @@ Georgia Tech Quantum Computing Association's Quantum Error Correction Project
 
 This is the repository where we store all code, tests, and demos for the implementation, simulation, and final hardware-ready code for our QEC toolkit.
 
-The end goal of this project is to provide researchers with an easy-to-learn tool for working with LogicalCircuits, an extension of Qiskit's QuantumCircuits, with generalized and optimized QEC methodology.
+The end goal of this project is to provide researchers with an easy-to-learn tool for working with `LogicalCircuit`s, an extension of Qiskit's `QuantumCircuit`s with generalized and optimized QEC methodology.
+
+For more information about `LogicalQ`, please refer to our documentation: [https://logicalq.readthedocs.io/](https://logicalq.readthedocs.io/).
 
 ## Installation
 
@@ -42,4 +44,7 @@ lsv.draw("latex")
 ```
 See the `demos` directory for more examples!
 
+## Contributing
+
+We welcome contributions from anyone! A GitHub Issue may be used for making requests or reporting bugs. Any contributions should be merged from a branch (preferred for internal contributors from QCA) or forks (default for external contributors outside QCA). Please read our [contributing guidelines](./CONTRIBUTING.md)
 

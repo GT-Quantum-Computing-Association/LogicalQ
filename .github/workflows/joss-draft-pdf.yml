@@ -1,6 +1,8 @@
 name: JOSS Draft PDF
 on:
   push:
+    branches:
+      - joss
     paths:
       - paper/**
       - .github/workflows/joss-draft-pdf.yml
@@ -9,6 +11,8 @@ jobs:
   paper:
     runs-on: ubuntu-latest
     name: Paper Draft
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,4 +30,4 @@ jobs:
         uses: EndBug/add-and-commit@v9
         with:
           message: "(auto) JOSS Paper PDF Draft"
-          add: "paper/paper.pdf"
+          add: paper/paper.pdf --force

@@ -1,19 +1,25 @@
 # from LogicalQ.Logical import LogicalCircuit
+import numpy as np
+from LogicalQ.Experiments import execute_circuits
+from LogicalQ.Logical import LogicalStatevector, logical_state_fidelity
 from LogicalQ.LogicalGeneral import LogicalCircuitGeneral as LogicalCircuit
 from LogicalQ.Library.QECCs import implemented_codes
 
 from qiskit.quantum_info import partial_trace, DensityMatrix
-
-from qiskit import transpile
+from qiskit.quantum_info import Statevector
+from qiskit import QuantumCircuit, transpile
 from qiskit.transpiler import PassManager
 from LogicalQ.Transpilation.ClearQEC import ClearQEC
 from LogicalQ.Transpilation.UnBox import UnBox
+from LogicalQ.Library.HardwareModels import hardware_models_Quantinuum
 
 from qiskit_aer import AerSimulator
 
 # @TODO - find expected results in the form of statevectors, density matrices, etc.
 
 def TestX(qeccs=None):
+    # @TODO Test if this works. (I don't know where it came from)
+    
     if qeccs is None:
         qeccs = implemented_codes
 
@@ -26,8 +32,8 @@ def TestX(qeccs=None):
         lqc_x.x(targets)
 
         simulator = AerSimulator()
-        tqc = transpile(qc, simulator)
-        result = simulator.run(tqc).result()
+        lqc_x_transpiled = transpile(lqc_x_transpiled, simulator)
+        result = simulator.run(lqc_x_transpiled).result()
         final_dm = result.data(0)["density_matrix"]
 
         rho = DensityMatrix(final_dm)
@@ -138,6 +144,66 @@ def TestCX(qeccs=None):
 
     print(f"WARNING - TestCX has not been fully implemented, returning True")
     return True
+
+def TestRX(qeccs=None):
+    if qeccs is None:
+        qeccs = implemented_codes
+
+    for qecc in qeccs:
+        n, k, d = qecc["label"]
+
+        for theta in np.linspace(0, 2*np.pi, 1024):
+            lqc_rx = LogicalCircuit(k, **qecc)
+
+            targets = list(range(k))
+
+            lqc_rx.rx(theta, 0)
+
+            simulator = AerSimulator()
+            lqc_rx_transpiled = transpile(lqc_rx, simulator)
+            result = simulator.run(lqc_rx_transpiled).result()
+            final_dm = result.data(0)["density_matrix"]
+
+            rho = DensityMatrix(final_dm)
+            reduced = partial_trace(rho, list(range(k, n)))
+
+    print(f"WARNING - TestX has not been fully implemented, returning True")
+    return True
+
+def TestRY(qeccs=None):
+    print(f"WARNING - TestRY has not been fully implemented, returning True")
+    return True
+
+def TestRZ(qeccs=None):
+    print(f"WARNING - TestRZ has not been fully implemented, returning True")
+    return True
+
+def TestRXX(qeccs=None):
+    print(f"WARNING - TestRXX has not been fully implemented, returning True")
+    return True
+
+def TestRYY(qeccs=None):
+    print(f"WARNING - TestRYY has not been fully implemented, returning True")
+    return True
+
+def TestRZZ(qeccs=None):
+    print(f"WARNING - TestRZZ has not been fully implemented, returning True")
+    return True
+
+def TestRotationGates(qeccs=None):
+    if all([
+        TestRX(qeccs),
+        TestRY(qeccs),
+        TestRZ(qeccs),
+        TestRXX(qeccs),
+        TestRYY(qeccs),
+        TestRZZ(qeccs),
+    ]):
+        print(f"TestRotationGates succeeded")
+        return True
+    else:
+        print(f"TestRotationGates failed")
+        return False
 
 def TestPauliGates(qeccs=None):
     if all([

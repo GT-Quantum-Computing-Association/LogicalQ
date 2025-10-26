@@ -29,7 +29,6 @@ from pytket.extensions.quantinuum import QuantinuumBackend
 from pytket.extensions.qiskit import qiskit_to_tk
 from qbraid.runtime.native.device import QbraidDevice
 
-
 DEFAULT = object()
 
 def execute_circuits(circuit_input, target=None, backend=None, hardware_model=None, noise_model=DEFAULT, noise_params=DEFAULT, coupling_map=DEFAULT, basis_gates=DEFAULT, method="statevector", optimization_level=0, shots=1024, memory=False, save_statevector=False, save_density_matrix=False, return_circuits_transpiled=False):
@@ -198,11 +197,66 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
             ):
                 raise TypeError(f"Invalid type for shots input: {type(shots)}; must be int or iterable of ints")
 
+            # @TODO - this part of the code seems buggy, needs fixing
             syntax_checker = backend._device_name.rstrip("LE") + "SC"
             _cost = lambda circuits, shots : [backend.cost(circuit, n_shots=shots, syntax_checker=syntax_checker) for circuit in circuits]
 
-            # @TODO - implement a smarter run function that instead uses process_circuits to get a handle and check its status periodically
-            _run = lambda circuits, shots, memory=None, **kwargs : backend.run_circuits(circuits, n_shots=shots, **kwargs)
+            # @TODO - give the user more control over this callable and its parameters
+            # @TODO - add better logging
+            def _run(circuits, shots, memory=None, **kwargs):
+                # Submit circuits for execution, using process_circuits in order to retrieve handles
+                handles = backend.process_circuits(circuits, n_shots=shots, **kwargs)
+
+                # Save handles to a file
+                save_dir = "./data/"
+                date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                save_filename = f"quantinuum_handles_{date_str}.pkl"
+                save_filepath = save_dir + save_filename
+                save_file = open(save_filepath, "wb")
+                pickle.dump(handles, save_file, protocol=5)
+                save_file.close()
+
+                # Poll handles periodically
+                poll_interval_seconds = 10
+                max_wait_minutes = 60 * 24 * 7
+                max_n_poll_attempts = int(max_wait_minutes * 60 / poll_interval_seconds)
+                
+                # @TODO - simplify this portion of the code
+                n_poll_attempts = 0
+                handles_completed = []
+                while n_poll_attempts < max_n_poll_attempts and len(handles_completed) < len(handles):
+                    for h, handle in enumerate(handles):
+                        if h not in handles_completed:
+                            handle_status = backend.circuit_status(handle)
+                            handle_status_str = str(handle_status.status).lower()
+                            
+                            print(f"Polling attempt {n_poll_attempts} of {max_n_poll_attempts}:")
+                            print(f"- Handle status: {handle_status}")
+
+                            if "completed" in handle_status_str:
+                                handles_completed.append(h)
+                            else:
+                                print(f"- Waiting {poll_interval_seconds} seconds to poll again...")
+                                time.sleep(poll_interval_seconds)
+
+                if len(handles_completed) == len(handles):
+                    for handle in handles:
+                        # Get results
+                        results = backend.get_results(handles)
+
+                        # Save results
+                        save_dir = "./data/"
+                        date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                        save_filename = f"quantinuum_results_{date_str}.pkl"
+                        save_file = open(save_dir + save_filename, "wb")
+                        pickle.dump(results, save_file, protocol=5)
+                        save_file.close()
+
+                        return results
+                else:
+                    print(f"Reached maximum number of handle polling attempts, stopping. All handles are stored at '{save_filepath}' for later access.")
+
+                    return None
         else:
             raise TypeError(f"backend must be None, 'aer_simulator', the name of a backend, or an instance of AerSimulator, Backend, or QuantinuumBackend not type {type(backend)}")
 
@@ -380,7 +434,19 @@ def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubi
 
     return all_data
 
-def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, error_scan_val_lists, basis_gates=None, target=None, compute_exact=False, with_mp=False, save_dir=None, save_filename=None, **kwargs):
+def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, error_scan_val_lists, basis_gates=None, compute_exact=False, exact_method=None, with_mp=False, save_dir=None, save_filename=None, **kwargs) -> dict:
+    """Simulates physical and logical circuits across a range of noise models.
+
+    Args:
+        circuit_input: The circuit(s) to simulate. Accepts instances or lists of QuantumCircuit objects.
+        noise_model_input: The noise model(s) to scan across. Accepts instances or lists of NoiseModel, or error dictionaries from which a NoiseModel can be constructed.
+    
+    Returns:
+        all_data
+        
+    Raises:
+        :class:`NotImplementedError`: if user attempts to provide noise_scaling_experiment with a circuit factory or noise model factory.
+    """
     if isinstance(circuit_input, QuantumCircuit):
         circuit_input = [circuit_input]
     elif hasattr(circuit_input, "__iter__") and all([isinstance(circuit, QuantumCircuit) for circuit in circuit_input]):
@@ -528,12 +594,18 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
                 circuit_no_meas = circuit.remove_final_measurements(inplace=False)
 
                 try:
+                    if exact_method is not None and exact_method != "density_matrix":
+                        raise Exception("User did not request exact density matrix computation")
+
                     # Compute exact density matrix
                     if isinstance(circuit_no_meas, LogicalCircuit):
                         density_matrix_exact = LogicalDensityMatrix(circuit_no_meas)
                     else:
                         density_matrix_exact = DensityMatrix(circuit_no_meas)
                 except:
+                    if exact_method is not None and exact_method != "statevector":
+                        raise Exception("User did not request exact statevector computation") from e
+
                     print(f"Failed to compute exact density matrix for circuit input at index {c}, attempting to compute exact statevector...")
                     try:
                         # Compute exact statevector
@@ -552,9 +624,9 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
                 "statevector_exact": statevector_exact,
                 "results": []
             }
-
+            
             for error_dict, noise_model in zip(error_dicts, noise_models):
-                result = execute_circuits(circuit, target=target, backend=backend, noise_model=noise_model, method=method, shots=shots)
+                result = execute_circuits(circuit, noise_model=noise_model, **kwargs)
 
                 sub_data["results"].append({
                     "error_dict": error_dict,
@@ -777,6 +849,52 @@ def qec_cycle_circuit_scaling_experiment(circuit_input, qecc, constraint_model=N
     return all_data
 
 def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, qecc, constraint_scan_keys, constraint_scan_val_lists, error_scan_keys, error_scan_val_lists, compute_exact=False, with_mp=False, save_dir=None, save_filename=None, **kwargs):
+    """
+    An extension of the `noise_scaling_experiment` method specifically for comparisons with QEC cycles scheduled given constraint models.
+
+    Data format:
+    ```
+    all_data =
+    [ # for each constraint model:
+        {
+            "circuit_physical": QuantumCircuit,
+            "circuit_logical": LogicalCircuit,
+            "constraint_model": dict,
+            "results_physical":
+            [ # for each circuit:
+                {
+                    "circuit": circuit,
+                    "density_matrix_exact": density_matrix_exact,
+                    "statevector_exact": statevector_exact,
+                    "results":
+                    [
+                        {
+                            "error_dict": error_dict,
+                            "result": result
+                        },
+                    ]
+                },
+            ],
+            "results_logical":
+            [
+                {
+                    "circuit": circuit,
+                    "density_matrix_exact": density_matrix_exact,
+                    "statevector_exact": statevector_exact,
+                    "results":
+                    [
+                        {
+                            "error_dict": error_dict,
+                            "result": result
+                        },
+                    ]
+                },
+            ],
+        },
+    ]
+    ```
+    """
+
     if isinstance(circuit_input, LogicalCircuit):
         raise NotImplementedError("LogicalCircuit inputs are not accepted because the original physical circuit(s) are also necessary for this experiment.")
     elif isinstance(circuit_input, QuantumCircuit):
@@ -836,7 +954,8 @@ def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, qecc, c
             noise_model_input=noise_model_input,
             error_scan_keys=error_scan_keys,
             error_scan_val_lists=error_scan_val_lists,
-            compute_exact=compute_exact
+            compute_exact=compute_exact,
+            **kwargs
         )
         all_data[c]["results_physical"] = results_physical
 
@@ -853,11 +972,12 @@ def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, qecc, c
             noise_model_input=noise_model_input,
             error_scan_keys=error_scan_keys,
             error_scan_val_lists=error_scan_val_lists,
-            compute_exact=False,
+            compute_exact=compute_exact,
+            exact_method='statevector',
             **kwargs
         )
         all_data[c]["results_logical"] = results_logical
-
+        
     # Run save_progress once for good measure and then unregister save_progress so it doesn't clutter our exit routine
     save_progress()
     atexit.unregister(save_progress)

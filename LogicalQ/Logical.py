@@ -7,8 +7,11 @@ from qiskit import QuantumRegister, AncillaRegister, ClassicalRegister, QuantumC
 from qiskit.circuit import Bit, Measure
 from qiskit.circuit.quantumcircuitdata import QuantumCircuitData
 from qiskit.circuit.classical import expr
+from qiskit.circuit.library import RXGate, RYGate, RZGate, RXXGate, RYYGate, RZZGate
 from qiskit.quantum_info import Statevector, DensityMatrix, Pauli, partial_trace, state_fidelity
 from qiskit_addon_utils.slicing import slice_by_depth
+from qiskit.transpiler.passes import SolovayKitaev
+from qiskit.synthesis import generate_basic_approximations
 
 from qiskit.transpiler import PassManager
 
@@ -173,7 +176,7 @@ class LogicalCircuit(QuantumCircuit):
             # Classical bits needed to track the Pauli Frame
             pauli_frame_creg_i = ClassicalRegister(2, name=f"cpauli_frame{i}")
             # Classical bits needed to take measurements of logical operation qubits
-            logical_op_meas_creg_i = ClassicalRegister(1, name=f"clogical_op_meas{i}")
+            logical_op_meas_creg_i = ClassicalRegister(2, name=f"clogical_op_meas{i}")
             # Classical bits needed to take measurements of the final state of the logical qubit
             final_measurement_creg_i = ClassicalRegister(self.n_physical_qubits, name=f"cfinal_meas{i}")
 
@@ -685,6 +688,7 @@ class LogicalCircuit(QuantumCircuit):
                 self.steane_flagged_circuit2(logical_qubit_indices)
             else:
                 self.measure_stabilizers(logical_qubit_indices=[q], stabilizer_indices=stabilizer_indices)
+                
             for n in range(self.n_ancilla_qubits):
                 super().append(Measure(), [self.ancilla_qregs[q][n]], [self.curr_syndrome_cregs[q][n]], copy=False)
 
@@ -927,7 +931,8 @@ class LogicalCircuit(QuantumCircuit):
 
     def append_qec_cycle(
             self,
-            logical_qubit_indices: Iterable[int] = None
+            logical_qubit_indices: Iterable[int] | None = None,
+            perform_flagged_syndrome_measurements: bool = True
     ) -> tuple[dict[int,int], dict[int,int]]:
         """Append a QEC cycle to the end of the circuit.
 
@@ -937,9 +942,7 @@ class LogicalCircuit(QuantumCircuit):
         Returns:
             Qubits and indices with QEC cycles, before and after appending.
         """
-        # Use hardcoded flagged circuits for Steane code
-        use_steane_flagged_circuits = True if (self.n, self.k, self.d) == (7,1,3) else False
-
+        
         if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
             logical_qubit_indices = list(range(self.n_logical_qubits))
 
@@ -959,23 +962,44 @@ class LogicalCircuit(QuantumCircuit):
 
             with self.box(label="logical.qec.qec_cycle:$\\hat U_{QEC}$"):
                 super().reset(self.ancilla_qregs[q])
+                
+                if perform_flagged_syndrome_measurements:
+                    # Perform first flagged syndrome measurements
+                    self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_1, flagged=True, steane_flag_1=True)
 
-                # Perform first flagged syndrome measurements
-                self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_1, flagged=True, steane_flag_1=use_steane_flagged_circuits)
-
-                with self.if_test(self.cbit_and(self.flagged_syndrome_diff_cregs[q], [0]*self.flagged_syndrome_diff_cregs[q].size)) as _else:
                     # If no change in syndrome, perform second flagged syndrome measurement
-                    self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_2, flagged=True, steane_flag_2=use_steane_flagged_circuits)
-                with _else:
-                    # If change in syndrome, perform unflagged syndrome measurement, decode, and correct
+                    with self.if_test(self.cbit_and(self.flagged_syndrome_diff_cregs[q], [0]*self.flagged_syndrome_diff_cregs[q].size)) as _else:
+                        self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_2, flagged=True, steane_flag_2=True)
+                    with _else:
+                        pass
+                    
+                    with self.if_test(self.cbit_and(self.flagged_syndrome_diff_cregs[q], [0]*self.flagged_syndrome_diff_cregs[q].size)) as _else:
+                        pass
+                    with _else:
+                        # If change in syndrome, perform unflagged syndrome measurement, decode, and correct
+                        self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, flagged=False)
+                        self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, flagged=False)
+
+                        self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, with_flagged=False)
+                        self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, with_flagged=False)
+                        
+                        self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, with_flagged=True)
+                        self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, with_flagged=True)
+
+                        # Update previous syndrome
+                        for n in range(self.n_stabilizers):
+                            with self.if_test(expr.lift(self.unflagged_syndrome_diff_cregs[q][n])) as _else_inner:
+                                self.cbit_not(self.prev_syndrome_cregs[q][n])
+                            with _else_inner:
+                                pass
+                else:
+                    # Perform unflagged syndrome measurements, decode, and correct
                     self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, flagged=False)
                     self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, flagged=False)
 
                     self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, with_flagged=False)
-                    self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, with_flagged=False)
-                    self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, with_flagged=True)
-                    self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, with_flagged=True)
-
+                    self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, with_flagged=False)  
+                            
                     # Update previous syndrome
                     for n in range(self.n_stabilizers):
                         with self.if_test(expr.lift(self.unflagged_syndrome_diff_cregs[q][n])) as _else_inner:
@@ -1093,7 +1117,7 @@ class LogicalCircuit(QuantumCircuit):
                     self.set_cbit(self.output_creg[c], 1)
                 with _else:
                     pass
-
+                
                 if with_error_correction:
                     # Final syndrome
                     for n in range(self.n_ancilla_qubits):
@@ -1543,6 +1567,232 @@ class LogicalCircuit(QuantumCircuit):
         with self.box(label="logical.logicalop.mcmt.default:$\\hat{MCMT}_{L}$"):
             super().append(gate.control(len(controls)), control_qubits + target_qubits)
 
+    def rx(self, theta: float, targets, method = "S-K", depth = 10, recursion_degree = 1, box=True):
+        """
+        Logical Single-Target Rotation Gate
+        
+        method = "LCU" -> linear combination of unitaries or "S-K" -> solovay-kitaev algorithm or "OAA" -> oblivious amplitude amplification
+        
+        theta in radians
+        """
+        if hasattr(targets, "__iter__"):
+            targets = targets
+        else:
+            targets = [targets]
+        
+        if method == "S-K":
+            self.r(
+                "x", 
+                targets,
+                theta,
+                label="Rx",
+                depth = depth, 
+                recursion_degree = recursion_degree, 
+                box = box)
+        elif method == "OAA":
+            raise NotImplementedError("Method not implemented.")
+        else:
+            raise ValueError("{method} is not a valid method.")
+            
+    def ry(self, theta: float, targets, method = "S-K", depth = 10, recursion_degree = 1, box=True):
+        """
+        Logical Single-Target Rotation Gate
+        
+        method = "LCU" or "S-K"
+        
+        theta in radians
+        """
+        if hasattr(targets, "__iter__"):
+            targets = targets
+        else:
+            targets = [targets]
+        
+        if method == "S-K":
+            self.r(
+                "y", 
+                targets,
+                theta,
+                label="Ry",
+                depth = depth, 
+                recursion_degree = recursion_degree, 
+                box = box)
+        elif method == "OAA":
+            raise NotImplementedError("Method not implemented.")
+        else:
+            raise ValueError("{method} is not a valid method.")
+            
+    def rz(self, theta: float, targets, method = "S-K", depth = 10, recursion_degree = 1, box=True):
+        """
+        Logical Single-Target Rotation Gate
+        
+        method = "LCU" or "S-K"
+        
+        theta in radians
+        """
+        if hasattr(targets, "__iter__"):
+            targets = targets
+        else:
+            targets = [targets]
+        
+        if method == "S-K":
+            self.r(
+                "z", 
+                targets,
+                theta,
+                label="Rz",
+                depth = depth, 
+                recursion_degree = recursion_degree, 
+                box = box)
+        elif method == "OAA":
+            raise NotImplementedError("Method not implemented.")
+        else:
+            raise ValueError("{method} is not a valid method.")
+            
+    def rxx(self, theta: float, targets, method = "S-K", depth = 10, recursion_degree = 1, box=True):
+        if hasattr(targets, "__iter__"):
+            targets = targets
+        else:
+            targets = [targets]
+            
+        if len(targets) != 2:
+            raise AssertionError("Number of target qubits must be 2.")
+        
+        if method == "S-K":
+            self.r(
+                "xx", 
+                targets,
+                theta,
+                label="Rxx",
+                depth = depth, 
+                recursion_degree = recursion_degree, 
+                box = box)
+        elif method == "OAA":
+            raise NotImplementedError("Method not implemented.")
+        else:
+            raise ValueError("{method} is not a valid method.")
+            
+    def ryy(self, theta: float, targets, method = "S-K", depth = 10, recursion_degree = 1, box=True):
+        if hasattr(targets, "__iter__"):
+            targets = targets
+        else:
+            targets = [targets]
+        
+        if len(targets) != 2:
+            raise AssertionError("Number of target qubits must be 2.")
+        
+        if method == "S-K":
+            self.r(
+                "yy", 
+                targets,
+                theta,
+                label="Ryy",
+                depth = depth, 
+                recursion_degree = recursion_degree, 
+                box = box)
+        elif method == "OAA":
+            raise NotImplementedError("Method not implemented.")
+        else:
+            raise ValueError("{method} is not a valid method.")
+            
+    def rzz(self, theta: float, targets, method = "S-K", depth = 10, recursion_degree = 1, box=True):
+        if hasattr(targets, "__iter__"):
+            targets = targets
+        else:
+            targets = [targets]
+        
+        if len(targets) != 2:
+            raise AssertionError("Number of target qubits must be 2.")
+        
+        if method == "S-K":
+            self.r(
+                "zz", 
+                targets,
+                theta,
+                label="Rzz",
+                depth = depth, 
+                recursion_degree = recursion_degree, 
+                box = box
+                )
+        elif method == "OAA":
+            raise NotImplementedError("Method not implemented.")
+        else:
+            raise ValueError("{method} is not a valid method.")
+
+    def append_sk_decomposition(self, circuit, targets, label="U", depth=10, recursion_degree=1, box=False, return_subcircuit=False):
+        
+        basis = ["s", "sdg", "t", "tdg", "h", "x", "y", "z", "cz"]
+        approx = generate_basic_approximations(basis, depth=depth)
+        skd = SolovayKitaev(recursion_degree=recursion_degree, basic_approximations=approx)
+
+        discretized_sub_qc = skd(circuit)
+        
+        def append_all():
+            for i in range(len(discretized_sub_qc.data)):
+                circuit_instruction = discretized_sub_qc.data[i]
+                qargs = [targets[discretized_sub_qc.qubits.index(qubit)] for qubit in circuit_instruction.qubits]
+                self.append(circuit_instruction, qargs=qargs)
+        
+        if box:
+            with self.box(label=f"logical.logicalop.{label}"):
+                append_all()
+        else:
+            append_all()
+            
+        if return_subcircuit:
+            return discretized_sub_qc
+
+    def r(self, axis, targets, theta = 0, label = "R", depth = 10, recursion_degree = 1, box=True, method = "S-K"):
+        if isinstance(axis, str):        
+            # In form "instruction.name: (Gate, num_targets_per_gate)"
+            valid_gates = {"x": (RXGate, 1), "y": (RYGate, 1), "z": (RZGate, 1), "xx": (RXXGate, 2), "yy": (RYYGate, 2), "zz": (RZZGate, 2)} 
+            
+            if axis not in list(valid_gates.keys()):
+                raise NotImplementedError(f"Invalid input '{axis}' for argument 'axis'.")
+            
+            if label == "R":
+                label = label + axis
+                
+        elif isinstance(axis, list):
+            if len(axis) == 3:
+                raise NotImplementedError("Arbitrary rotation axes are not yet implemented.")
+            else:
+                raise ValueError(f"'axis' is list of invalid length ({len(axis)}). 'axis' must have length 3.")
+            
+        else:
+            raise TypeError(f"Provided 'axis' is not an instance of an allowed type (str, int).")
+        
+        if method == "S-K":
+            gate_base, num_target_qubits = valid_gates[axis]
+            gate = gate_base(theta)
+            
+            sub_qc = QuantumCircuit(num_target_qubits)
+        
+            def apply_Rzz(sub_qc):
+                sub_qc.cx(0, 1)
+                sub_qc.rz(theta, 1)
+                sub_qc.cx(0, 1)
+        
+            match axis:
+                case "xx":
+                    sub_qc.h([0, 1])
+                    apply_Rzz(sub_qc)
+                    sub_qc.h([0, 1])
+                case "yy":
+                    sub_qc.rx(np.pi / 2, [0, 1])
+                    apply_Rzz(sub_qc)
+                    sub_qc.rx(-np.pi / 2, [0, 1])
+                case "zz":
+                    apply_Rzz(sub_qc)
+                case _:        
+                    sub_qc.append(gate, qargs = list(range(num_target_qubits)))
+            
+            self.append_sk_decomposition(sub_qc, targets, label=label, depth=depth, recursion_degree=recursion_degree, box=box)
+            
+        elif method == "OAA":
+            raise NotImplementedError("Method not implemented.")
+        else:
+            raise ValueError("{method} is not a valid method.")
+
     # Input could be: 1. (CircuitInstruction(name="...", qargs="...", cargs="..."), qargs=None, cargs=None)
     #                 2. (Instruction(name="..."), qargs=[..], cargs=[...])
     def append(self, instruction, qargs=None, cargs=None, copy=True):
@@ -1637,6 +1887,32 @@ class LogicalCircuit(QuantumCircuit):
                 control_qubit = instruction.qubits[0]._index
                 target_qubit = instruction.qubits[1]._index
                 self.cy(control_qubit, target_qubit)
+            case "rx":
+                theta = instruction.params[0]
+                self.rx(theta, qubits)
+            case "ry":
+                theta = instruction.params[0]
+                self.ry(theta, qubits)
+            case "rz":
+                theta = instruction.params[0]
+                self.rz(theta, qubits)
+            case "Rxx":
+                theta = instruction.params[0]
+                self.rxx(theta, qubits)
+            case "Ryy":
+                theta = instruction.params[0]
+                self.ryy(theta, qubits)    
+            case "Rzz":
+                theta = instruction.params[0]
+                self.rzz(theta, qubits)
+            # @TODO Fix code to initialize LogicalCircuit to arbitrary logical state.
+            #case "initialize":
+            #    sv = instruction.params
+            #    #if isinstance(sv, list):
+            #    #    sv = Statevector(sv)
+            #        
+            #    lsv = LogicalStatevector(sv, len(qubits), self.label, self.stabilizer_tableau)
+            #    self.initialize(lsv.data)
             case "mcmt":
                 raise NotImplementedError(f"Physical operation 'MCMT' does not have physical gate conversion implemented!")
             case "measure":
@@ -2111,7 +2387,7 @@ class LogicalStatevector(Statevector):
             coeffs = [0.] * np.pow(2, self.n_logical_qubits)
             for i in range(len(coeffs)):
                 coeffs[i] = np.vdot(lsvs[i].data, self.data)
-            delta = np.sqrt(1 - np.sum(np.pow(np.abs(coeffs),2)))
+            delta = np.sqrt(np.maximum(0.0, 1 - np.sum(np.pow(np.abs(coeffs),2))))
 
             self._logical_decomposition = np.array([*coeffs, delta])
             real_part = np.real(self._logical_decomposition)
