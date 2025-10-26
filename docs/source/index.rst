@@ -11,13 +11,22 @@ LogicalQ
 Installation
 -------------------------
 
-LogicalQ is still in the development stage, so the latest version of LogicalQ is available on the GitHub under the `main branch`_.
+LogicalQ is still in the development stage, so the latest nightly version of LogicalQ is available on the GitHub under the `main branch`_.
 
 .. _main branch: https://github.com/GT-Quantum-Computing-Association/LogicalQ.git
 
-LogicalQ is written to function best on any Unix/POSIX-like system, but it can also be installed on Windows and any other operating system which supports Python 3 and the necessary dependencies. We do our best to ensure compatibility with all major Linux, macOS, and Windows distributions. However, we recommend installing it in a Unix/POSIX-like environment for the highest-quality experience and guaranteed support of all features. If you use Windows, we recommend using WSL, which is documented at `https://learn.microsoft.com/en-us/windows/wsl/ <https://learn.microsoft.com/en-us/windows/wsl/>`__.
+The latest stable release can be installed from the PyPI index as follows:
 
-LogicalQ can be installed as follows:
+.. code:: bash
+
+    python -m pip install virtualenv
+    python -m virtualenv .venv
+    .venv/bin/activate # `Scripts` instead of `bin` on Windows
+    python -m pip install LogicalQ
+
+The source code for the latest stable release can be found under the latest ``stable/*`` branch.
+
+The latest nightly version of LogicalQ can be installed from source as follows:
 
 .. code:: bash
 
@@ -27,6 +36,8 @@ LogicalQ can be installed as follows:
     python -m virtualenv .venv
     .venv/bin/activate # `Scripts` instead of `bin` on Windows
     python -m pip install -e .
+
+LogicalQ is written to function best on any Unix/POSIX-like system, but it can also be installed on Windows and any other operating system which supports Python 3 and the necessary dependencies. We do our best to ensure compatibility with all major Linux, macOS, and Windows distributions. However, we recommend installing it in a Unix/POSIX-like environment for the highest-quality experience and guaranteed support of all features. If you use Windows, we recommend using WSL, which is documented at `https://learn.microsoft.com/en-us/windows/wsl/ <https://learn.microsoft.com/en-us/windows/wsl/>`__.
 
 Documentation
 -------------------------------

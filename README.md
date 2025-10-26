@@ -10,7 +10,15 @@ For more information about `LogicalQ`, please refer to our documentation: [https
 
 ## Installation
 
-To install LogicalQ, clone this repository and install via `pip`:
+To install the latest stable release of LogicalQ, install directly from the PyPI index via `pip`:
+```py
+python -m pip install virtualenv
+python -m virtualenv .venv
+.venv/bin/activate
+python -m pip install LogicalQ
+```
+
+To install the latest nightly version of LogicalQ, clone this repository and install via `pip`:
 ```py
 git clone https://github.com/GT-Quantum-Computing-Association/LogicalQ.git
 cd LogicalQ
