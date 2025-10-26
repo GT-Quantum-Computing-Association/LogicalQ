@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="LogicalQ",
-    version="0.1.1",
+    version="0.1.0",
     author="GT-QCA",
     author_email="aliceandbob@gatechquantum.com",
     url="https://github.com/GT-Quantum-Computing-Association/LogicalQ/",
