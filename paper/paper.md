@@ -65,19 +65,18 @@ Many of the necessary components for QEMDAC have been formalized mathematically 
 
 A comparison of existing libraries is made in Table 1.
 
-| Feature                        | `LogicalQ`    | `stim`       | `mqt-qecc`   | `PEC0S`      | `stac`       |
-| ------------------------------ | ------------- | ------------ | ----------   | ------------ | ------------ |
-| Stabilizer code QEC            | $\checkmark$  | $\checkmark$ | $\checkmark$ | $\checkmark$ | $\checkmark$ |
-| Arbitrary Clifford gates       | $\checkmark$  | $\checkmark$ | $\times$     | $\checkmark$ | $\checkmark$ |
-| Arbitrary non-Clifford gates   | $\checkmark$  | $\times$     | $\times$     | $\checkmark$ | $\checkmark$ |
-| Fault-tolerant gates           | $\checkmark$  | $\times$     | $\times$     | $ checkmark$ | $\times$     |
-| Two-way interoperability       | $\checkmark$  | $\checkmark$ | $\times$     | $\times$     | $\checkmark$ |
-| General noise model support    | $\checkmark$  | $\times$     | $\times$     | $\checkmark$ | $\times$     |
-| Cloud hardware interfaces      | $\checkmark$  | $\times$     | $\times$     | $\times$     | $\times$     |
-| Experiment suite               | $\checkmark$  | $\times$     | $\times$     | $\times$     | $\times$     |
-| Optimized QEC cycle scheduling | $\checkmark$  | $\times$     | $\times$     | $\times$     | $\times$     |
-Table 1: Comparison of `LogicalQ` with other major QEMDAC packages
-[]{label="table:software-comparison"}
+| Feature                        | `LogicalQ`    | `stim`       | `mqt-qecc`     | `PEC0S`      | `stac`       |
+| ------------------------------ | ------------- | ------------ | -------------- | ------------ | ------------ |
+| Stabilizer code QEC            | $\checkmark$  | $\checkmark$ | $\checkmark$   | $\checkmark$ | $\checkmark$ |
+| Arbitrary Clifford gates       | $\checkmark$  | $\checkmark$ | $\times$       | $\checkmark$ | $\checkmark$ |
+| Arbitrary non-Clifford gates   | $\checkmark$  | $\times$     | $\times$       | $\checkmark$ | $\checkmark$ |
+| Fault-tolerant gates           | $\checkmark$  | $\times$     | $\times$       | $ checkmark$ | $\times$     |
+| Two-way interoperability       | $\checkmark$  | $\checkmark$ | $\times$       | $\times$     | $\checkmark$ |
+| General noise model support    | $\checkmark$  | $\times$     | $\times$       | $\checkmark$ | $\times$     |
+| Cloud hardware interfaces      | $\checkmark$  | $\times$     | $\times$       | $\times$     | $\times$     |
+| Experiment suite               | $\checkmark$  | $\times$     | $\times$       | $\times$     | $\times$     |
+| Optimized QEC cycle scheduling | $\checkmark$  | $\times$     | $\times$       | $\times$     | $\times$     |
+Table: Comparison of `LogicalQ` with other major QEMDAC packages; `stim` is due to [@Gidney2021], `mqt-qecc` is due to [@Wille2024], `PECOS` is due to [@RyanAndersonPECOS], and `stac` is due to [@KhalidStac].
 
 In summary, many of the existing libraries are notable for their high-performance simulations and advanced implementations of certain features, but none support the full functionality required for QECDAM applied to quantum algorithms research, especially on cloud hardware. `LogicalQ` is also unique in that it has a suite of experiments for testing QECDAM which serves as a quick set of tests for researchers studying noise control.
 
