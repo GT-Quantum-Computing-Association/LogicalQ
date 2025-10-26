@@ -1,6 +1,6 @@
 # from LogicalQ.Logical import LogicalCircuit
 import numpy as np
-from LogicalQ.Experiments import execute_circuits
+from LogicalQ.Execution import execute_circuits
 from LogicalQ.Logical import LogicalStatevector, logical_state_fidelity
 from LogicalQ.LogicalGeneral import LogicalCircuitGeneral as LogicalCircuit
 from LogicalQ.Library.QECCs import implemented_codes

@@ -7,7 +7,7 @@ from qiskit.circuit.library import RGate, HGate, XGate, YGate, ZGate, TGate
 from qiskit.quantum_info import Statevector, DensityMatrix, state_fidelity
 
 from .Logical import LogicalCircuit, LogicalStatevector, logical_state_fidelity
-from .Experiments import execute_circuits
+from .Execution import execute_circuits
 from .Library.Gates import string_to_gate_set
 
 from typing import TYPE_CHECKING, Callable
