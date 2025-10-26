@@ -62,7 +62,9 @@ class LogicalCircuit(QuantumCircuit):
         self.generate_code()
         self.group_stabilizers()
 
-        # Keep track of where QEC cycles are located in the circuit
+        # Keep track of where QED/QEC cycles are located in the circuit
+        self.qed_cycle_indices_initial = {}
+        self.qed_cycle_indices_final = {}
         self.qec_cycle_indices_initial = {}
         self.qec_cycle_indices_final = {}
 
@@ -110,6 +112,7 @@ class LogicalCircuit(QuantumCircuit):
         super().x(self.cbit_setter_qreg[1])
 
         self.data_without_qec = copy.deepcopy(self.data)
+        self.data_without_qed = copy.deepcopy(self.data)
 
     # @TODO - this completely ignores QEC (besides encoding), do we want to have some sort of default QEC behavior?
     @classmethod
@@ -145,9 +148,9 @@ class LogicalCircuit(QuantumCircuit):
         return logical_circuit
 
     def add_logical_qubits(
-            self,
-            logical_qubit_count: int
-        ):
+        self,
+        logical_qubit_count: int
+    ):
         """Add logical qubit(s) to the LogicalCircuit.
 
         Args:
@@ -468,10 +471,10 @@ class LogicalCircuit(QuantumCircuit):
         self.encoding_gate = self.encoding_circuit.to_gate(label="$U_{enc}$")
 
     def encode(
-            self,
-            *qubits: Iterable[int],
-            max_iterations: int = 1,
-            initial_states: Iterable[list[int]] = None
+        self,
+        *qubits: Iterable[int],
+        max_iterations: int = 1,
+        initial_states: Iterable[list[int]] | None = None
     ) -> bool:
         """
         Prepare logical qubit(s) in the specified initial state.
@@ -558,8 +561,8 @@ class LogicalCircuit(QuantumCircuit):
         return True
 
     def reset_ancillas(
-            self,
-            logical_qubit_indices: Iterable[int] = None
+        self,
+        logical_qubit_indices: Iterable[int] | None = None
     ):
         """Reset all ancillas associated with specified logical qubits.
 
@@ -573,8 +576,8 @@ class LogicalCircuit(QuantumCircuit):
             self.reset(self.ancilla_qregs[q])
 
     def steane_flagged_circuit1(
-            self,
-            logical_qubit_indices: Iterable[int]
+        self,
+        logical_qubit_indices: Iterable[int]
     ):
         """Measure first set of flagged syndromes for the Steane code.
         """
@@ -599,8 +602,8 @@ class LogicalCircuit(QuantumCircuit):
             super().barrier()
 
     def steane_flagged_circuit2(
-            self,
-            logical_qubit_indices: Iterable[int]
+        self,
+        logical_qubit_indices: Iterable[int]
     ):
         """Measure second set of flagged syndromes for the Steane code.
         """
@@ -627,9 +630,9 @@ class LogicalCircuit(QuantumCircuit):
             super().barrier()
 
     def measure_stabilizers(
-            self,
-            logical_qubit_indices: Iterable[int] = None,
-            stabilizer_indices: Iterable[int] = None
+        self,
+        logical_qubit_indices: Iterable[int] | None = None,
+        stabilizer_indices: Iterable[int] | None = None
     ):
         """Measure specified stabilizers to the circuit as controlled Pauli operators.
 
@@ -656,12 +659,12 @@ class LogicalCircuit(QuantumCircuit):
                 super().h(self.ancilla_qregs[q][s])
 
     def measure_syndrome_diff(
-            self,
-            logical_qubit_indices: Iterable[int] = None,
-            stabilizer_indices: Iterable[int] = None,
-            flagged: bool = False,
-            steane_flag_1: bool = False,
-            steane_flag_2: bool = False
+        self,
+        logical_qubit_indices: Iterable[int] | None = None,
+        stabilizer_indices: Iterable[int] | None = None,
+        flagged: bool = False,
+        steane_flag_1: bool = False,
+        steane_flag_2: bool = False
     ):
         """Measure flagged or unflagged syndrome differences for specified logical qubits and stabilizers.
 
@@ -702,11 +705,11 @@ class LogicalCircuit(QuantumCircuit):
         self.reset_ancillas(logical_qubit_indices=logical_qubit_indices)
 
     def optimize_qec_cycle_indices(
-            self,
-            logical_qubit_indices: Iterable[int] = None,
-            constraint_model: dict[str, float] = None,
-            ignore_existing_qec: bool = False,
-            clear_existing_qec: bool = False
+        self,
+        logical_qubit_indices: Iterable[int] | None = None,
+        constraint_model: dict[str, float] | None = None,
+        ignore_existing_qec: bool = False,
+        clear_existing_qec: bool = False
     ) -> dict[int,int]:
         """Compute optimal QEC cycle indices.
 
@@ -862,11 +865,11 @@ class LogicalCircuit(QuantumCircuit):
     # Insert QEC cycles at specified indices in the circuit data
     # @TODO - Extend the method to process qubit-specific indices for user-friendliness
     def insert_qec_cycles(
-            self,
-            logical_qubit_indices: Iterable[int] = None,
-            qec_cycle_indices: dict[int, list] | list[list] = None,
-            clear_existing_qec: bool = False
-        ) -> tuple[QuantumCircuitData, QuantumCircuitData]:
+        self,
+        logical_qubit_indices: Iterable[int] | None = None,
+        qec_cycle_indices: dict[int, list] | list[list] | None = None,
+        clear_existing_qec: bool = False
+    ) -> tuple[QuantumCircuitData, QuantumCircuitData]:
         """Insert QEC cycles at specified indices in the circuit data.
 
         Args:
@@ -929,10 +932,86 @@ class LogicalCircuit(QuantumCircuit):
 
         return _data, self.data
 
+    def append_qed_cycle(
+        self,
+        logical_qubit_indices: Iterable[int] | None = None,
+        perform_flagged_syndrome_measurements: bool = True
+    ) -> tuple[dict[int,int], dict[int,int]]:
+        """Append a QED cycle to the end of the circuit.
+
+        Args:
+            logical_qubit_indices: Logical qubits for which to add QED cycles.
+        
+        Returns:
+            Qubits and indices with QED cycles, before and after appending.
+        """
+        
+        if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
+            logical_qubit_indices = list(range(self.n_logical_qubits))
+
+        for q in logical_qubit_indices:
+            if len(self.data_without_qed) is None:
+                self.data_without_qed = copy.deepcopy(self.data)
+            else:
+                if len(self.qed_cycle_indices_final[q]) > 0:
+                    last_qed_index_final = self.qed_cycle_indices_final[q][-1]
+                else:
+                    last_qed_index_final = -1
+
+                self.data_without_qed.extend(self.data[last_qed_index_final+1:])
+
+            # Keep track of the initial index for now, only append at the end once we know this call was successful
+            index_initial = len(self.data)
+
+            with self.box(label="logical.qed.qed_cycle:$\\hat U_{QED}$"):
+                super().reset(self.ancilla_qregs[q])
+                
+                if perform_flagged_syndrome_measurements:
+                    # Perform first flagged syndrome measurements
+                    self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_1, flagged=True, steane_flag_1=True)
+
+                    # If no change in syndrome, perform second flagged syndrome measurement
+                    with self.if_test(self.cbit_and(self.flagged_syndrome_diff_cregs[q], [0]*self.flagged_syndrome_diff_cregs[q].size)) as _else:
+                        self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_2, flagged=True, steane_flag_2=True)
+                    with _else:
+                        pass
+                    
+                    with self.if_test(self.cbit_and(self.flagged_syndrome_diff_cregs[q], [0]*self.flagged_syndrome_diff_cregs[q].size)) as _else:
+                        pass
+                    with _else:
+                        # If change in syndrome, perform unflagged syndrome measurement
+                        self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, flagged=False)
+                        self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, flagged=False)
+
+                        # Update previous syndrome
+                        for n in range(self.n_stabilizers):
+                            with self.if_test(expr.lift(self.unflagged_syndrome_diff_cregs[q][n])) as _else_inner:
+                                self.cbit_not(self.prev_syndrome_cregs[q][n])
+                            with _else_inner:
+                                pass
+                else:
+                    # Perform unflagged syndrome measurements, decode, and correct
+                    self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, flagged=False)
+                    self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, flagged=False)
+
+                    # Update previous syndrome
+                    for n in range(self.n_stabilizers):
+                        with self.if_test(expr.lift(self.unflagged_syndrome_diff_cregs[q][n])) as _else_inner:
+                            self.cbit_not(self.prev_syndrome_cregs[q][n])
+                        with _else_inner:
+                            pass
+
+            index_final = len(self.data)-1
+
+            self.qed_cycle_indices_initial[q].append(index_initial)
+            self.qed_cycle_indices_final[q].append(index_final)
+
+        return self.qed_cycle_indices_initial, self.qed_cycle_indices_final
+    
     def append_qec_cycle(
-            self,
-            logical_qubit_indices: Iterable[int] | None = None,
-            perform_flagged_syndrome_measurements: bool = True
+        self,
+        logical_qubit_indices: Iterable[int] | None = None,
+        perform_flagged_syndrome_measurements: bool = True
     ) -> tuple[dict[int,int], dict[int,int]]:
         """Append a QEC cycle to the end of the circuit.
 
@@ -1015,9 +1094,9 @@ class LogicalCircuit(QuantumCircuit):
         return self.qec_cycle_indices_initial, self.qec_cycle_indices_final
 
     def clear_qec_cycles(
-            self,
-            logical_qubit_indices: Iterable[int] = None,
-            qec_cycle_indices: Iterable[int ] = None
+        self,
+        logical_qubit_indices: Iterable[int] | None = None,
+        qec_cycle_indices: Iterable[int ] | None = None
     ) -> NotImplementedError:
         """Clear QEC cycles (either specified or all) on specified logical qubits.
 
@@ -1028,14 +1107,15 @@ class LogicalCircuit(QuantumCircuit):
         Returns:
             This method is not yet implemented.
         """
+
         return NotImplementedError("clear_qec_cycles is not yet implemented")
 
     # @TODO - determine appropriate syndrome decoding mappings dynamically
     def apply_decoding(
-            self,
-            logical_qubit_indices: Iterable[int],
-            stabilizer_indices: Iterable[int],
-            with_flagged: bool
+        self,
+        logical_qubit_indices: Iterable[int],
+        stabilizer_indices: Iterable[int],
+        with_flagged: bool
     ):
         """Decode the syndrome measurements to determine the correction to apply.
 
@@ -1081,10 +1161,10 @@ class LogicalCircuit(QuantumCircuit):
                     pass
 
     def measure(
-            self,
-            logical_qubit_indices: Iterable[int],
-            cbit_indices: Iterable[int],
-            with_error_correction: bool = True
+        self,
+        logical_qubit_indices: Iterable[int],
+        cbit_indices: Iterable[int],
+        with_error_correction: bool = True
     ):
         """Measure specified qubits (in the Z basis) into classical bits.
 
@@ -1147,9 +1227,9 @@ class LogicalCircuit(QuantumCircuit):
                         pass
 
     def measure_all(
-            self,
-            inplace: bool = True,
-            with_error_correction: bool = True
+        self,
+        inplace: bool = True,
+        with_error_correction: bool = True
     ) -> LogicalCircuit:
         """Add measurements to all qubits.
 
@@ -1168,8 +1248,8 @@ class LogicalCircuit(QuantumCircuit):
             return _lqc
 
     def remove_final_measurements(
-            self,
-            inplace: bool = False
+        self,
+        inplace: bool = False
     ) -> LogicalCircuit:
         """Remove final measurements from circuit.
 
@@ -1194,9 +1274,9 @@ class LogicalCircuit(QuantumCircuit):
         return lqc_no_meas
 
     def get_logical_counts(
-            self,
-            physical_counts: Iterable[int],
-            logical_qubit_indices: Iterable[int] = None
+        self,
+        physical_counts: Iterable[int],
+        logical_qubit_indices: Iterable[int] = None
     ) -> dict[str, int]:
         """Get logical counts from physical counts.
 
@@ -2067,14 +2147,14 @@ class LogicalStatevector(Statevector):
     """
 
     def __init__(
-            self,
-            data: np.ndarray | QuantumCircuit | LogicalCircuit | Statevector,
-            logical_circuit: LogicalCircuit = None,
-            n_logical_qubits: int = None,
-            label: Iterable[int] = None,
-            stabilizer_tableau: Iterable[str] = None,
-            dims: int = None
-        ):
+        self,
+        data: np.ndarray | QuantumCircuit | LogicalCircuit | Statevector,
+        logical_circuit: LogicalCircuit = None,
+        n_logical_qubits: int = None,
+        label: Iterable[int] = None,
+        stabilizer_tableau: Iterable[str] = None,
+        dims: int = None
+    ):
         """Initialize a LogicalStatevector object.
 
         Args:
