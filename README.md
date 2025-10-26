@@ -48,7 +48,7 @@ See the `demos` directory for more examples!
 
 ## Contributing
 
-We welcome contributions from anyone! A GitHub Issue may be used for making requests or reporting bugs. Any contributions should be merged from a branch (preferred for internal contributors from QCA) or forks (default for external contributors outside QCA). Please read our [contributing guidelines](./CONTRIBUTING.md)
+We welcome contributions from anyone! A GitHub Issue may be used for making requests or reporting bugs. Any contributions should be merged from a branch (preferred for internal contributors from GT QCA) or forks (default for external contributors outside GT QCA). Please read our [contributing guidelines](./CONTRIBUTING.md).
 
 ## Acknowledgements
 
