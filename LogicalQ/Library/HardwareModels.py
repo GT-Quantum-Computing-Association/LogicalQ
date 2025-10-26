@@ -8,6 +8,7 @@ from .Gates import RGate, RZGate, RZZGate, ZZGate
 #           - Caltech neutral atom group (e.g. papers by Endres, Choi, Scholl, Shaw)
 
 # Quantinuum H1-1 (https://docs.quantinuum.com/systems/user_guide/emulator_user_guide/emulators/h1_emulators.html):
+
 hardware_model_Quantinuum_H1_1 = {
     "device_info": {
         "n_qubits": 20,

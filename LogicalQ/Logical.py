@@ -1438,7 +1438,7 @@ class LogicalCircuit(QuantumCircuit):
 
     def cx(self, control, *_targets, method="Ancilla_Assisted"):
         """
-        Logical Controlled-PauliX gate
+        Logical Controlled-Pauli X gate
         """
 
         if hasattr(_targets, "__iter__"):
@@ -1466,7 +1466,7 @@ class LogicalCircuit(QuantumCircuit):
 
     def cz(self, control, *_targets, method="Ancilla_Assisted"):
         """
-        Logical Controlled-PauliZ gate
+        Logical Controlled-Pauli Z gate
         """
 
         if hasattr(_targets, "__iter__"):
@@ -1494,7 +1494,7 @@ class LogicalCircuit(QuantumCircuit):
         
     def cy(self, control, *_targets, method="Ancilla_Assisted"):
         """
-        Logical Controlled-PauliY gate
+        Logical Controlled-Pauli Y gate
         """
 
         if hasattr(_targets, "__iter__"):
@@ -1546,6 +1546,21 @@ class LogicalCircuit(QuantumCircuit):
     # Input could be: 1. (CircuitInstruction(name="...", qargs="...", cargs="..."), qargs=None, cargs=None)
     #                 2. (Instruction(name="..."), qargs=[..], cargs=[...])
     def append(self, instruction, qargs=None, cargs=None, copy=True):
+        """Append a Logical gate to the circuit.
+
+        Args:
+            instruction: The instruction to add. Accepts instances of Instruction, CircuitInstruction, or a string containing the gate name.
+            qargs: Logical qubits to target.
+            cargs: Classical bits to target.
+            copy: Whether to copy the instruction before appending, to prevent modification of the argument.
+
+        Raises:
+            ValueError: If the instruction cannot be parsed.
+            ValueError: If an element of the qargs cannot be recognized.
+            ValueError: If an element of the cargs cannot be recognized.
+            NotImplementedError: Is MCMT is attempted.
+        """
+        
         if isinstance(instruction, str):
             operation = instruction
         elif hasattr(instruction, "name"):
@@ -1646,7 +1661,14 @@ class LogicalCircuit(QuantumCircuit):
     ###########################
 
     # Adds a desired error for testing
-    def add_error(self, l_ind, p_ind, error_type):
+    def add_error(self, l_ind: int, p_ind: int, error_type):
+        """Induces an X or Z error on a physical qubit.
+
+        Args:
+            l_ind: Logical qubit index
+            p_ind: Physical qubit index within logical qubit
+            error_type: The type of error to add. Accepts 'X' or 'Z'.
+        """
         if error_type == 'X':
             super().x(self.logical_qregs[l_ind][p_ind])
         if error_type == 'Z':
@@ -1656,6 +1678,12 @@ class LogicalCircuit(QuantumCircuit):
 
     # Set values of classical bits
     def set_cbit(self, cbit, value):
+        """Set the value of a bit in classical register.
+
+        Args:
+            cbit: Classical bit
+            value: 0 or 1
+        """
         if value == 0:
             super().append(Measure(), [self.cbit_setter_qreg[0]], [cbit], copy=False)
         else:
@@ -1663,6 +1691,11 @@ class LogicalCircuit(QuantumCircuit):
 
     # Performs a NOT statement on a classical bit
     def cbit_not(self, cbit):
+        """Control flow method that performs NOT statement on a classical bit.
+
+        Args:
+            cbit: Classical bit
+        """
         with self.if_test(expr.lift(cbit)) as _else:
             self.set_cbit(cbit, 0)
         with _else:
@@ -1670,6 +1703,15 @@ class LogicalCircuit(QuantumCircuit):
 
     # Performs AND and NOT statements on multiple classical bits, e.g. (~c[0] & ~c[1] & c[2])
     def cbit_and(self, cbits, values):
+        """Control flow method used to perform AND statement on multiple classical bits against a set of values.
+
+        Args:
+            cbits: The classical bits to compare
+            values: A list of zeros and ones
+
+        Returns:
+            result
+        """
         result = expr.bit_not(cbits[0]) if values[0] == 0 else expr.lift(cbits[0])
         for n in range(len(cbits)-1):
             result = expr.bit_and(result, expr.bit_not(cbits[n+1])) if values[n+1] == 0 else expr.bit_and(result, cbits[n+1])
@@ -1677,6 +1719,14 @@ class LogicalCircuit(QuantumCircuit):
 
     # XOR multiple classical bits
     def cbit_xor(self, cbits):
+        """Control flow method used to perform XOR statement on multiple classical bits.
+
+        Args:
+            cbits: The classical bits to XOR
+
+        Returns:
+            result
+        """
         result = expr.lift(cbits[0])
         for n in range(len(cbits)-1):
             result = expr.bit_xor(result, cbits[n+1])
@@ -1741,7 +1791,9 @@ class LogicalCircuit(QuantumCircuit):
 
 class LogicalQubit(list):
     """
-    A single LogicalQubit
+    A single LogicalQubit.
+    
+    NOT YET FULLY IMPLEMENTED.
     """
 
     def __init__(self, regs=None, qregs=None, cregs=None):
@@ -1777,7 +1829,7 @@ class LogicalQubit(list):
 
 class LogicalRegister(list):
     """
-    A register containing LogicalQubits
+    A register containing LogicalQubits.
     """
 
     def __init__(self, qregs=None, cregs=None):
@@ -1787,7 +1839,7 @@ class LogicalRegister(list):
 
 class LogicalStatevector(Statevector):
     """
-    A LogicalStatevector
+    A LogicalStatevector is an object representing a Logical state.
     """
 
     def __init__(
@@ -2170,6 +2222,26 @@ class LogicalDensityMatrix(DensityMatrix):
     """
 
     def __init__(self, data, n_logical_qubits=None, label=None, stabilizer_tableau=None, dims=None):
+        """"Initialize a LogicalDensityMatrix object.
+
+        Args:
+            data: The data from which to construct the LogicalDensityMatrix. This can be a
+                `LogicalCircuit` object, a qiskit `Statevector`, or a complex data vector.
+            n_logical_qubits: The number of logical qubits encoded in the statevector.
+            label: The label of the quantum error correction code, i.e., [[n,k,d]] (given as a
+                tuple), with n the number of physical qubits, k the number of logical qubits, and
+                d the distance.
+            stabilizer_tableau: The set of stabilizers for the QECC.
+            dims: The subsystem dimension of the state.
+        
+        Raises:
+            ValueError: if `data` is a mixed state or otherwise invalid, or if other parameters
+                are not given when constructing from a complex vector.
+            TypeError: if `data` is not a supported data type.
+            NotImplementedError: if `n_logical_qubits` is greater than 1 or if `data` is a
+                qiskit QuantumCircuit.
+        """
+        
         if isinstance(data, LogicalCircuit):
             self.logical_circuit = copy.deepcopy(data)
             self.n_logical_qubits = self.logical_circuit.n_logical_qubits
@@ -2248,6 +2320,20 @@ class LogicalDensityMatrix(DensityMatrix):
         )
 
 def logical_state_fidelity(state1, state2):
+    """Calculate the logical fidelity between two logical states.
+
+    Args:
+        state1: The first state.
+        state2: The second state.
+
+    Raises:
+        NotImplementedError: If state fidelity computation for LogicalDensityMatrix instances is attempted.
+        TypeError: If either state is not a LogicalStatevector, LogicalDensityMatrix, Statevector, or DensityMatrix.
+
+    Returns:
+        fidelity
+    """
+    
     states = []
 
     if (
