@@ -380,7 +380,19 @@ def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubi
 
     return all_data
 
-def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, error_scan_val_lists, basis_gates=None, compute_exact=False, exact_method=None, with_mp=False, save_dir=None, save_filename=None, **kwargs):
+def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, error_scan_val_lists, basis_gates=None, compute_exact=False, exact_method=None, with_mp=False, save_dir=None, save_filename=None, **kwargs) -> dict:
+    """Simulates physical and logical circuits across a range of noise models.
+
+    Args:
+        circuit_input: The circuit(s) to simulate. Accepts instances or lists of QuantumCircuit objects.
+        noise_model_input: The noise model(s) to scan across. Accepts instances or lists of NoiseModel, or error dictionaries from which a NoiseModel can be constructed.
+    
+    Returns:
+        all_data
+        
+    Raises:
+        :class:`NotImplementedError`: if user attempts to provide noise_scaling_experiment with a circuit factory or noise model factory.
+    """
     if isinstance(circuit_input, QuantumCircuit):
         circuit_input = [circuit_input]
     elif hasattr(circuit_input, "__iter__") and all([isinstance(circuit, QuantumCircuit) for circuit in circuit_input]):
@@ -558,7 +570,7 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
                 "statevector_exact": statevector_exact,
                 "results": []
             }
-
+            
             for error_dict, noise_model in zip(error_dicts, noise_models):
                 result = execute_circuits(circuit, noise_model=noise_model, **kwargs)
 
@@ -907,10 +919,11 @@ def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, qecc, c
             error_scan_keys=error_scan_keys,
             error_scan_val_lists=error_scan_val_lists,
             compute_exact=compute_exact,
+            exact_method='statevector',
             **kwargs
         )
         all_data[c]["results_logical"] = results_logical
-
+        
     # Run save_progress once for good measure and then unregister save_progress so it doesn't clutter our exit routine
     save_progress()
     atexit.unregister(save_progress)
