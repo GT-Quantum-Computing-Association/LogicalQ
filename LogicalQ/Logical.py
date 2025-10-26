@@ -1646,7 +1646,7 @@ class LogicalCircuit(QuantumCircuit):
                 self.ry(theta, qubits)
             case "rz":
                 theta = instruction.params[0]
-                self.ry(theta, qubits)
+                self.rz(theta, qubits)
             case "Rxx":
                 theta = instruction.params[0]
                 self.rxx(theta, qubits)
