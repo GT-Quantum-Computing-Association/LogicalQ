@@ -380,7 +380,7 @@ def circuit_scaling_experiment(circuit_input, noise_model_input=None, min_n_qubi
 
     return all_data
 
-def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, error_scan_val_lists, basis_gates=None, compute_exact=False, with_mp=False, save_dir=None, save_filename=None, **kwargs):
+def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, error_scan_val_lists, basis_gates=None, compute_exact=False, exact_method=None, with_mp=False, save_dir=None, save_filename=None, **kwargs):
     if isinstance(circuit_input, QuantumCircuit):
         circuit_input = [circuit_input]
     elif hasattr(circuit_input, "__iter__") and all([isinstance(circuit, QuantumCircuit) for circuit in circuit_input]):
@@ -528,12 +528,18 @@ def noise_scaling_experiment(circuit_input, noise_model_input, error_scan_keys, 
                 circuit_no_meas = circuit.remove_final_measurements(inplace=False)
 
                 try:
+                    if exact_method is not None and exact_method != "density_matrix":
+                        raise Exception("User did not request exact density matrix computation")
+
                     # Compute exact density matrix
                     if isinstance(circuit_no_meas, LogicalCircuit):
                         density_matrix_exact = LogicalDensityMatrix(circuit_no_meas)
                     else:
                         density_matrix_exact = DensityMatrix(circuit_no_meas)
                 except:
+                    if exact_method is not None and exact_method != "statevector":
+                        raise Exception("User did not request exact statevector computation") from e
+
                     print(f"Failed to compute exact density matrix for circuit input at index {c}, attempting to compute exact statevector...")
                     try:
                         # Compute exact statevector
@@ -777,6 +783,52 @@ def qec_cycle_circuit_scaling_experiment(circuit_input, qecc, constraint_model=N
     return all_data
 
 def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, qecc, constraint_scan_keys, constraint_scan_val_lists, error_scan_keys, error_scan_val_lists, compute_exact=False, with_mp=False, save_dir=None, save_filename=None, **kwargs):
+    """
+    An extension of the `noise_scaling_experiment` method specifically for comparisons with QEC cycles scheduled given constraint models.
+
+    Data format:
+    ```
+    all_data =
+    [ # for each constraint model:
+        {
+            "circuit_physical": QuantumCircuit,
+            "circuit_logical": LogicalCircuit,
+            "constraint_model": dict,
+            "results_physical":
+            [ # for each circuit:
+                {
+                    "circuit": circuit,
+                    "density_matrix_exact": density_matrix_exact,
+                    "statevector_exact": statevector_exact,
+                    "results":
+                    [
+                        {
+                            "error_dict": error_dict,
+                            "result": result
+                        },
+                    ]
+                },
+            ],
+            "results_logical":
+            [
+                {
+                    "circuit": circuit,
+                    "density_matrix_exact": density_matrix_exact,
+                    "statevector_exact": statevector_exact,
+                    "results":
+                    [
+                        {
+                            "error_dict": error_dict,
+                            "result": result
+                        },
+                    ]
+                },
+            ],
+        },
+    ]
+    ```
+    """
+
     if isinstance(circuit_input, LogicalCircuit):
         raise NotImplementedError("LogicalCircuit inputs are not accepted because the original physical circuit(s) are also necessary for this experiment.")
     elif isinstance(circuit_input, QuantumCircuit):

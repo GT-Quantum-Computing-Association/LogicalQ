@@ -685,6 +685,7 @@ class LogicalCircuit(QuantumCircuit):
                 self.steane_flagged_circuit2(logical_qubit_indices)
             else:
                 self.measure_stabilizers(logical_qubit_indices=[q], stabilizer_indices=stabilizer_indices)
+                
             for n in range(self.n_ancilla_qubits):
                 super().append(Measure(), [self.ancilla_qregs[q][n]], [self.curr_syndrome_cregs[q][n]], copy=False)
 
@@ -927,7 +928,8 @@ class LogicalCircuit(QuantumCircuit):
 
     def append_qec_cycle(
             self,
-            logical_qubit_indices: Iterable[int] = None
+            logical_qubit_indices: Iterable[int] | None = None,
+            perform_flagged_syndrome_measurements: bool = True
     ) -> tuple[dict[int,int], dict[int,int]]:
         """Append a QEC cycle to the end of the circuit.
 
@@ -937,9 +939,7 @@ class LogicalCircuit(QuantumCircuit):
         Returns:
             Qubits and indices with QEC cycles, before and after appending.
         """
-        # Use hardcoded flagged circuits for Steane code
-        use_steane_flagged_circuits = True if (self.n, self.k, self.d) == (7,1,3) else False
-
+        
         if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
             logical_qubit_indices = list(range(self.n_logical_qubits))
 
@@ -959,23 +959,44 @@ class LogicalCircuit(QuantumCircuit):
 
             with self.box(label="logical.qec.qec_cycle:$\\hat U_{QEC}$"):
                 super().reset(self.ancilla_qregs[q])
+                
+                if perform_flagged_syndrome_measurements:
+                    # Perform first flagged syndrome measurements
+                    self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_1, flagged=True, steane_flag_1=True)
 
-                # Perform first flagged syndrome measurements
-                self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_1, flagged=True, steane_flag_1=use_steane_flagged_circuits)
-
-                with self.if_test(self.cbit_and(self.flagged_syndrome_diff_cregs[q], [0]*self.flagged_syndrome_diff_cregs[q].size)) as _else:
                     # If no change in syndrome, perform second flagged syndrome measurement
-                    self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_2, flagged=True, steane_flag_2=use_steane_flagged_circuits)
-                with _else:
-                    # If change in syndrome, perform unflagged syndrome measurement, decode, and correct
+                    with self.if_test(self.cbit_and(self.flagged_syndrome_diff_cregs[q], [0]*self.flagged_syndrome_diff_cregs[q].size)) as _else:
+                        self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_2, flagged=True, steane_flag_2=True)
+                    with _else:
+                        pass
+                    
+                    with self.if_test(self.cbit_and(self.flagged_syndrome_diff_cregs[q], [0]*self.flagged_syndrome_diff_cregs[q].size)) as _else:
+                        pass
+                    with _else:
+                        # If change in syndrome, perform unflagged syndrome measurement, decode, and correct
+                        self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, flagged=False)
+                        self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, flagged=False)
+
+                        self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, with_flagged=False)
+                        self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, with_flagged=False)
+                        
+                        self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, with_flagged=True)
+                        self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, with_flagged=True)
+
+                        # Update previous syndrome
+                        for n in range(self.n_stabilizers):
+                            with self.if_test(expr.lift(self.unflagged_syndrome_diff_cregs[q][n])) as _else_inner:
+                                self.cbit_not(self.prev_syndrome_cregs[q][n])
+                            with _else_inner:
+                                pass
+                else:
+                    # Perform unflagged syndrome measurements, decode, and correct
                     self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, flagged=False)
                     self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, flagged=False)
 
                     self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, with_flagged=False)
-                    self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, with_flagged=False)
-                    self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, with_flagged=True)
-                    self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, with_flagged=True)
-
+                    self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, with_flagged=False)  
+                            
                     # Update previous syndrome
                     for n in range(self.n_stabilizers):
                         with self.if_test(expr.lift(self.unflagged_syndrome_diff_cregs[q][n])) as _else_inner:
@@ -1093,7 +1114,7 @@ class LogicalCircuit(QuantumCircuit):
                     self.set_cbit(self.output_creg[c], 1)
                 with _else:
                     pass
-
+                
                 if with_error_correction:
                     # Final syndrome
                     for n in range(self.n_ancilla_qubits):
