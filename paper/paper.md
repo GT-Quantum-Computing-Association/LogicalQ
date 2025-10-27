@@ -90,7 +90,7 @@ A comparison of existing libraries is made in Table 1. We choose to compare feat
 | Logical state analysis               | $\checkmark$  | $\times$     | $\times$       | $\times$     | $\times$     | $\checkmark$ |
 | External two-way interoperability    | $\checkmark$  | $\checkmark$ | $\times$       | $\times$     | $\checkmark$ | $\times$     |
 | Cloud hardware interfaces            | $\checkmark$  | $\times$     | $\times$       | $\times$     | $\times$     | $\times$     |
-Table: Comparison of `LogicalQ` with other major QEMDAC packages; `stim` is due to [@Gidney2021], `mqt-qecc` is due to [@Wille2024], `PECOS` is due to [@RyanAndersonPECOS], `stac` is due to [@KhalidStac], and `tqec` is due to [@TQEC].
+Table: Comparison of `LogicalQ` with other major QEMDAC packages; `stim` is due to [@Gidney2021], `mqt-qecc` is due to [@Wille2024], `PECOS` is due to [@RyanAndersonPECOS], `stac` is due to [@Stac2024], and `tqec` is due to [@TQEC].
 
 In summary, many of the existing libraries are notable for their high-performance simulations and advanced implementations of certain features, but none support the full functionality required for QEMDAC applied to quantum algorithms research, especially on cloud hardware. `LogicalQ` is also unique in that it has a suite of experiments for testing QEMDAC which serves as a quick set of tests for researchers studying noise control.
 
