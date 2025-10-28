@@ -39,6 +39,7 @@ authors:
   - name: Richard Yu
     affiliation: "2,5"
   - name: Alisa Petrusinskaia
+    orcid: 0009-0000-8913-0650
     affiliation: 5
   - name: Zhixin Song
     affiliation: 1
