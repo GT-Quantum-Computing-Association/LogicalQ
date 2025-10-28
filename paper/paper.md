@@ -77,19 +77,19 @@ Many of the necessary components for QEMDAC have been formalized mathematically 
 
 A comparison of existing libraries is made in Table 1. We choose to compare features which may be desirable to researchers in quantum algorithms. Note that we define external two-way interoperability to be with any external general-purpose quantum computing tool such as `QASM` or `Qiskit`, but not just another QEMDAC tool.
 
-| Feature                              | `LogicalQ`    | `stim`       | `mqt-qecc`     | `PEC0S`      | `stac`       | `tqec`       |
-| ------------------------------       | ------------- | ------------ | -------------- | ------------ | ------------ | ------------ |
-| Stabilizer code QEC                  | $\checkmark$  | $\checkmark$ | $\checkmark$   | $\checkmark$ | $\checkmark$ | $\checkmark$ |
-| qLDPC-oriented QEC                   | $\checkmark$  | $\times$     | $\checkmark$   | $\times$     | $\times$     | $\times$     |
-| Arbitrary logical Clifford gates     | $\checkmark$  | $\times$     | $\times$       | $\checkmark$ | $\checkmark$ | $\times$     |
-| Arbitrary logical non-Clifford gates | $\checkmark$  | $\times$     | $\times$       | $\checkmark$ | $\checkmark$ | $\times$     |
-| Advanced decoders                    | $\times$      | $\checkmark$ | $\checkmark$   | $\checkmark$ | $\times$     | $\checkmark$ |
-| Arbitrary noise model support        | $\checkmark$  | $\times$     | $\times$       | $\checkmark$ | $\times$     | $\checkmark$ |
-| Optimized QEC cycle scheduling       | $\checkmark$  | $\times$     | $\times$       | $\times$     | $\times$     | $\times$     |
-| Experiment suite                     | $\checkmark$  | $\times$     | $\times$       | $\checkmark$ | $\times$     | $\checkmark$ |
-| Logical state analysis               | $\checkmark$  | $\times$     | $\times$       | $\times$     | $\times$     | $\checkmark$ |
-| External two-way interoperability    | $\checkmark$  | $\checkmark$ | $\times$       | $\times$     | $\checkmark$ | $\times$     |
-| Cloud hardware interfaces            | $\checkmark$  | $\times$     | $\times$       | $\times$     | $\times$     | $\times$     |
+|Feature|`LogicalQ`|`stim`|`mqt-qecc`|`PEC0S`|`stac`|`tqec`|
+|------------------------------------|-------------|------------|------------|------------|------------|------------|
+|StabilizercodeQEC|$\checkmark$|$\checkmark$|$\checkmark$|$\checkmark$|$\checkmark$|$\checkmark$|
+|qLDPC-orientedQEC|$\checkmark$|$\times$|$\checkmark$|$\times$|$\times$|$\times$|
+|ArbitrarylogicalCliffordgates|$\checkmark$|$\times$|$\times$|$\checkmark$|$\checkmark$|$\times$|
+|Arbitrarylogicalnon-Cliffordgates|$\checkmark$|$\times$|$\times$|$\checkmark$|$\checkmark$|$\times$|
+|Advanceddecoders|$\times$|$\checkmark$|$\checkmark$|$\checkmark$|$\times$|$\checkmark$|
+|Arbitrarynoisemodelsupport|$\checkmark$|$\times$|$\times$|$\checkmark$|$\times$|$\checkmark$|
+|OptimizedQECcyclescheduling|$\checkmark$|$\times$|$\times$|$\times$|$\times$|$\times$|
+|Experimentsuite|$\checkmark$|$\times$|$\times$|$\checkmark$|$\times$|$\checkmark$|
+|Logicalstateanalysis|$\checkmark$|$\times$|$\times$|$\times$|$\times$|$\checkmark$|
+|Externaltwo-wayinteroperability|$\checkmark$|$\checkmark$|$\times$|$\times$|$\checkmark$|$\times$|
+|Cloudhardwareinterfaces|$\checkmark$|$\times$|$\times$|$\times$|$\times$|$\times$|
 Table: Comparison of `LogicalQ` with other major QEMDAC packages; `stim` is due to [@Gidney2021], `mqt-qecc` is due to [@Wille2024], `PECOS` is due to [@RyanAndersonPECOS], `stac` is due to [@Stac2024], and `tqec` is due to [@TQEC].
 
 In summary, many of the existing libraries are notable for their high-performance simulations and advanced implementations of certain features, but none support the full functionality required for QEMDAC applied to quantum algorithms research, especially on cloud hardware. `LogicalQ` is also unique in that it has a suite of experiments for testing QEMDAC which serves as a quick set of tests for researchers studying noise control.
@@ -128,9 +128,11 @@ The `Library` modules contain utilties such as quantum codes for QED and QEC, ha
 
 # Acknowledgements
 
-We acknowledge contributions from past and present members of the Quantum Computing Association at Georgia Tech.
+We acknowledge contributions from the Quantum Computing Association at Georgia Tech.
 
 We would like to thank Jeff Young for serving as the advisor of the Quantum Computing Association at Georgia Tech and this project.
+
+This research was supported in part through research cyberinfrastructure resources and services provided by the Partnership for an Advanced Computing Environment (PACE) at the Georgia Institute of Technology, Atlanta, Georgia, USA [@PACE].
 
 # References
 
