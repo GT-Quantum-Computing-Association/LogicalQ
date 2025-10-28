@@ -1019,7 +1019,7 @@ class LogicalCircuit(QuantumCircuit):
             logical_qubit_indices: Iterable[int] = None,
             qec_cycle_indices: Iterable[int ] = None
     ) -> NotImplementedError:
-        """Clear QEC cycles (either specified or all) on specified logical qubits.
+        """Clear QEC cycles (either specified or all) on specified logical qubits. Not yet implemented.
 
         Args:
             logical_qubit_indices: Logical qubits from which to clear QEC cycles. Clears all if :py:type:`None`.
@@ -1222,9 +1222,18 @@ class LogicalCircuit(QuantumCircuit):
     ##### Logical quantum operations #####
     ######################################
 
-    def h(self, *targets, method="Coherent_Feedback"):
+    def h(
+            self,
+            *targets: Iterable[int],
+            method: str = "Coherent_Feedback"
+        ):
         """
-        Logical Hadamard gate
+        Logical Hadamard gate.
+
+        Args:
+            targets: Logical qubits to apply gate to.
+            method: Method, which can be "LCU", "LCU_Corrected", "Coherent_Feedback",
+                or "Transversal_Uniform".
         """
 
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
@@ -1269,9 +1278,15 @@ class LogicalCircuit(QuantumCircuit):
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical Hadamard gate")
 
-    def x(self, *targets):
+    def x(
+            self,
+            *targets: Iterable[Int]
+        ):
         """
-        Logical PauliX gate
+        Logical PauliX gate.
+
+        Args:
+            targets: Logical qubits to apply gate to.
         """
 
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
@@ -1281,9 +1296,15 @@ class LogicalCircuit(QuantumCircuit):
             with self.box(label="logical.logicalop.x.gottesman:$\\hat X_{L}$"):
                 super().compose(self.LogicalXCircuit, self.logical_qregs[t], inplace=True)
 
-    def y(self, *targets):
+    def y(
+            self,
+            *targets: Iterable[int]
+        ):
         """
-        Logical PauliY gate
+        Logical PauliY gate.
+
+        Args:
+            targets: Logical qubits to apply gate to.
         """
 
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
@@ -1293,9 +1314,15 @@ class LogicalCircuit(QuantumCircuit):
             self.z(targets)
             self.x(targets)
 
-    def z(self, *targets):
+    def z(
+            self,
+            *targets: Iterable[int]
+        ):
         """
-        Logical PauliZ gate
+        Logical PauliZ gate.
+
+        Args:
+            targest: Logical qubits to apply gate to.
         """
 
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
@@ -1305,13 +1332,25 @@ class LogicalCircuit(QuantumCircuit):
             with self.box(label="logical.logicalop.z.gottesman:$\\hat Z_{L}$"):
                 super().compose(self.LogicalZCircuit, self.logical_qregs[t], inplace=True)
 
-    def s(self, *targets, method="Coherent_Feedback"):
+    def s(
+            self,
+            *targets: Iterable[int],
+            method: str = "Coherent_Feedback"
+        ):
         """
         Logical S gate
 
         Definition:
-        [1   0]
-        [0   i]
+        .. math::
+            \\begin{pmatrix}
+            1 & 0 \\\\
+            0 & i
+            \\end{pmatrix}
+
+        Args:
+            targest: Logical qubits to apply gate to.
+            method: Method, which can be "LCU_Corrected", "Coherent_Feedback", or
+                "Transversal_Uniform".
         """
 
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
@@ -1345,13 +1384,25 @@ class LogicalCircuit(QuantumCircuit):
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical S gate")
 
-    def sdg(self, *targets, method="Coherent_Feedback"):
+    def sdg(
+            self,
+            *targets: Iterable[int],
+            method: str = "Coherent_Feedback"
+        ):
         """
-        Logical S^dagger gate
+        Logical S^dagger gate, adjoint of the logical S gate.
 
         Definition:
-        [1    0]
-        [0   -i]
+        .. math::
+            \\begin{pmatrix}
+            1 & 0 \\\\
+            0 & -i
+            \\end{pmatrix}
+
+        Args:
+            targets: Logical qubits to apply gate to.
+            method: Method, which can be "LCU_Corrected", "Coherent_Feedback", or
+                "Transversal_Uniform".
         """
         
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
@@ -1386,13 +1437,24 @@ class LogicalCircuit(QuantumCircuit):
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical S^dagger gate")
 
-    def t(self, *targets, method="Coherent_Feedback"):
+    def t(
+            self,
+            *targets: Iterable[int],
+            method: str = "Coherent_Feedback"
+        ):
         """
         Logical T gate
 
         Definition:
-        [1    0        ]
-        [0    e^(ipi/4)]
+        .. math:
+            \\begin{pmatrix}
+            1 & 0 \\\\
+            0 & e^{i\\pi/4}
+            \\end{pmatrix}
+        
+        Args:
+            targets: Logical qubits to apply gate to.
+            method: Method, which can be "LCU_Corrected", or "Coherent_Feedback".
         """
 
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
@@ -1423,13 +1485,24 @@ class LogicalCircuit(QuantumCircuit):
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical T gate")
 
-    def tdg(self, *targets, method="Coherent_Feedback"):
+    def tdg(
+            self,
+            *targets: Iterable[int],
+            method: str = "Coherent_Feedback"
+        ):
             """
             Logical T^dagger gate
 
             Definition:
-            [1    0         ]
-            [0    e^(-ipi/4)]
+            .. math::
+                \\begin{pmatrix}
+                1 & 0 \\\\
+                0 & e^{-i\\pi/4}
+                \\end{pmatrix}
+            
+            Args:
+                targets: Logical qubits to apply gate to.
+                method: Method, which can be "LCU_Corrected", or "Coherent_Feedback".
             """
 
             if len(targets) == 1 and hasattr(targets[0], "__iter__"):
@@ -1460,9 +1533,19 @@ class LogicalCircuit(QuantumCircuit):
             else:
                 raise ValueError(f"'{method}' is not a valid method for the logical T^dagger gate")
 
-    def cx(self, control, *_targets, method="Ancilla_Assisted"):
+    def cx(
+            self,
+            control: int,
+            *_targets: Iterable[int],
+            method: str = "Ancilla_Assisted"
+        ):
         """
-        Logical Controlled-Pauli X gate
+        Logical Controlled-Pauli X gate.
+
+        Args:
+            control: Control qubit.
+            _targets: Logical qubits to apply gate to.
+            method: Method, which can be "Ancilla_Assisted" or "Transversal_Uniform".
         """
 
         if hasattr(_targets, "__iter__"):
@@ -1488,9 +1571,19 @@ class LogicalCircuit(QuantumCircuit):
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical CX gate")
 
-    def cz(self, control, *_targets, method="Ancilla_Assisted"):
+    def cz(
+            self,
+            control: int,
+            *_targets: Iterable[int],
+            method: str = "Ancilla_Assisted"
+        ):
         """
-        Logical Controlled-Pauli Z gate
+        Logical Controlled-Pauli Z gate.
+
+        Args:
+            control: Control qubit.
+            _targets: Logical qubits to apply gate to.
+            method: Method, which can be "Ancilla_Assisted" or "Transversal_Uniform".
         """
 
         if hasattr(_targets, "__iter__"):
@@ -1516,9 +1609,19 @@ class LogicalCircuit(QuantumCircuit):
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical CZ gate")
         
-    def cy(self, control, *_targets, method="Ancilla_Assisted"):
+    def cy(
+            self,
+            control: int,
+            *_targets: Iterable[int],
+            method: str = "Ancilla_Assisted"
+        ):
         """
-        Logical Controlled-Pauli Y gate
+        Logical Controlled-Pauli Y gate.
+
+        Args:
+            control: Control qubit.
+            _targets: Logical qubits to apply gate to.
+            method: Method, which can be "Ancilla_Assisted" or "Transversal_Uniform".
         """
 
         if hasattr(_targets, "__iter__"):
