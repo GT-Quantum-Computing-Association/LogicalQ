@@ -80,17 +80,17 @@ A comparison of existing libraries is made in Table 1. We choose to compare feat
 
 |Feature|`LogicalQ`|`stim`|`mqt-qecc`|`PEC0S`|`stac`|`tqec`|
 |------------------------------------|-------------|------------|------------|------------|------------|------------|
-|StabilizercodeQEC|$\checkmark$|$\checkmark$|$\checkmark$|$\checkmark$|$\checkmark$|$\checkmark$|
-|qLDPC-orientedQEC|$\checkmark$|$\times$|$\checkmark$|$\times$|$\times$|$\times$|
-|ArbitrarylogicalCliffordgates|$\checkmark$|$\times$|$\times$|$\checkmark$|$\checkmark$|$\times$|
-|Arbitrarylogicalnon-Cliffordgates|$\checkmark$|$\times$|$\times$|$\checkmark$|$\checkmark$|$\times$|
-|Advanceddecoders|$\times$|$\checkmark$|$\checkmark$|$\checkmark$|$\times$|$\checkmark$|
-|Arbitrarynoisemodelsupport|$\checkmark$|$\times$|$\times$|$\checkmark$|$\times$|$\checkmark$|
-|OptimizedQECcyclescheduling|$\checkmark$|$\times$|$\times$|$\times$|$\times$|$\times$|
-|Experimentsuite|$\checkmark$|$\times$|$\times$|$\checkmark$|$\times$|$\checkmark$|
-|Logicalstateanalysis|$\checkmark$|$\times$|$\times$|$\times$|$\times$|$\checkmark$|
-|Externaltwo-wayinteroperability|$\checkmark$|$\checkmark$|$\times$|$\times$|$\checkmark$|$\times$|
-|Cloudhardwareinterfaces|$\checkmark$|$\times$|$\times$|$\times$|$\times$|$\times$|
+|Stabilizercode QEC|$\checkmark$|$\checkmark$|$\checkmark$|$\checkmark$|$\checkmark$|$\checkmark$|
+|qLDPC-oriented QEC|$\checkmark$|$\times$|$\checkmark$|$\times$|$\times$|$\times$|
+|Arbitrary logical Clifford gates|$\checkmark$|$\times$|$\times$|$\checkmark$|$\checkmark$|$\times$|
+|Arbitrary logical non-Clifford gates|$\checkmark$|$\times$|$\times$|$\checkmark$|$\checkmark$|$\times$|
+|Advanced decoders|$\times$|$\checkmark$|$\checkmark$|$\checkmark$|$\times$|$\checkmark$|
+|Arbitrary noise model support|$\checkmark$|$\times$|$\times$|$\checkmark$|$\times$|$\checkmark$|
+|Optimized QEC cycle scheduling|$\checkmark$|$\times$|$\times$|$\times$|$\times$|$\times$|
+|Experiment suite|$\checkmark$|$\times$|$\times$|$\checkmark$|$\times$|$\checkmark$|
+|Logical state analysis|$\checkmark$|$\times$|$\times$|$\times$|$\times$|$\checkmark$|
+|External two-way interoperability|$\checkmark$|$\checkmark$|$\times$|$\times$|$\checkmark$|$\times$|
+|Cloud hardware interfaces|$\checkmark$|$\times$|$\times$|$\times$|$\times$|$\times$|
 Table: Comparison of `LogicalQ` with other major QEMDAC packages; `stim` is due to [@Gidney2021], `mqt-qecc` is due to [@Wille2024], `PECOS` is due to [@RyanAndersonPECOS], `stac` is due to [@Stac2024], and `tqec` is due to [@TQEC].
 
 In summary, many of the existing libraries are notable for their high-performance simulations and advanced implementations of certain features, but none support the full functionality required for QEMDAC applied to quantum algorithms research, especially on cloud hardware. `LogicalQ` is also unique in that it has a suite of experiments for testing QEMDAC which serves as a quick set of tests for researchers studying noise control.
