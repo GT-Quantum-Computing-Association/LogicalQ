@@ -1983,13 +1983,13 @@ class LogicalCircuit(QuantumCircuit):
             case "rz":
                 theta = instruction.params[0]
                 self.rz(theta, qubits)
-            case "Rxx":
+            case "rxx":
                 theta = instruction.params[0]
                 self.rxx(theta, qubits)
-            case "Ryy":
+            case "ryy":
                 theta = instruction.params[0]
                 self.ryy(theta, qubits)    
-            case "Rzz":
+            case "rzz":
                 theta = instruction.params[0]
                 self.rzz(theta, qubits)
             # @TODO Fix code to initialize LogicalCircuit to arbitrary logical state.
