@@ -1654,6 +1654,9 @@ class LogicalCircuit(QuantumCircuit):
         sk_decomposition = SolovayKitaev(recursion_degree=recursion_degree, basis_gates=basis_gates, depth=depth)
 
         discretized_subcircuit = sk_decomposition(circuit)
+
+        if label is None:
+            label = "U"
         
         def append_all():
             for i in range(len(discretized_subcircuit.data)):
@@ -1661,11 +1664,25 @@ class LogicalCircuit(QuantumCircuit):
                 qargs = [targets[discretized_subcircuit.qubits.index(qubit)] for qubit in circuit_instruction.qubits]
                 self.append(circuit_instruction, qargs=qargs)
         
-        with self.box(label=f"logical.logicalop.{label.lower()}.sk:$\\hat{label}_{SK}$"):
+        with self.box(label=f"logical.logicalop.{label.lower()}.sk:$\\hat{label}$"):
             append_all()
             
         if return_discretized_subcircuit:
             return discretized_subcircuit
+
+    def u(self, targets, theta: float, phi: float, lam: float, method="Rotation"):
+        if method == "Rotation":
+            if np.isclose(phi + lambda, 0.0):
+                with self.box(label=f"logical.logicalop.U.sk:$\\hat{{U}}_{{R}}({theta},{phi},{lam})$"):
+                    self.rz(phi, targets)
+                    self.ry(theta, targets)
+                    self.rz(lam, targets)
+            else:
+                raise ValueError("Method 'Rotation' is currently unavailable when phi + lambda != 0 (non-zero phase unsupported).")
+        else:
+            raise ValueError(f"{method} is not a valid method.")
+
+        return
 
     def r(self, axis, targets, theta=0.0, label="R", depth=10, recursion_degree=1, method="S-K"):
         if isinstance(axis, str):        
