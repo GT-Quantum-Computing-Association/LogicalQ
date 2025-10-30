@@ -1672,7 +1672,7 @@ class LogicalCircuit(QuantumCircuit):
 
     def u(self, targets, theta: float, phi: float, lam: float, method="Rotation"):
         if method == "Rotation":
-            if np.isclose(phi + lambda, 0.0):
+            if np.isclose(phi + lam, 0.0):
                 with self.box(label=f"logical.logicalop.U.sk:$\\hat{{U}}_{{R}}({theta},{phi},{lam})$"):
                     self.rz(phi, targets)
                     self.ry(theta, targets)
