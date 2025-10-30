@@ -1,3 +1,22 @@
+### LogicalQ-specific
+
+# Demo data
+demos/data/**
+
+# Sphinx documentation
+docs/_build/
+docs/source/_static/
+docs/source/_template/
+
+# JOSS paper output
+paper/*.pdf
+paper/*.preprint
+
+# Scratch directories
+scratch/
+
+### General
+
 # Byte-compiled / optimized / DLL files
 *.py[cod]
 *$py.class
@@ -56,9 +75,6 @@ coverage.xml
 .pytest_cache/
 cover/
 
-# Demo data
-demos/data/**
-
 # Translations
 *.mo
 *.pot
@@ -113,9 +129,6 @@ venv.bak/
 # Rope project settings
 .ropeproject
 
-# mkdocs documentation
-docs/site/
-
 # mypy
 .mypy_cache/
 .dmypy.json
@@ -136,6 +149,4 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 .idea/
-
-scratch/
 

@@ -3,6 +3,10 @@ import time
 from pathlib import Path
 from datetime import datetime
 
+class Default:
+    def __init__(self):
+        pass
+
 def sanitize_save_parameters(filename, save_dir, default_filename="file", default_save_dir="./", default_extension=".png"):
     if filename is None or filename.strip() == "":
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")

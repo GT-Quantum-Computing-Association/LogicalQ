@@ -7,8 +7,9 @@ build:
   tools:
     python: "3.13"
 
-mkdocs:
-  configuration: mkdocs.yml
+# Sphinx configuration
+sphinx:
+  configuration: ./docs/source/conf.py
 
 # Build documentation in additional formats
 formats:
