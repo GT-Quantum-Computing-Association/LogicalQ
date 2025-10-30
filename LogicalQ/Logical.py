@@ -1670,7 +1670,7 @@ class LogicalCircuit(QuantumCircuit):
         if return_discretized_subcircuit:
             return discretized_subcircuit
 
-    def u(self, targets, theta: float, phi: float, lam: float, method="Rotation"):
+    def u(self, theta: float, phi: float, lam: float, targets, method="Rotation"):
         if method == "Rotation":
             if np.isclose(phi + lam, 0.0):
                 with self.box(label=f"logical.logicalop.U.sk:$\\hat{{U}}_{{R}}({theta},{phi},{lam})$"):
@@ -1684,7 +1684,7 @@ class LogicalCircuit(QuantumCircuit):
 
         return
 
-    def r(self, axis, targets, theta=0.0, label="R", depth=10, recursion_degree=1, method="S-K"):
+    def r(self, axis, theta, targets, label="R", depth=10, recursion_degree=1, method="S-K"):
         if isinstance(axis, str):        
             # In form "instruction.name: (Gate, num_targets_per_gate)"
             valid_gates = {"x": (RXGate, 1), "y": (RYGate, 1), "z": (RZGate, 1), "xx": (RXXGate, 2), "yy": (RYYGate, 2), "zz": (RZZGate, 2)}
@@ -1974,6 +1974,12 @@ class LogicalCircuit(QuantumCircuit):
                 control_qubit = instruction.qubits[0]._index
                 target_qubit = instruction.qubits[1]._index
                 self.cy(control_qubit, target_qubit)
+            case "u":
+                print(instruction.params)
+                theta = instruction.params[0]
+                phi = instruction.params[1]
+                lam = instruction.params[2]
+                self.u(theta, phi, lam, qubits)
             case "rx":
                 theta = instruction.params[0]
                 self.rx(theta, qubits)
@@ -1992,14 +1998,6 @@ class LogicalCircuit(QuantumCircuit):
             case "rzz":
                 theta = instruction.params[0]
                 self.rzz(theta, qubits)
-            # @TODO Fix code to initialize LogicalCircuit to arbitrary logical state.
-            #case "initialize":
-            #    sv = instruction.params
-            #    #if isinstance(sv, list):
-            #    #    sv = Statevector(sv)
-            #        
-            #    lsv = LogicalStatevector(sv, len(qubits), self.label, self.stabilizer_tableau)
-            #    self.initialize(lsv.data)
             case "mcmt":
                 raise NotImplementedError(f"Physical operation 'MCMT' does not have physical gate conversion implemented!")
             case "measure":
@@ -2013,7 +2011,7 @@ class LogicalCircuit(QuantumCircuit):
                 pass
             case _:
                 # @TODO - identify a better way of providing these warnings
-                # print(f"WARNING: Physical operation '{operation.upper()}' does not have a logical counterpart implemented! Defaulting to physical operation.")
+                print(f"WARNING: Physical operation '{operation.upper()}' does not have a logical counterpart implemented! Defaulting to physical operation.")
 
                 instruction = super().append(instruction, qargs, cargs, copy=copy)
 
