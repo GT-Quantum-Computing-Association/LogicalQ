@@ -1749,8 +1749,8 @@ class LogicalCircuit(QuantumCircuit):
         if method == "S-K":
             self.r(
                 "x", 
-                targets,
                 theta,
+                targets,
                 label="RX",
                 recursion_degree=recursion_degree,
                 depth=depth
@@ -1781,8 +1781,8 @@ class LogicalCircuit(QuantumCircuit):
         if method == "S-K":
             self.r(
                 "y",
-                targets,
                 theta,
+                targets,
                 label="Ry",
                 depth=depth,
                 recursion_degree=recursion_degree,
@@ -1813,8 +1813,8 @@ class LogicalCircuit(QuantumCircuit):
         if method == "S-K":
             self.r(
                 "z",
-                targets,
                 phi,
+                targets,
                 label="RZ",
                 recursion_degree=recursion_degree,
                 depth=depth
@@ -1834,8 +1834,8 @@ class LogicalCircuit(QuantumCircuit):
         if method == "S-K":
             self.r(
                 "xx", 
-                targets,
                 theta,
+                targets,
                 label="Rxx",
                 depth=depth, 
                 recursion_degree=recursion_degree, 
@@ -1855,8 +1855,8 @@ class LogicalCircuit(QuantumCircuit):
         if method == "S-K":
             self.r(
                 "yy", 
-                targets,
                 theta,
+                targets,
                 label="Ryy",
                 depth=depth, 
                 recursion_degree=recursion_degree, 
@@ -1878,8 +1878,8 @@ class LogicalCircuit(QuantumCircuit):
         if method == "S-K":
             self.r(
                 "zz", 
-                targets,
                 theta,
+                targets,
                 label="Rzz",
                 depth=depth, 
                 recursion_degree=recursion_degree, 
@@ -1890,10 +1890,20 @@ class LogicalCircuit(QuantumCircuit):
             raise ValueError("{method} is not a valid method.")
     
     def sx(self, target, **kwargs):
-        self.r("x", np.pi/2, target, **kwargs)
+        self.r(
+            "x",
+            np.pi/2,
+            target,
+            **kwargs
+        )
 
     def sxdg(self, target, **kwargs):
-        self.r("x", -np.pi/2, target, **kwargs)
+        self.r(
+            "x",
+            -np.pi/2,
+            target,
+            **kwargs
+        )
 
     # Input could be: 1. (CircuitInstruction(name="...", qargs="...", cargs="..."), qargs=None, cargs=None)
     #                 2. (Instruction(name="..."), qargs=[..], cargs=[...])
@@ -1975,7 +1985,6 @@ class LogicalCircuit(QuantumCircuit):
                 target_qubit = instruction.qubits[1]._index
                 self.cy(control_qubit, target_qubit)
             case "u":
-                print(instruction.params)
                 theta = instruction.params[0]
                 phi = instruction.params[1]
                 lam = instruction.params[2]
@@ -2011,7 +2020,7 @@ class LogicalCircuit(QuantumCircuit):
                 pass
             case _:
                 # @TODO - identify a better way of providing these warnings
-                print(f"WARNING: Physical operation '{operation.upper()}' does not have a logical counterpart implemented! Defaulting to physical operation.")
+                # print(f"WARNING: Physical operation '{operation.upper()}' does not have a logical counterpart implemented! Defaulting to physical operation.")
 
                 instruction = super().append(instruction, qargs, cargs, copy=copy)
 
