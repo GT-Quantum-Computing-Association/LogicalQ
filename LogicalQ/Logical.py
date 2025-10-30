@@ -4,7 +4,7 @@ import copy
 import numpy as np
 
 from qiskit import QuantumRegister, AncillaRegister, ClassicalRegister, QuantumCircuit
-from qiskit.circuit import Bit, Measure
+from qiskit.circuit import Bit, Measure, Reset
 from qiskit.circuit.quantumcircuitdata import QuantumCircuitData
 from qiskit.circuit.classical import expr
 from qiskit.circuit.library import RXGate, RYGate, RZGate, RXXGate, RYYGate, RZZGate
@@ -517,7 +517,7 @@ class LogicalCircuit(QuantumCircuit):
         for q, init_state in zip(qubits, initial_states):
             with self.box(label="logical.qec.encode:$\\hat U_{enc}$"):
                 # Preliminary physical qubit reset
-                super().reset(self.logical_qregs[q])
+                super().append(Reset(), [self.logical_qregs[q][:]], copy=False)
 
                 # Initial encoding
                 super().compose(self.encoding_circuit, self.logical_qregs[q], inplace=True)
@@ -534,7 +534,7 @@ class LogicalCircuit(QuantumCircuit):
                     for _ in range(max_iterations - 1):
                         # If the ancilla stores a 1, reset the entire logical qubit and redo
                         with super().if_test((self.enc_verif_cregs[q][0], 1)) as _else:
-                            super().reset(self.logical_qregs[q])
+                            super().append(Reset(), [self.logical_qregs[q][:]], copy=False)
 
                             # Initial encoding
                             super().compose(self.encoding_circuit, self.logical_qregs[q], inplace=True)
@@ -550,7 +550,7 @@ class LogicalCircuit(QuantumCircuit):
                             pass
 
                     # Reset ancilla qubit
-                    super().reset(self.ancilla_qregs[q][0])
+                    super().append(Reset(), [self.ancilla_qregs[q][0]], copy=False)
 
                 # Flip qubits if necessary
                 if init_state == 1:
@@ -559,6 +559,30 @@ class LogicalCircuit(QuantumCircuit):
                     raise ValueError("Initial state should be either 0 or 1 (arbitrary statevectors not yet supported)!")
 
         return True
+
+    def reset(
+        self,
+        logical_qubit_indices: int | Iterable[int] | None = None,
+        reset_ancillas: bool = False,
+    ):
+        """Reset all physical qubits associated with specified logical qubits, optionally including ancillas.
+
+        Args:
+            logical_qubit_indices: Indices of logical qubits to reset. If None, then reset all.
+            reset_ancillas: Specifies whether to reset (both general and logical operation) ancilla qubits associated with each logical qubit.
+        """
+
+        if logical_qubit_indices is None or (hasattr(logical_qubit_indices, "__iter__") and len(logical_qubit_indices) == 0):
+            logical_qubit_indices = list(range(self.n_logical_qubits))
+        elif isinstance(logical_qubit_indices, int):
+            logical_qubit_indices = [logical_qubit_indices]
+
+        for q in logical_qubit_indices:
+            super().append(Reset(), [self.logical_qregs[q][:]], copy=False)
+
+            if reset_ancillas:
+                super().append(Reset(), [self.ancilla_qregs[q][:]], copy=False)
+                super().append(Reset(), [self.logical_op_qregs[q][:]], copy=False)
 
     def reset_ancillas(
         self,
@@ -573,7 +597,7 @@ class LogicalCircuit(QuantumCircuit):
             logical_qubit_indices = list(range(self.n_logical_qubits))
 
         for q in logical_qubit_indices:
-            self.reset(self.ancilla_qregs[q])
+            super().append(Reset(), [self.ancilla_qregs[q][:]], copy=False)
 
     def steane_flagged_circuit1(
         self,
@@ -964,7 +988,7 @@ class LogicalCircuit(QuantumCircuit):
             index_initial = len(self.data)
 
             with self.box(label="logical.qed.qed_cycle:$\\hat U_{QED}$"):
-                super().reset(self.ancilla_qregs[q])
+                super().append(Reset(), [self.ancilla_qregs[q][:]], copy=False)
                 
                 if perform_flagged_syndrome_measurements:
                     # Perform first flagged syndrome measurements
@@ -1040,7 +1064,7 @@ class LogicalCircuit(QuantumCircuit):
             index_initial = len(self.data)
 
             with self.box(label="logical.qec.qec_cycle:$\\hat U_{QEC}$"):
-                super().reset(self.ancilla_qregs[q])
+                super().append(Reset(), [self.ancilla_qregs[q][:]], copy=False)
                 
                 if perform_flagged_syndrome_measurements:
                     # Perform first flagged syndrome measurements
@@ -1319,7 +1343,7 @@ class LogicalCircuit(QuantumCircuit):
             # for t in targets:
                 # @TODO - determine whether extra reset is necessary at the end
                 # with self.box(label="logical.logicalop.lcu"):
-                    # super().reset(self.logical_op_qregs[t])
+                    # super().append(Reset(), [self.logical_op_qregs[t][:]], copy=False)
         elif method == "LCU_Corrected": 
             for t in targets:
                 with self.box(label="logical.logicalop.h.lcu_corrected:$\\hat H_{L}$"):
@@ -1329,7 +1353,7 @@ class LogicalCircuit(QuantumCircuit):
                     super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
                     super().h(self.logical_op_qregs[t][0])
                     super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
-                    super().reset(self.logical_op_qregs[t][0])
+                    super().append(Reset(), [self.logical_op_qregs[t][0]], copy=False)
 
                     # Corrections to apply based on ancilla measurement
                     with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as else_:
@@ -1412,7 +1436,7 @@ class LogicalCircuit(QuantumCircuit):
                     with _else:
                         pass
 
-                    super().reset(self.logical_op_qregs[t][0])
+                    super().append(Reset(), [self.logical_op_qregs[t][0]], copy=False)
         elif method == "Coherent_Feedback":
             for t in targets:
                 with self.box(label="logical.logicalop.s.coherent_feedback:$\\hat S_{L}$"):
@@ -1452,7 +1476,7 @@ class LogicalCircuit(QuantumCircuit):
                     with _else:
                         pass
 
-                    super().reset(self.logical_op_qregs[t][0])
+                    super().append(Reset(), [self.logical_op_qregs[t][0]], copy=False)
         elif method == "Coherent_Feedback":
             for t in targets:
                 with self.box(label="logical.logicalop.sdg.coherent_feedback:$\\hat{S^\\dagger}_{L}$"):
@@ -1488,7 +1512,7 @@ class LogicalCircuit(QuantumCircuit):
                     super().h(self.logical_op_qregs[t][0])
 
                     super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
-                    super().reset(self.logical_op_qregs[t][0])
+                    super().append(Reset(), [self.logical_op_qregs[t][0]], copy=False)
 
                     with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as _else:
                         self.s(t, method='LCU_corrected')
@@ -1525,7 +1549,7 @@ class LogicalCircuit(QuantumCircuit):
                         super().h(self.logical_op_qregs[t][0])
 
                         super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
-                        super().reset(self.logical_op_qregs[t][0])
+                        super().append(Reset(), [self.logical_op_qregs[t][0]], copy=False)
 
                         with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as _else:
                             self.sdg(t, method='LCU_corrected')
@@ -2016,6 +2040,8 @@ class LogicalCircuit(QuantumCircuit):
 
                 # @TODO - decide best default behavior here (maybe we should ask during from_physical_circuit)
                 self.measure(qubits, clbits, with_error_correction=True)
+            case "reset":
+                self.reset(qubits)
             case "barrier":
                 pass
             case _:
