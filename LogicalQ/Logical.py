@@ -1367,7 +1367,7 @@ class LogicalCircuit(QuantumCircuit):
 
     def h(self, *targets, method="Coherent_Feedback"):
         """
-        Logical Hadamard gate
+        Logical $H$ gate
         """
 
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
@@ -1414,7 +1414,7 @@ class LogicalCircuit(QuantumCircuit):
 
     def x(self, *targets):
         """
-        Logical PauliX gate
+        Logical $X$ gate
         """
 
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
@@ -1426,7 +1426,7 @@ class LogicalCircuit(QuantumCircuit):
 
     def y(self, *targets):
         """
-        Logical PauliY gate
+        Logical $Y$ gate
         """
 
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
@@ -1438,7 +1438,7 @@ class LogicalCircuit(QuantumCircuit):
 
     def z(self, *targets):
         """
-        Logical PauliZ gate
+        Logical $Z$ gate
         """
 
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
@@ -1450,7 +1450,7 @@ class LogicalCircuit(QuantumCircuit):
 
     def s(self, *targets, method="Coherent_Feedback"):
         """
-        Logical S gate
+        Logical $S$ gate
 
         Definition:
         [1   0]
@@ -1710,7 +1710,16 @@ class LogicalCircuit(QuantumCircuit):
         with self.box(label="logical.logicalop.mcmt.default:$\\hat{MCMT}_{L}$"):
             super().append(gate.control(len(controls)), control_qubits + target_qubits)
 
-    def append_sk_decomposition(self, circuit, targets, label=None, recursion_degree=1, basis_gates=None, depth=10, return_discretized_subcircuit=False):
+    def append_sk_decomposition(
+        self,
+        circuit,
+        targets,
+        label=None,
+        recursion_degree=1,
+        basis_gates=None,
+        depth=10,
+        return_discretized_subcircuit=False
+    ):
         if basis_gates is None:
             basis_gates = ["s", "sdg", "t", "tdg", "h", "x", "y", "z", "cz"]
 
@@ -1727,16 +1736,23 @@ class LogicalCircuit(QuantumCircuit):
                 qargs = [targets[discretized_subcircuit.qubits.index(qubit)] for qubit in circuit_instruction.qubits]
                 self.append(circuit_instruction, qargs=qargs)
         
-        with self.box(label=f"logical.logicalop.{label.lower()}.sk:$\\hat{label}$"):
+        with self.box(label=f"logical.logicalop.{label.lower()}.sk:$\\hat{{{label}}}$"):
             append_all()
             
         if return_discretized_subcircuit:
             return discretized_subcircuit
 
-    def u(self, theta: float, phi: float, lam: float, targets, method="Rotation"):
+    def u(
+        self,
+        theta: float,
+        phi: float,
+        lam: float,
+        targets,
+        method="Rotation"
+    ):
         if method == "Rotation":
             if np.isclose(phi + lam, 0.0):
-                with self.box(label=f"logical.logicalop.U.sk:$\\hat{{U}}_{{R}}({theta},{phi},{lam})$"):
+                with self.box(label=f"logical.logicalop.u.r:$\\hat{{U}}_{{R}}({theta},{phi},{lam})$"):
                     self.rz(phi, targets)
                     self.ry(theta, targets)
                     self.rz(lam, targets)
@@ -1747,7 +1763,23 @@ class LogicalCircuit(QuantumCircuit):
 
         return
 
-    def r(self, axis, theta, targets, label="R", depth=10, recursion_degree=1, method="S-K"):
+    def r(
+        self,
+        axis,
+        theta,
+        targets,
+        label="R",
+        recursion_degree=1,
+        depth=10,
+        method="S-K"
+    ):
+        """Logical Arbitrary-Axis Rotation Gate
+        
+        Args:
+            theta: Rotation angle in radians
+            method: Gate realization method; options: "S-K" (Solovay-Kitaev algorithm) (Default: `"S-K"`)
+        """
+
         if isinstance(axis, str):        
             # In form "instruction.name: (Gate, num_targets_per_gate)"
             valid_gates = {"x": (RXGate, 1), "y": (RYGate, 1), "z": (RZGate, 1), "xx": (RXXGate, 2), "yy": (RYYGate, 2), "zz": (RZZGate, 2)}
@@ -1796,12 +1828,19 @@ class LogicalCircuit(QuantumCircuit):
         else:
             raise ValueError(f"{method} is not a valid method.")
 
-    def rx(self, theta: float, targets, method = "S-K", depth=10, recursion_degree=1):
-        """Logical Single-Target Rotation Gate
+    def rx(
+        self,
+        theta: float,
+        targets,
+        method = "S-K",
+        recursion_degree=1,
+        depth=10,
+    ):
+        """Logical X Rotation Gate
         
-        method = "LCU" -> linear combination of unitaries or "S-K" -> solovay-kitaev algorithm or "OAA" -> oblivious amplitude amplification
-        
-        theta in radians
+        Args:
+            theta: Rotation angle in radians
+            method: Gate realization method; options: "S-K" (Solovay-Kitaev algorithm) (Default: `"S-K"`)
         """
 
         if hasattr(targets, "__iter__"):
@@ -1829,11 +1868,11 @@ class LogicalCircuit(QuantumCircuit):
         recursion_degree=1,
         depth=10
     ):
-        """Logical Single-Target Rotation Gate
+        """Logical Y Rotation Gate
         
         Args:
             theta: Rotation angle in radians
-            method: (Default: `"S-K"`)
+            method: Gate realization method; options: "S-K" (Solovay-Kitaev algorithm) (Default: `"S-K"`)
         """
 
         if hasattr(targets, "__iter__"):
@@ -1846,9 +1885,9 @@ class LogicalCircuit(QuantumCircuit):
                 "y",
                 theta,
                 targets,
-                label="Ry",
-                depth=depth,
+                label="RY",
                 recursion_degree=recursion_degree,
+                depth=depth,
             )
         else:
             raise ValueError(f"{method} is not a valid method.")
@@ -1861,11 +1900,11 @@ class LogicalCircuit(QuantumCircuit):
         recursion_degree=1,
         depth=10
     ):
-        """Logical Single-Target Rotation Gate
+        """Logical Z Rotation Gate
         
         Args:
-            theta in radians
-            method: (Default: `"S-K"`)
+            theta: Rotation angle in radians
+            method: Gate realization method; options: "S-K" (Solovay-Kitaev algorithm) (Default: `"S-K"`)
         """
 
         if hasattr(targets, "__iter__"):
@@ -1885,7 +1924,14 @@ class LogicalCircuit(QuantumCircuit):
         else:
             raise ValueError("{method} is not a valid method.")
             
-    def rxx(self, theta: float, targets, method="S-K", recursion_degree=1, depth=10):
+    def rxx(
+        self,
+        theta: float,
+        targets,
+        method="S-K",
+        recursion_degree=1,
+        depth=10
+    ):
         if hasattr(targets, "__iter__"):
             targets=targets
         else:
@@ -1896,17 +1942,24 @@ class LogicalCircuit(QuantumCircuit):
         
         if method == "S-K":
             self.r(
-                "xx", 
+                "xx",
                 theta,
                 targets,
-                label="Rxx",
-                depth=depth, 
-                recursion_degree=recursion_degree, 
+                label="RXX",
+                recursion_degree=recursion_degree,
+                depth=depth,
             )
         else:
             raise ValueError("{method} is not a valid method.")
             
-    def ryy(self, theta: float, targets, method="S-K", recursion_degree=1, depth=10):
+    def ryy(
+        self,
+        theta: float,
+        targets,
+        method="S-K",
+        recursion_degree=1,
+        depth=10
+    ):
         if hasattr(targets, "__iter__"):
             targets=targets
         else:
@@ -1920,16 +1973,21 @@ class LogicalCircuit(QuantumCircuit):
                 "yy", 
                 theta,
                 targets,
-                label="Ryy",
-                depth=depth, 
+                label="RYY",
                 recursion_degree=recursion_degree, 
+                depth=depth, 
             )
-        elif method == "OAA":
-            raise NotImplementedError("Method not implemented.")
         else:
             raise ValueError("{method} is not a valid method.")
             
-    def rzz(self, theta: float, targets, method="S-K", recursion_degree=1, depth=10):
+    def rzz(
+        self,
+        theta: float,
+        targets,
+        method="S-K",
+        recursion_degree=1,
+        depth=10
+    ):
         if hasattr(targets, "__iter__"):
             targets=targets
         else:
@@ -1943,16 +2001,17 @@ class LogicalCircuit(QuantumCircuit):
                 "zz", 
                 theta,
                 targets,
-                label="Rzz",
-                depth=depth, 
+                label="RZZ",
                 recursion_degree=recursion_degree, 
+                depth=depth, 
             )
-        elif method == "OAA":
-            raise NotImplementedError("Method not implemented.")
         else:
             raise ValueError("{method} is not a valid method.")
     
     def sx(self, target, **kwargs):
+        """Logical $\sqrt{X}$ Gate
+        """
+
         self.r(
             "x",
             np.pi/2,
@@ -1961,6 +2020,9 @@ class LogicalCircuit(QuantumCircuit):
         )
 
     def sxdg(self, target, **kwargs):
+        """Logical $\sqrt{X}^\dagger$ Gate
+        """
+
         self.r(
             "x",
             -np.pi/2,
@@ -1968,9 +2030,13 @@ class LogicalCircuit(QuantumCircuit):
             **kwargs
         )
 
-    # Input could be: 1. (CircuitInstruction(name="...", qargs="...", cargs="..."), qargs=None, cargs=None)
-    #                 2. (Instruction(name="..."), qargs=[..], cargs=[...])
     def append(self, instruction, qargs=None, cargs=None, copy=True):
+        """Append instruction to LogicalCircuit.
+        """
+
+        # Input could be: 1. (CircuitInstruction(name="...", qargs="...", cargs="..."), qargs=None, cargs=None)
+        #                 2. (Instruction(name="..."), qargs=[..], cargs=[...])
+
         if isinstance(instruction, str):
             operation = instruction
         elif hasattr(instruction, "name"):
