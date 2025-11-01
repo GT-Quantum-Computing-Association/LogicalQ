@@ -1366,8 +1366,7 @@ class LogicalCircuit(QuantumCircuit):
     ######################################
 
     def h(self, *targets, method="Coherent_Feedback"):
-        """
-        Logical $H$ gate
+        """Logical single-qubit Hadamard (:math:`\hat H`) gate
         """
 
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
@@ -1413,8 +1412,7 @@ class LogicalCircuit(QuantumCircuit):
             raise ValueError(f"'{method}' is not a valid method for the logical Hadamard gate")
 
     def x(self, *targets):
-        """
-        Logical $X$ gate
+        """Logical single-qubit Pauli-X (:math:`\hat X`) gate
         """
 
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
@@ -1425,8 +1423,7 @@ class LogicalCircuit(QuantumCircuit):
                 super().compose(self.LogicalXCircuit, self.logical_qregs[t], inplace=True)
 
     def y(self, *targets):
-        """
-        Logical $Y$ gate
+        """Logical single-qubit Pauli-Y (:math:`\hat Y`) gate
         """
 
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
@@ -1437,8 +1434,7 @@ class LogicalCircuit(QuantumCircuit):
             self.x(targets)
 
     def z(self, *targets):
-        """
-        Logical $Z$ gate
+        """Logical single-qubit Pauli-Z (:math:`\hat Z`) gate
         """
 
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
@@ -1449,8 +1445,7 @@ class LogicalCircuit(QuantumCircuit):
                 super().compose(self.LogicalZCircuit, self.logical_qregs[t], inplace=True)
 
     def s(self, *targets, method="Coherent_Feedback"):
-        """
-        Logical $S$ gate
+        """Logical single-qubit S (:math:`\hat S`) gate
 
         Definition:
         [1   0]
@@ -1489,8 +1484,7 @@ class LogicalCircuit(QuantumCircuit):
             raise ValueError(f"'{method}' is not a valid method for the logical S gate")
 
     def sdg(self, *targets, method="Coherent_Feedback"):
-        """
-        Logical S^dagger gate
+        """Logical S^dagger gate
 
         Definition:
         [1    0]
@@ -1530,8 +1524,7 @@ class LogicalCircuit(QuantumCircuit):
             raise ValueError(f"'{method}' is not a valid method for the logical S^dagger gate")
 
     def t(self, *targets, method="Coherent_Feedback"):
-        """
-        Logical T gate
+        """Logical T gate
 
         Definition:
         [1    0        ]
@@ -1567,45 +1560,41 @@ class LogicalCircuit(QuantumCircuit):
             raise ValueError(f"'{method}' is not a valid method for the logical T gate")
 
     def tdg(self, *targets, method="Coherent_Feedback"):
-            """
-            Logical T^dagger gate
+        """Logical T^dagger gate
 
-            Definition:
-            [1    0         ]
-            [0    e^(-ipi/4)]
-            """
+        Definition:
+        [1    0         ]
+        [0    e^(-ipi/4)]
+        """
 
-            if len(targets) == 1 and hasattr(targets[0], "__iter__"):
-                targets = targets[0]
+        if len(targets) == 1 and hasattr(targets[0], "__iter__"):
+            targets = targets[0]
 
-            if method == "LCU_Corrected":
-                for t in targets:
-                    with self.box(label="logical.logicalop.t.lcu_corrected:$\\hat{T^\\dagger}_{L}$"):
-                        super().h(self.logical_op_qregs[t][0])
-                        super().tdg(self.logical_op_qregs[t][0])
-                        super().h(self.logical_op_qregs[t][0])
-                        super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
-                        super().h(self.logical_op_qregs[t][0])
+        if method == "LCU_Corrected":
+            for t in targets:
+                with self.box(label="logical.logicalop.t.lcu_corrected:$\\hat{T^\\dagger}_{L}$"):
+                    super().h(self.logical_op_qregs[t][0])
+                    super().tdg(self.logical_op_qregs[t][0])
+                    super().h(self.logical_op_qregs[t][0])
+                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
+                    super().h(self.logical_op_qregs[t][0])
 
-                        super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
-                        super().append(Reset(), [self.logical_op_qregs[t][0]], copy=False)
+                    super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
+                    super().append(Reset(), [self.logical_op_qregs[t][0]], copy=False)
 
-                        with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as _else:
-                            self.sdg(t, method='LCU_corrected')
-                        with _else:
-                            pass
-
-            elif method == "Coherent_Feedback":
-                for t in targets:
-                    with self.box(label="logical.logicalop.t.coherent_feedback:$\\hat{T^\\dagger}_{L}$"):
-                        super().compose(self.LogicalTdgCircuit_CF, self.logical_qregs[t][:] + self.logical_op_qregs[t][:], inplace=True)
-
-            else:
-                raise ValueError(f"'{method}' is not a valid method for the logical T^dagger gate")
+                    with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as _else:
+                        self.sdg(t, method='LCU_corrected')
+                    with _else:
+                        pass
+        elif method == "Coherent_Feedback":
+            for t in targets:
+                with self.box(label="logical.logicalop.t.coherent_feedback:$\\hat{T^\\dagger}_{L}$"):
+                    super().compose(self.LogicalTdgCircuit_CF, self.logical_qregs[t][:] + self.logical_op_qregs[t][:], inplace=True)
+        else:
+            raise ValueError(f"'{method}' is not a valid method for the logical T^dagger gate")
 
     def cx(self, control, *_targets, method="Ancilla_Assisted"):
-        """
-        Logical Controlled-PauliX gate
+        """Logical Controlled-PauliX gate
         """
 
         if hasattr(_targets, "__iter__"):
@@ -1632,8 +1621,7 @@ class LogicalCircuit(QuantumCircuit):
             raise ValueError(f"'{method}' is not a valid method for the logical CX gate")
 
     def cz(self, control, *_targets, method="Ancilla_Assisted"):
-        """
-        Logical Controlled-PauliZ gate
+        """Logical Controlled-PauliZ gate
         """
 
         if hasattr(_targets, "__iter__"):
@@ -1660,8 +1648,7 @@ class LogicalCircuit(QuantumCircuit):
             raise ValueError(f"'{method}' is not a valid method for the logical CZ gate")
         
     def cy(self, control, *_targets, method="Ancilla_Assisted"):
-        """
-        Logical Controlled-PauliY gate
+        """Logical Controlled-PauliY gate
         """
 
         if hasattr(_targets, "__iter__"):
@@ -1691,8 +1678,7 @@ class LogicalCircuit(QuantumCircuit):
             raise ValueError(f"'{method}' is not a valid method for the logical CY gate")
 
     def mcmt(self, gate, controls, targets):
-        """
-        Logical Multi-Control Multi-Target gate
+        """Logical Multi-Control Multi-Target gate
         """
 
         if len(controls) == 1 and hasattr(controls[0], "__iter__"):
@@ -1720,6 +1706,9 @@ class LogicalCircuit(QuantumCircuit):
         depth=10,
         return_discretized_subcircuit=False
     ):
+        """Append the Solovay-Kitaev decomposition of a circuit in terms of logical basis gates.
+        """
+
         if basis_gates is None:
             basis_gates = ["s", "sdg", "t", "tdg", "h", "x", "y", "z", "cz"]
 
@@ -1765,15 +1754,15 @@ class LogicalCircuit(QuantumCircuit):
 
     def r(
         self,
-        axis,
-        theta,
+        axis: str,
+        theta: float,
         targets,
-        label="R",
-        recursion_degree=1,
-        depth=10,
-        method="S-K"
+        label: str = "R",
+        method: str = "S-K",
+        recursion_degree: int = 1,
+        depth: int = 10,
     ):
-        """Logical Arbitrary-Axis Rotation Gate
+        """Logical single-qubit rotation (:math:`R`) gate
         
         Args:
             theta: Rotation angle in radians
@@ -1785,19 +1774,17 @@ class LogicalCircuit(QuantumCircuit):
             valid_gates = {"x": (RXGate, 1), "y": (RYGate, 1), "z": (RZGate, 1), "xx": (RXXGate, 2), "yy": (RYYGate, 2), "zz": (RZZGate, 2)}
             
             if axis not in list(valid_gates.keys()):
-                raise NotImplementedError(f"Invalid input '{axis}' for argument 'axis'.")
+                raise ValueError(f"Invalid input '{axis}' for argument 'axis'.")
             
             if label == "R":
                 label = label + axis
-                
         elif isinstance(axis, list):
             if len(axis) == 3:
                 raise NotImplementedError("Arbitrary rotation axes are not yet implemented.")
             else:
-                raise ValueError(f"'axis' is list of invalid length ({len(axis)}). 'axis' must have length 3.")
-            
+                raise ValueError(f"'axis' is list of invalid length ({len(axis)}); 'axis' must have length 3.")
         else:
-            raise TypeError(f"Provided 'axis' is not an instance of an allowed type (str, int).")
+            raise TypeError(f"Provided 'axis' is not an instance of an allowed type; must be str or int.")
         
         if method == "S-K":
             gate_base, num_target_qubits = valid_gates[axis]
@@ -1832,11 +1819,11 @@ class LogicalCircuit(QuantumCircuit):
         self,
         theta: float,
         targets,
-        method = "S-K",
-        recursion_degree=1,
-        depth=10,
+        method: str = "S-K",
+        recursion_degree: int = 1,
+        depth: int = 10,
     ):
-        """Logical X Rotation Gate
+        """Logical single-qubit X rotation (:math:`RX`) gate
         
         Args:
             theta: Rotation angle in radians
@@ -1854,6 +1841,7 @@ class LogicalCircuit(QuantumCircuit):
                 theta,
                 targets,
                 label="RX",
+                method="S-K",
                 recursion_degree=recursion_degree,
                 depth=depth
             )
@@ -1868,7 +1856,7 @@ class LogicalCircuit(QuantumCircuit):
         recursion_degree=1,
         depth=10
     ):
-        """Logical Y Rotation Gate
+        """Logical single-qubit Y rotation (:math:`RY`) gate
         
         Args:
             theta: Rotation angle in radians
@@ -1886,6 +1874,7 @@ class LogicalCircuit(QuantumCircuit):
                 theta,
                 targets,
                 label="RY",
+                method="S-K",
                 recursion_degree=recursion_degree,
                 depth=depth,
             )
@@ -1900,7 +1889,7 @@ class LogicalCircuit(QuantumCircuit):
         recursion_degree=1,
         depth=10
     ):
-        """Logical Z Rotation Gate
+        """Logical single-qubit Z rotation (:math:`RZ`) gate
         
         Args:
             theta: Rotation angle in radians
@@ -1918,6 +1907,7 @@ class LogicalCircuit(QuantumCircuit):
                 phi,
                 targets,
                 label="RZ",
+                method="S-K",
                 recursion_degree=recursion_degree,
                 depth=depth
             )
@@ -1946,6 +1936,7 @@ class LogicalCircuit(QuantumCircuit):
                 theta,
                 targets,
                 label="RXX",
+                method="S-K",
                 recursion_degree=recursion_degree,
                 depth=depth,
             )
@@ -1974,6 +1965,7 @@ class LogicalCircuit(QuantumCircuit):
                 theta,
                 targets,
                 label="RYY",
+                method="S-K",
                 recursion_degree=recursion_degree, 
                 depth=depth, 
             )
@@ -1989,6 +1981,7 @@ class LogicalCircuit(QuantumCircuit):
         depth=10
     ):
         if hasattr(targets, "__iter__"):
+
             targets=targets
         else:
             targets=[targets]
@@ -2002,6 +1995,7 @@ class LogicalCircuit(QuantumCircuit):
                 theta,
                 targets,
                 label="RZZ",
+                method="S-K",
                 recursion_degree=recursion_degree, 
                 depth=depth, 
             )
@@ -2009,7 +2003,7 @@ class LogicalCircuit(QuantumCircuit):
             raise ValueError("{method} is not a valid method.")
     
     def sx(self, target, **kwargs):
-        """Logical $\sqrt{X}$ Gate
+        """Logical single-qubit SQRT(X) (:math:`\sqrt{X}`) gate
         """
 
         self.r(
@@ -2020,8 +2014,9 @@ class LogicalCircuit(QuantumCircuit):
         )
 
     def sxdg(self, target, **kwargs):
-        """Logical $\sqrt{X}^\dagger$ Gate
+        """Logical single-qubit SQRT(X)-adjoint (:math:`\sqrt{X}^\dagger`) gate
         """
+
 
         self.r(
             "x",
@@ -2031,7 +2026,7 @@ class LogicalCircuit(QuantumCircuit):
         )
 
     def append(self, instruction, qargs=None, cargs=None, copy=True):
-        """Append instruction to LogicalCircuit.
+        """Append instruction to LogicalCircuit
         """
 
         # Input could be: 1. (CircuitInstruction(name="...", qargs="...", cargs="..."), qargs=None, cargs=None)
@@ -2304,8 +2299,7 @@ class LogicalRegister(list):
         raise NotImplementedError("LogicalRegister is not yet fully implemented")    
 
 class LogicalStatevector(Statevector):
-    """
-    A LogicalStatevector
+    """A LogicalStatevector
     """
 
     def __init__(
@@ -2332,12 +2326,11 @@ class LogicalStatevector(Statevector):
             dims: The subsystem dimension of the state.
         
         Raises:
-            ValueError: if `data` is a mixed state or otherwise invalid, or if other parameters
-                are not given when constructing from a complex vector.
+            ValueError: if `data` is a mixed state or otherwise invalid, or if other parameters are not given when constructing from a complex vector.
             TypeError: if `data` is not a supported data type.
-            NotImplementedError: if `n_logical_qubits` is greater than 1 or if `data` is a
-                Qiskit QuantumCircuit.
+            NotImplementedError: if `data` is a Qiskit QuantumCircuit.
         """
+
         if isinstance(data, LogicalCircuit):
             self.logical_circuit = copy.deepcopy(data)
             self.n_logical_qubits = self.logical_circuit.n_logical_qubits
@@ -2417,9 +2410,13 @@ class LogicalStatevector(Statevector):
                         raise ValueError("Unable to construct LogicalStatevector from Statevector") from e
                 else:
                     raise ValueError("LogicalStatevector construction from a Statevector in the physical basis requires n_logical_qubits, label, stabilizer_tableau, and logical_circuit to all be specified")
-            else:
+            elif basis == "logical":
                 # @TODO - implement either directly or just by passing on to the iterable-based constructor
                 raise NotImplementedError("LogicalStatevector construction from a Statevector in the logical basis is not yet implemented")
+            elif basis is None:
+                raise ValueError("Data basis must be specified for LogicalStatevector construction from a statevector")
+            else:
+                raise ValueError(f"Invalid input '{basis}' for basis of logical statevector data")
         elif hasattr(data, "__iter__"):
             if basis == "physical":
                 if n_logical_qubits and label and stabilizer_tableau:
@@ -2431,7 +2428,7 @@ class LogicalStatevector(Statevector):
                     super().__init__(data=data, dims=dims)
                 else:
                     raise ValueError("LogicalStatevector construction from an amplitude iterable in the physical basis requires n_logical_qubits, label, and stabilizer_tableau to all be specified")
-            else:
+            elif basis == "logical":
                 if n_logical_qubits and label and stabilizer_tableau:
                     self.n_logical_qubits = n_logical_qubits
                     self.label = label
@@ -2467,6 +2464,10 @@ class LogicalStatevector(Statevector):
                     super().__init__(data=_data, dims=dims)
                 else:
                     raise ValueError("LogicalStatevector construction from an amplitude iterable in the logical basis requires n_logical_qubits, label, and stabilizer_tableau to all be specified")
+            elif basis is None:
+                raise ValueError("Data basis must be specified for LogicalStatevector construction from an amplitude iterable")
+            else:
+                raise ValueError(f"Invalid input '{basis}' for basis of logical statevector data")
         else:
             raise TypeError(f"Object of type {type(data)} is not a valid data input for LogicalStatevector")
 
@@ -2498,6 +2499,7 @@ class LogicalStatevector(Statevector):
         Raises:
             ValueError: if the counts format could not be parsed or if `basis` is invalid.
         """
+
         outcomes_raw = [key.replace(" ", "") for key in counts.keys()]
         outcomes = []
         if basis == "physical":
@@ -2550,16 +2552,22 @@ class LogicalStatevector(Statevector):
         return lsv_normalized
 
     @classmethod
-    def from_basis_str(cls, basis_str, n_logical_qubits, label, stabilizer_tableau, basis="physical"):
-        """Construct a LogicalStatevector, an element of the logical computational basis, from
-            a basis string.
+    def from_basis_str(
+        cls,
+        basis_str,
+        n_logical_qubits,
+        label,
+        stabilizer_tableau,
+        basis="physical"
+    ):
+        """Construct a LogicalStatevector from a string in the logical computational basis.
         
         Args:
-            basis_str (str): Either a binary bitstring or its hex equivalent to identify the basis.
-            n_logical_qubits (int): Number of logical qubits.
-            label (tuple): The label of the quantum error correction code [[n,k,d]] (as a tuple).
-            stabilizer_tableau (Iterable[str]): The set of stabilizers for the QECC.
-            basis (str): The basis in which each respective count's vector is given, physical or logical.
+            basis_str: Either a binary bitstring or its hex equivalent to identify the basis.
+            n_logical_qubits: Number of logical qubits.
+            label: The label of the quantum error correction code [[n,k,d]].
+            stabilizer_tableau: The set of stabilizers for the QECC.
+            basis: The basis in which each respective count's vector is given, physical or logical.
         
         Returns:
             :py:class:`~LogicalQ.Logical.LogicalStatevector`: The LogicalStatevector of
@@ -2568,6 +2576,7 @@ class LogicalStatevector(Statevector):
         Raises:
             ValueError: if the `basis_str` could not be parsed due to improper format.
         """
+
         if all([char in ["0", "1"] for char in basis_str]):
             d = 2**(len(basis_str))
             basis_idx = int(basis_str, 2)
@@ -2583,15 +2592,24 @@ class LogicalStatevector(Statevector):
         basis_vector = np.zeros((d,))
         basis_vector[basis_idx] = 1.0
 
-        lsv = cls(data=basis_vector, n_logical_qubits=n_logical_qubits, label=label, stabilizer_tableau=stabilizer_tableau)
+        lsv = cls(
+            data=basis_vector,
+            n_logical_qubits=n_logical_qubits,
+            label=label, stabilizer_tableau=stabilizer_tableau,
+            basis=basis
+        )
+
         return lsv
 
     @property
-    def logical_decomposition(self, atol=1E-13):
+    def logical_decomposition(
+        self,
+        atol: float = 1E-13
+    ):
         """Compute the decomposition of the LogicalStatevector in the logical basis.
 
         Args:
-            atol (float): Tolerance within which to set probability amplitude to zero.
+            atol: Tolerance within which to set probability amplitude to zero.
         
         Returns:
             :py:type:`np.ndarray`: The set of coefficients :math:`\\alpha_i, \\delta`, where
@@ -2639,9 +2657,9 @@ class LogicalStatevector(Statevector):
         """Return an array representation of the object.
 
         Args:
-            basis (str): The basis, physical or logical, in which to represent the vector.
-            dtype (data-type): The desired data-type for the array.
-            copy (bool): If `True`, then the array data is copied
+            basis: The basis, physical or logical, in which to represent the vector.
+            dtype: The desired data-type for the array.
+            copy: If `True`, then the array data is copied
         
         Returns:
             :py:type:`np.ndarray`: The :py:meth:`~LogicalQ.Logical.LogicalStatevector.logical_decomposition`
@@ -2663,7 +2681,7 @@ class LogicalStatevector(Statevector):
         """Return a string representation of the statevector.
 
         Args:
-            basis (str): The basis, logical or physical, in which to return the array.
+            basis: The basis, logical or physical, in which to return the array.
         
         Returns:
             :py:type:`np.ndarray`: String representation of the statevector in the requested basis.
@@ -2689,7 +2707,7 @@ class LogicalStatevector(Statevector):
         """Return a visual representation of the statevector in the logical basis.
 
         Args:
-            output (str): The method in which to draw. Valid choices are `text`, `latex`, and `latex_source`.
+            output: The method in which to draw. Valid choices are `text`, `latex`, and `latex_source`.
             
         Returns:
             `str` or :py:class:`IPython.display.Latex`: string or LaTeX representation of the statevector.
@@ -2697,7 +2715,9 @@ class LogicalStatevector(Statevector):
         Raises:
             ValueError: if the draw method is invalid.
         """
-        if output is None: output = "text"
+
+        if output is None:
+            output = "text"
 
         # @TODO - display scientific notation correctly in string formatting
         if output == "text":
