@@ -875,14 +875,11 @@ class LogicalMatplotlibDrawer:
                         else:
                             c_indxs.append(wire_map[carg])
 
-                if self.fold_qec:
-                    flow_op = isinstance(node.op, ControlFlowOp) and not (node.op.label is not None and node.op.label.startswith("logical.qec"))
-                elif self.fold_qed:
-                    flow_op = isinstance(node.op, ControlFlowOp) and not (node.op.label is not None and node.op.label.startswith("logical.qed"))
-                elif self.fold_logicalop:
-                    flow_op = isinstance(node.op, ControlFlowOp) and not (node.op.label is not None and node.op.label.startswith("logical.logicalop"))
-                else:
-                    flow_op = isinstance(node.op, ControlFlowOp)
+                flow_op = (isinstance(node.op, ControlFlowOp) and
+                    not (self.fold_qec and node.op.label is not None and node.op.label.startswith("logical.qec")) and
+                    not (self.fold_qed and node.op.label is not None and node.op.label.startswith("logical.qed")) and
+                    not (self.fold_logicalop and node.op.label is not None and node.op.label.startswith("logical.logicalop"))
+                )
 
                 # qubit coordinates
                 node_data[node].q_xy = [
