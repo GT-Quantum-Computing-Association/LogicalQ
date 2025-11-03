@@ -16,10 +16,6 @@
 from __future__ import annotations
 
 import logging
-import os
-import shutil
-import subprocess
-import tempfile
 import typing
 from warnings import warn
 
@@ -27,7 +23,6 @@ from qiskit import user_config
 from qiskit.circuit import ControlFlowOp, Measure
 
 from qiskit.visualization.exceptions import VisualizationError
-from qiskit.visualization.utils import _trim as trim_image
 from .LogicalMatplotlibDrawer import _logical_matplotlib_circuit_drawer
 
 if typing.TYPE_CHECKING:
@@ -58,6 +53,7 @@ def logical_circuit_drawer(
     wire_order: list[int] | None = None,
     expr_len: int = 30,
     fold_qec=True,
+    fold_qed=True,
     fold_logicalop=True
 ):
     image = None
@@ -161,6 +157,9 @@ def logical_circuit_drawer(
             cregbundle=cregbundle,
             wire_order=complete_wire_order,
             expr_len=expr_len,
+            fold_qec=fold_qec,
+            fold_qed=fold_qed,
+            fold_logicalop=fold_logicalop,
         )
     else:
         raise VisualizationError(
@@ -169,3 +168,4 @@ def logical_circuit_drawer(
     if image and interactive:
         image.show()
     return image
+

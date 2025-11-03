@@ -105,6 +105,7 @@ def _logical_matplotlib_circuit_drawer(
     wire_order=None,
     expr_len=30,
     fold_qec=True,
+    fold_qed=True,
     fold_logicalop=True
 ):
     qubits, clbits, nodes = _utils._get_layered_instructions(
@@ -133,6 +134,7 @@ def _logical_matplotlib_circuit_drawer(
         with_layout=with_layout,
         expr_len=expr_len,
         fold_qec=fold_qec,
+        fold_qed=fold_qed,
         fold_logicalop=fold_logicalop,
     )
     return qcd.draw(filename)
@@ -161,6 +163,7 @@ class LogicalMatplotlibDrawer:
         with_layout=False,
         expr_len=30,
         fold_qec=True,
+        fold_qed=True,
         fold_logicalop=True
     ):
         self._circuit = circuit
@@ -207,6 +210,9 @@ class LogicalMatplotlibDrawer:
 
         # Condense QEC if specified
         self.fold_qec = fold_qec
+
+        # Condense QED if specified
+        self.fold_qed = fold_qed
 
         # Condense logical operations if specified
         self.fold_logicalop = fold_logicalop
@@ -529,6 +535,8 @@ class LogicalMatplotlibDrawer:
                 if (
                     # Condense QEC if specified
                     (self.fold_qec and op.label is not None and op.label.startswith("logical.qec")) or
+                    # Condense QED if specified
+                    (self.fold_qed and op.label is not None and op.label.startswith("logical.qed")) or
                     # Condense logical operations if specified
                     (self.fold_logicalop and op.label is not None and op.label.startswith("logical.logicalop"))
                 ):
@@ -665,7 +673,9 @@ class LogicalMatplotlibDrawer:
                             plot_barriers=self._plot_barriers,
                             fold=self._fold,
                             cregbundle=self._cregbundle,
+                            expr_len=self._expr_len,
                             fold_qec=self.fold_qec,
+                            fold_qed=self.fold_qed,
                             fold_logicalop=self.fold_logicalop
                         )
 
@@ -865,7 +875,14 @@ class LogicalMatplotlibDrawer:
                         else:
                             c_indxs.append(wire_map[carg])
 
-                flow_op = isinstance(node.op, ControlFlowOp) and not (node.op.label is not None and node.op.label.startswith("logical.qec"))
+                if self.fold_qec:
+                    flow_op = isinstance(node.op, ControlFlowOp) and not (node.op.label is not None and node.op.label.startswith("logical.qec"))
+                elif self.fold_qed:
+                    flow_op = isinstance(node.op, ControlFlowOp) and not (node.op.label is not None and node.op.label.startswith("logical.qed"))
+                elif self.fold_logicalop:
+                    flow_op = isinstance(node.op, ControlFlowOp) and not (node.op.label is not None and node.op.label.startswith("logical.logicalop"))
+                else:
+                    flow_op = isinstance(node.op, ControlFlowOp)
 
                 # qubit coordinates
                 node_data[node].q_xy = [
@@ -1195,6 +1212,11 @@ class LogicalMatplotlibDrawer:
 
                 # Condense QEC if specified
                 if self.fold_qec and op.label is not None and op.label.startswith("logical.qec"):
+                    node_data[node].gate_text = op.label.split(":")[-1]
+                    self._multiqubit_gate(node, node_data, glob_data)
+
+                # Condense QED if specified
+                elif self.fold_qed and op.label is not None and op.label.startswith("logical.qed"):
                     node_data[node].gate_text = op.label.split(":")[-1]
                     self._multiqubit_gate(node, node_data, glob_data)
 
@@ -2127,3 +2149,4 @@ class NodeData:
         self.indexset = ()  # List of indices used for ForLoopOp
         self.jump_values = []  # List of jump values used for SwitchCaseOp
         self.circ_num = 0  # Which block is it in op.blocks
+
