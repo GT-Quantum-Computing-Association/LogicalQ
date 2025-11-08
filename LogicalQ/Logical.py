@@ -24,6 +24,35 @@ from qiskit.exceptions import QiskitError
 from typing import TYPE_CHECKING
 from typing import Iterable
 
+from __future__ import annotations
+
+import copy
+import numpy as np
+
+from qiskit import QuantumRegister, AncillaRegister, ClassicalRegister, QuantumCircuit
+from qiskit.circuit import Bit, Measure, Reset
+from qiskit.circuit.quantumcircuitdata import QuantumCircuitData
+from qiskit.circuit.classical import expr
+from qiskit.circuit.library import Initialize, RXGate, RYGate, RZGate, RXXGate, RYYGate, RZZGate
+from qiskit.quantum_info import Statevector, DensityMatrix, Pauli, partial_trace, state_fidelity
+from qiskit_addon_utils.slicing import slice_by_depth
+from qiskit.transpiler.passes import SolovayKitaev
+from qiskit.synthesis import generate_basic_approximations
+
+from qiskit.transpiler import PassManager
+
+from LogicalQ.Logical import LogicalStatevector
+from LogicalQ.Reservoir import AncillaReservoir
+
+from .Transpilation.ClearQEC import ClearQEC
+from .Transpilation.UnBox import UnBox
+
+from qiskit import _numpy_compat
+from qiskit.exceptions import QiskitError
+
+from typing import TYPE_CHECKING
+from typing import Iterable
+
 class LogicalCircuit(QuantumCircuit):
     """
     Core LogicalQ representation of a logical quantum circuit.
@@ -34,6 +63,7 @@ class LogicalCircuit(QuantumCircuit):
         n_logical_qubits: int,
         label: Iterable[int],
         stabilizer_tableau: Iterable[str],
+        num_ancillas = "default",
         name: str = None,
     ) -> None:
         # Quantum error correcting code preparation
@@ -49,9 +79,11 @@ class LogicalCircuit(QuantumCircuit):
         if any([len(stabilizer) != self.n for stabilizer in self.stabilizer_tableau]):
             raise ValueError(f"Stabilizer lengths do not all equal the code label n ({self.n})")
 
-        # @TODO - obtain an exact estimate for the number of ancilla qubits
+        # @TODO - Refactor to merge n_reservoir_qubits with n_ancilla_qubits, as they currently serve distinct purposes
+        # 2 for logicalops, self.n_stabilizers // 2 estimate for stabilizer measurements
         self.n_ancilla_qubits = self.n_stabilizers//2
         self.n_measure_qubits = self.n_ancilla_qubits
+        self.n_reservoir_qubits = self.n_logical_qubits * (2 + self.n_ancilla_qubits) if (num_ancillas == "default") else num_ancillas
 
         self.flagged_stabilizers_1 = []
         self.flagged_stabilizers_2 = []
@@ -100,6 +132,10 @@ class LogicalCircuit(QuantumCircuit):
         super().__init__(name=name)
         # ...then adding the logical qubits
         self.add_logical_qubits(self.n_logical_qubits)
+        
+        # Add ancilla reservoir and add as register
+        self.reservoir = AncillaReservoir(self.n_reservoir_qubits, name=f"qanc_reservoir", algorithm="cyclic")
+        super().add_register(self.reservoir._reservoir)
 
         # Also add a classical measurement output register at the end
         self.output_creg = ClassicalRegister(self.n_logical_qubits, name="coutput")
@@ -162,10 +198,6 @@ class LogicalCircuit(QuantumCircuit):
         for i in range(current_logical_qubit_count, current_logical_qubit_count + logical_qubit_count):
             # Physical qubits for logical qubit
             logical_qreg_i = QuantumRegister(self.n_physical_qubits, name=f"qlog{i}")
-            # Ancilla qubits needed for measurements
-            ancilla_qreg_i = AncillaRegister(self.n_ancilla_qubits, name=f"qanc{i}")
-            # Ancilla qubits needed for logical operations
-            logical_op_qreg_i = AncillaRegister(2, name=f"qlogical_op{i}")
             # Classical bits needed for encoding verification
             enc_verif_creg_i = ClassicalRegister(1, name=f"cenc_verif{i}")
             # Classical bits needed for measurements
@@ -185,8 +217,6 @@ class LogicalCircuit(QuantumCircuit):
 
             # Add new registers to storage lists
             self.logical_qregs.append(logical_qreg_i)
-            self.ancilla_qregs.append(ancilla_qreg_i)
-            self.logical_op_qregs.append(logical_op_qreg_i)
             self.enc_verif_cregs.append(enc_verif_creg_i)
             self.curr_syndrome_cregs.append(curr_syndrome_creg_i)
             self.prev_syndrome_cregs.append(prev_syndrome_creg_i)
@@ -198,8 +228,6 @@ class LogicalCircuit(QuantumCircuit):
 
             # Add new registers to quantum circuit
             super().add_register(logical_qreg_i)
-            super().add_register(ancilla_qreg_i)
-            super().add_register(logical_op_qreg_i)
             super().add_register(enc_verif_creg_i)
             super().add_register(curr_syndrome_creg_i)
             super().add_register(prev_syndrome_creg_i)
@@ -524,33 +552,34 @@ class LogicalCircuit(QuantumCircuit):
 
                 with self.box(label="logical.qec.encoding_verification:$\\hat U_{enc,verif}$"):
                     # CNOT from physical qubits to ancilla(e)
-                    super().cx(self.logical_qregs[q][1], self.ancilla_qregs[q][0])
-                    super().cx(self.logical_qregs[q][3], self.ancilla_qregs[q][0])
-                    super().cx(self.logical_qregs[q][5], self.ancilla_qregs[q][0])
+                    with self.reservoir.allocate(1) as ancilla:
+                        super().cx(self.logical_qregs[q][1], ancilla)
+                        super().cx(self.logical_qregs[q][3], ancilla)
+                        super().cx(self.logical_qregs[q][5], ancilla)
 
-                    # Measure ancilla(e)
-                    super().append(Measure(), [self.ancilla_qregs[q][0]], [self.enc_verif_cregs[q][0]], copy=False)
+                        # Measure ancilla(e)
+                        super().append(Measure(), [ancilla], [self.enc_verif_cregs[q][0]], copy=False)
 
-                    for _ in range(max_iterations - 1):
-                        # If the ancilla stores a 1, reset the entire logical qubit and redo
-                        with super().if_test((self.enc_verif_cregs[q][0], 1)) as _else:
-                            super().append(Reset(), [self.logical_qregs[q][:]], copy=False)
+                        for _ in range(max_iterations - 1):
+                            # If the ancilla stores a 1, reset the entire logical qubit and redo
+                            with super().if_test((self.enc_verif_cregs[q][0], 1)) as _else:
+                                super().append(Reset(), [self.logical_qregs[q][:]], copy=False)
 
-                            # Initial encoding
-                            super().compose(self.encoding_circuit, self.logical_qregs[q], inplace=True)
+                                # Initial encoding
+                                super().compose(self.encoding_circuit, self.logical_qregs[q], inplace=True)
 
-                            # CNOT from (Z1 Z3 Z5) to ancilla
-                            super().cx(self.logical_qregs[q][1], self.ancilla_qregs[q][0])
-                            super().cx(self.logical_qregs[q][3], self.ancilla_qregs[q][0])
-                            super().cx(self.logical_qregs[q][5], self.ancilla_qregs[q][0])
+                                # CNOT from (Z1 Z3 Z5) to ancilla
+                                super().cx(self.logical_qregs[q][1], ancilla)
+                                super().cx(self.logical_qregs[q][3], ancilla)
+                                super().cx(self.logical_qregs[q][5], ancilla)
 
-                            # Measure ancilla
-                            super().append(Measure(), [self.ancilla_qregs[q][0]], [self.enc_verif_cregs[q][0]], copy=False)
-                        with _else:
-                            pass
+                                # Measure ancilla
+                                super().append(Measure(), [ancilla], [self.enc_verif_cregs[q][0]], copy=False)
+                            with _else:
+                                pass
 
-                    # Reset ancilla qubit
-                    super().append(Reset(), [self.ancilla_qregs[q][0]], copy=False)
+                        # Reset ancilla qubit
+                        super().append(Reset(), [ancilla], copy=False)
 
                 # Flip qubits if necessary
                 if init_state == 1:
@@ -620,86 +649,89 @@ class LogicalCircuit(QuantumCircuit):
             super().append(Reset(), [self.logical_qregs[q][:]], copy=False)
 
             if reset_ancillas:
-                super().append(Reset(), [self.ancilla_qregs[q][:]], copy=False)
-                super().append(Reset(), [self.logical_op_qregs[q][:]], copy=False)
+                with self.reservoir.allocate_all() as ancillas:
+                    super().append(Reset(), ancillas, copy=False)
+                #super().append(Reset(), [self.ancilla_qregs[q][:]], copy=False)
+                #super().append(Reset(), [self.logical_op_qregs[q][:]], copy=False)
 
     def reset_ancillas(
-        self,
-        logical_qubit_indices: Iterable[int] | None = None
+        self
     ):
-        """Reset all ancillas associated with specified logical qubits.
-
-        Args:
-            logical_qubit_indices: Indices of logical qubits to reset. If None, then reset all.
+        """Reset all ancillas in reservoir.
         """
-        if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
-            logical_qubit_indices = list(range(self.n_logical_qubits))
 
-        for q in logical_qubit_indices:
-            super().append(Reset(), [self.ancilla_qregs[q][:]], copy=False)
+        with self.reservoir.allocate_all() as ancillas:
+                super().append(Reset(), ancillas, copy=False)
 
     def steane_flagged_circuit1(
         self,
+        ancillas,
         logical_qubit_indices: Iterable[int]
     ):
         """Measure first set of flagged syndromes for the Steane code.
         """
-        for q in logical_qubit_indices:
+        for q in logical_qubit_indices:        
             super().barrier()
-            super().h(self.ancilla_qregs[q][0])
-            super().cx(self.ancilla_qregs[q][0], self.logical_qregs[q][3])
-            super().cx(self.logical_qregs[q][2], self.ancilla_qregs[q][2])
-            super().cx(self.logical_qregs[q][5], self.ancilla_qregs[q][1])
-            super().cx(self.ancilla_qregs[q][0], self.ancilla_qregs[q][1])
-            super().cx(self.ancilla_qregs[q][0], self.logical_qregs[q][0])
-            super().cx(self.logical_qregs[q][3], self.ancilla_qregs[q][2])
-            super().cx(self.logical_qregs[q][4], self.ancilla_qregs[q][1])
-            super().cx(self.ancilla_qregs[q][0], self.logical_qregs[q][1])
-            super().cx(self.logical_qregs[q][6], self.ancilla_qregs[q][2])
-            super().cx(self.logical_qregs[q][2], self.ancilla_qregs[q][1])
-            super().cx(self.ancilla_qregs[q][0], self.ancilla_qregs[q][2])
-            super().cx(self.ancilla_qregs[q][0], self.logical_qregs[q][2])
-            super().cx(self.logical_qregs[q][5], self.ancilla_qregs[q][2])
-            super().cx(self.logical_qregs[q][1], self.ancilla_qregs[q][1])
-            super().h(self.ancilla_qregs[q][0])
+            super().h(ancillas[0])
+            super().cx(ancillas[0],              self.logical_qregs[q][3])
+            super().cx(self.logical_qregs[q][2], ancillas[2])
+            super().cx(self.logical_qregs[q][5], ancillas[1])
+            super().cx(ancillas[0],              ancillas[1])
+            super().cx(ancillas[0],              self.logical_qregs[q][0])
+            super().cx(self.logical_qregs[q][3], ancillas[2])
+            super().cx(self.logical_qregs[q][4], ancillas[1])
+            super().cx(ancillas[0],              self.logical_qregs[q][1])
+            super().cx(self.logical_qregs[q][6], ancillas[2])
+            super().cx(self.logical_qregs[q][2], ancillas[1])
+            super().cx(ancillas[0],              ancillas[2])
+            super().cx(ancillas[0],              self.logical_qregs[q][2])
+            super().cx(self.logical_qregs[q][5], ancillas[2])
+            super().cx(self.logical_qregs[q][1], ancillas[1])
+            super().h(ancillas[0])
             super().barrier()
 
     def steane_flagged_circuit2(
         self,
+        ancillas,
         logical_qubit_indices: Iterable[int]
     ):
         """Measure second set of flagged syndromes for the Steane code.
         """
+        if len(ancillas) > 3:
+            print("WARNING: Only 3 ancillas are required for steane_flagged_circuit2.")
+
         for q in logical_qubit_indices:
             super().barrier()
-            super().h(self.ancilla_qregs[q][1])
-            super().h(self.ancilla_qregs[q][2])
-            super().cx(self.logical_qregs[q][3], self.ancilla_qregs[q][0])
-            super().cx(self.ancilla_qregs[q][2], self.logical_qregs[q][2])
-            super().cx(self.ancilla_qregs[q][1], self.logical_qregs[q][5])
-            super().cx(self.ancilla_qregs[q][1], self.ancilla_qregs[q][0])
-            super().cx(self.logical_qregs[q][0], self.ancilla_qregs[q][0])
-            super().cx(self.ancilla_qregs[q][2], self.logical_qregs[q][3])
-            super().cx(self.ancilla_qregs[q][1], self.logical_qregs[q][4])
-            super().cx(self.logical_qregs[q][1], self.ancilla_qregs[q][0])
-            super().cx(self.ancilla_qregs[q][2], self.logical_qregs[q][6])
-            super().cx(self.ancilla_qregs[q][1], self.logical_qregs[q][2])
-            super().cx(self.ancilla_qregs[q][2], self.ancilla_qregs[q][0])
-            super().cx(self.logical_qregs[q][2], self.ancilla_qregs[q][0])
-            super().cx(self.ancilla_qregs[q][2], self.logical_qregs[q][5])
-            super().cx(self.ancilla_qregs[q][1], self.logical_qregs[q][1])
-            super().h(self.ancilla_qregs[q][1])
-            super().h(self.ancilla_qregs[q][2])
+            super().h(ancillas[1])
+            super().h(ancillas[2])
+            super().cx(self.logical_qregs[q][3], ancillas[0])
+            super().cx(ancillas[2],              self.logical_qregs[q][2])
+            super().cx(ancillas[1],              self.logical_qregs[q][5])
+            super().cx(ancillas[1],              ancillas[0])
+            super().cx(self.logical_qregs[q][0], ancillas[0])
+            super().cx(ancillas[2],              self.logical_qregs[q][3])
+            super().cx(ancillas[1],              self.logical_qregs[q][4])
+            super().cx(self.logical_qregs[q][1], ancillas[0])
+            super().cx(ancillas[2],              self.logical_qregs[q][6])
+            super().cx(ancillas[1],              self.logical_qregs[q][2])
+            super().cx(ancillas[2],              ancillas[0])
+            super().cx(self.logical_qregs[q][2], ancillas[0])
+            super().cx(ancillas[2],              self.logical_qregs[q][5])
+            super().cx(ancillas[1],              self.logical_qregs[q][1])
+            super().h(ancillas[1])
+            super().h(ancillas[2])
             super().barrier()
 
     def measure_stabilizers(
         self,
+        ancillas, # @TODO Enforce better convention for indexing
         logical_qubit_indices: Iterable[int] | None = None,
-        stabilizer_indices: Iterable[int] | None = None
+        stabilizer_indices: Iterable[int] | None = None,
     ):
         """Measure specified stabilizers to the circuit as controlled Pauli operators.
 
         Args:
+            ancillas: Nested array indicating ancillas on which to measure stabilizers. Index of outer list should correspond to logical qubits, index of inner lists should correspond to stabilizer index. Necessarily, len(ancillas) must be equal to len(logical_qubit_indices) * len(stabilizer_indices).
             logical_qubit_indices: Indices of logical qubits for which to measure stabilizers.
             stabilizer_indices: Indices of stabilizers to measure.
         """
@@ -708,21 +740,26 @@ class LogicalCircuit(QuantumCircuit):
 
         if stabilizer_indices is None or len(logical_qubit_indices) == 0:
             stabilizer_indices = list(range(self.n_stabilizers))
+            
+        # @TODO figure out a good way to handle indexing & constrain len of ancillas
+        #if len(ancillas) != len(logical_qubit_indices) * len(stabilizer_indices):
+        #    raise ValueError(f"len(ancillas) ({len(ancillas)}) must be equal to len(logical_qubit_indices) * len(stabilizer_indices) ({len(logical_qubit_indices) * len(stabilizer_indices)})")
 
         for q in logical_qubit_indices:
             for s, stabilizer_index in enumerate(stabilizer_indices):
 
                 stabilizer = self.stabilizer_tableau[stabilizer_index]
-                super().h(self.ancilla_qregs[q][s])
+                super().h(ancillas[q][s])
                 for p in range(self.n_physical_qubits):
                     stabilizer_pauli = Pauli(stabilizer[p])
                     if stabilizer[p] != 'I':
                         CPauliInstruction = stabilizer_pauli.to_instruction().control(1)
-                        super().append(CPauliInstruction, [self.ancilla_qregs[q][s], self.logical_qregs[q][p]])
-                super().h(self.ancilla_qregs[q][s])
+                        super().append(CPauliInstruction, [ancillas[q][s], self.logical_qregs[q][p]])
+                super().h(ancillas[q][s])
 
     def measure_syndrome_diff(
         self,
+        ancillas,
         logical_qubit_indices: Iterable[int] | None = None,
         stabilizer_indices: Iterable[int] | None = None,
         flagged: bool = False,
@@ -744,19 +781,22 @@ class LogicalCircuit(QuantumCircuit):
         if stabilizer_indices is None or len(stabilizer_indices) == 0:
             stabilizer_indices = list(range(self.n_stabilizers))
 
+        if len(ancillas) < len(stabilizer_indices) * len(logical_qubit_indices):
+            raise ValueError("Number of ancillas must be at least len(stabilizer_indices) * len(logical_qubit_indices).")
+
         for q in logical_qubit_indices:
             syndrome_diff_creg = self.flagged_syndrome_diff_cregs[q] if flagged else self.unflagged_syndrome_diff_cregs[q]
-
+            
             # Apply and measure stabilizers for the desired syndrome
             if steane_flag_1:
-                self.steane_flagged_circuit1(logical_qubit_indices)
+                self.steane_flagged_circuit1(ancillas, logical_qubit_indices)
             elif steane_flag_2:
-                self.steane_flagged_circuit2(logical_qubit_indices)
+                self.steane_flagged_circuit2(ancillas, logical_qubit_indices)
             else:
-                self.measure_stabilizers(logical_qubit_indices=[q], stabilizer_indices=stabilizer_indices)
+                self.measure_stabilizers([ancillas], logical_qubit_indices=[q], stabilizer_indices=stabilizer_indices)
                 
-            for n in range(self.n_ancilla_qubits):
-                super().append(Measure(), [self.ancilla_qregs[q][n]], [self.curr_syndrome_cregs[q][n]], copy=False)
+            super().append(Measure(), ancillas, [self.curr_syndrome_cregs[q][:len(ancillas)]], copy=False)
+            super().append(Reset(), ancillas, copy=False)
 
             # Determine the syndrome difference
             for n in range(len(stabilizer_indices)):
@@ -764,8 +804,6 @@ class LogicalCircuit(QuantumCircuit):
                     self.set_cbit(syndrome_diff_creg[stabilizer_indices[n]], 1)
                 with _else:
                     self.set_cbit(syndrome_diff_creg[stabilizer_indices[n]], 0)
-
-        self.reset_ancillas(logical_qubit_indices=logical_qubit_indices)
 
     def optimize_qec_cycle_indices(
         self,
@@ -1008,7 +1046,7 @@ class LogicalCircuit(QuantumCircuit):
         Returns:
             Qubits and indices with QED cycles, before and after appending.
         """
-        
+                
         if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
             logical_qubit_indices = list(range(self.n_logical_qubits))
 
@@ -1027,15 +1065,16 @@ class LogicalCircuit(QuantumCircuit):
             index_initial = len(self.data)
 
             with self.box(label="logical.qed.qed_cycle:$\\hat U_{QED}$"):
-                super().append(Reset(), [self.ancilla_qregs[q][:]], copy=False)
                 
                 if perform_flagged_syndrome_measurements:
                     # Perform first flagged syndrome measurements
-                    self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_1, flagged=True, steane_flag_1=True)
+                    with self.reservoir.allocate(len(self.flagged_stabilizers_1)) as flag_ancillas:
+                        self.measure_syndrome_diff(flag_ancillas, logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_1, flagged=True, steane_flag_1=True)
 
                     # If no change in syndrome, perform second flagged syndrome measurement
                     with self.if_test(self.cbit_and(self.flagged_syndrome_diff_cregs[q], [0]*self.flagged_syndrome_diff_cregs[q].size)) as _else:
-                        self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_2, flagged=True, steane_flag_2=True)
+                        with self.reservoir.allocate(len(self.flagged_stabilizers_2)) as flag_ancillas:
+                            self.measure_syndrome_diff(flag_ancillas, logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_2, flagged=True, steane_flag_2=True)
                     with _else:
                         pass
                     
@@ -1043,9 +1082,11 @@ class LogicalCircuit(QuantumCircuit):
                         pass
                     with _else:
                         # If change in syndrome, perform unflagged syndrome measurement
-                        self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, flagged=False)
-                        self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, flagged=False)
-
+                        with self.reservoir.allocate(len(self.x_stabilizers)) as x_stab_ancillas:
+                            self.measure_syndrome_diff(x_stab_ancillas, logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, flagged=False)
+                        with self.reservoir.allocate(len(self.z_stabilizers)) as z_stab_ancillas:
+                            self.measure_syndrome_diff(z_stab_ancillas, logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, flagged=False)
+                            
                         # Update previous syndrome
                         for n in range(self.n_stabilizers):
                             with self.if_test(expr.lift(self.unflagged_syndrome_diff_cregs[q][n])) as _else_inner:
@@ -1054,8 +1095,10 @@ class LogicalCircuit(QuantumCircuit):
                                 pass
                 else:
                     # Perform unflagged syndrome measurements, decode, and correct
-                    self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, flagged=False)
-                    self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, flagged=False)
+                    with self.reservoir.allocate(len(self.x_stabilizers)) as x_stab_ancillas:
+                        self.measure_syndrome_diff(x_stab_ancillas, logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, flagged=False)
+                    with self.reservoir.allocate(len(self.z_stabilizers)) as z_stab_ancillas:
+                        self.measure_syndrome_diff(z_stab_ancillas, logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, flagged=False)
 
                     # Update previous syndrome
                     for n in range(self.n_stabilizers):
@@ -1089,6 +1132,7 @@ class LogicalCircuit(QuantumCircuit):
             logical_qubit_indices = list(range(self.n_logical_qubits))
 
         for q in logical_qubit_indices:
+                
             if len(self.data_without_qec) is None:
                 self.data_without_qec = copy.deepcopy(self.data)
             else:
@@ -1103,15 +1147,16 @@ class LogicalCircuit(QuantumCircuit):
             index_initial = len(self.data)
 
             with self.box(label="logical.qec.qec_cycle:$\\hat U_{QEC}$"):
-                super().append(Reset(), [self.ancilla_qregs[q][:]], copy=False)
                 
                 if perform_flagged_syndrome_measurements:
                     # Perform first flagged syndrome measurements
-                    self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_1, flagged=True, steane_flag_1=True)
+                    with self.reservoir.allocate(len(self.flagged_stabilizers_1)) as flag_ancillas:
+                        self.measure_syndrome_diff(flag_ancillas, logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_1, flagged=True, steane_flag_1=True)
 
                     # If no change in syndrome, perform second flagged syndrome measurement
                     with self.if_test(self.cbit_and(self.flagged_syndrome_diff_cregs[q], [0]*self.flagged_syndrome_diff_cregs[q].size)) as _else:
-                        self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_2, flagged=True, steane_flag_2=True)
+                        with self.reservoir.allocate(len(self.flagged_stabilizers_2)) as flag_ancillas:
+                            self.measure_syndrome_diff(flag_ancillas, logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_2, flagged=True, steane_flag_2=True)
                     with _else:
                         pass
                     
@@ -1119,8 +1164,10 @@ class LogicalCircuit(QuantumCircuit):
                         pass
                     with _else:
                         # If change in syndrome, perform unflagged syndrome measurement, decode, and correct
-                        self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, flagged=False)
-                        self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, flagged=False)
+                        with self.reservoir.allocate(len(self.x_stabilizers)) as x_stab_ancillas:
+                            self.measure_syndrome_diff(x_stab_ancillas, logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, flagged=False)
+                        with self.reservoir.allocate(len(self.z_stabilizers)) as z_stab_ancillas:
+                            self.measure_syndrome_diff(z_stab_ancillas, logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, flagged=False)
 
                         self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, with_flagged=False)
                         self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, with_flagged=False)
@@ -1136,8 +1183,10 @@ class LogicalCircuit(QuantumCircuit):
                                 pass
                 else:
                     # Perform unflagged syndrome measurements, decode, and correct
-                    self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, flagged=False)
-                    self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, flagged=False)
+                    with self.reservoir.allocate(len(self.x_stabilizers)) as x_stab_ancillas:
+                        self.measure_syndrome_diff(x_stab_ancillas, logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, flagged=False)
+                    with self.reservoir.allocate(len(self.z_stabilizers)) as z_stab_ancillas:
+                        self.measure_syndrome_diff(z_stab_ancillas, logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, flagged=False)
 
                     self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.x_stabilizers, with_flagged=False)
                     self.apply_decoding(logical_qubit_indices=[q], stabilizer_indices=self.z_stabilizers, with_flagged=False)  
@@ -1149,10 +1198,10 @@ class LogicalCircuit(QuantumCircuit):
                         with _else_inner:
                             pass
 
-            index_final = len(self.data)-1
+        index_final = len(self.data)-1
 
-            self.qec_cycle_indices_initial[q].append(index_initial)
-            self.qec_cycle_indices_final[q].append(index_final)
+        self.qec_cycle_indices_initial[q].append(index_initial)
+        self.qec_cycle_indices_final[q].append(index_final)
 
         return self.qec_cycle_indices_initial, self.qec_cycle_indices_final
 
@@ -1374,8 +1423,9 @@ class LogicalCircuit(QuantumCircuit):
 
         if method == "LCU":
             for t in targets:
-                with self.box(label="logical.logicalop.h.lcu:$\\hat H_{L}$"):
-                    super().compose(self.LogicalHCircuit_LCU, [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
+                with self.reservoir.allocate(1) as ancilla_op:
+                    with self.box(label="logical.logicalop.h.lcu:$\\hat H_{L}$"):
+                        super().compose(self.LogicalHCircuit_LCU, ancilla_op + self.logical_qregs[t][:], inplace=True)
 
             # @TODO - perform resets after main operation is complete to allow for faster(?) parallel operation
             # for t in targets:
@@ -1457,24 +1507,26 @@ class LogicalCircuit(QuantumCircuit):
 
         if method == "LCU_Corrected":
             for t in targets:
-                with self.box(label="logical.logicalop.s.lcu_corrected:$\\hat S_{L}$"):
-                    super().h(self.logical_op_qregs[t][0])
-                    super().s(self.logical_op_qregs[t][0])
-                    super().h(self.logical_op_qregs[t][0])
-                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
-                    super().h(self.logical_op_qregs[t][0])
-                    super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
+                with self.reservoir.allocate(1) as ancilla_op:
+                    with self.box(label="logical.logicalop.s.lcu_corrected:$\\hat S_{L}$"):
+                        super().h(ancilla_op)
+                        super().s(ancilla_op)
+                        super().h(ancilla_op)
+                        super().compose(self.LogicalZCircuit.control(1), ancilla_op + self.logical_qregs[t][:], inplace=True)
+                        super().h(ancilla_op)
+                        super().append(Measure(), ancilla_op, [self.logical_op_meas_cregs[t][0]], copy=False)
 
-                    with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as _else:
-                        self.z(t)
-                    with _else:
-                        pass
+                        with super().if_test((ancilla_op, 1)) as _else:
+                            self.z(t)
+                        with _else:
+                            pass
 
-                    super().append(Reset(), [self.logical_op_qregs[t][0]], copy=False)
+                        super().append(Reset(), ancilla_op, copy=False)
         elif method == "Coherent_Feedback":
             for t in targets:
-                with self.box(label="logical.logicalop.s.coherent_feedback:$\\hat S_{L}$"):
-                    super().compose(self.LogicalSCircuit_CF, self.logical_qregs[t][:] + [self.logical_op_qregs[t][0]], inplace=True)
+                with self.reservoir.allocate(1) as ancilla_op:
+                    with self.box(label="logical.logicalop.s.coherent_feedback:$\\hat S_{L}$"):
+                        super().compose(self.LogicalSCircuit_CF, self.logical_qregs[t][:] + ancilla_op, inplace=True)
         elif method == "Transversal_Uniform":
             for t in targets:
                 with self.box(label="logical.logicalop.s.transversal_uniform:$\\hat S_{L}$"):
@@ -1496,24 +1548,26 @@ class LogicalCircuit(QuantumCircuit):
 
         if method == "LCU_Corrected":
             for t in targets:
-                with self.box(label="logical.logicalop.sdg.lcu_corrected:$\\hat{S^\\dagger}_{L}$"):
-                    super().h(self.logical_op_qregs[t][0])
-                    super().sdg(self.logical_op_qregs[t][0])
-                    super().h(self.logical_op_qregs[t][0])
-                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
-                    super().h(self.logical_op_qregs[t][0])
-                    super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
+                with self.reservoir.allocate(1) as ancilla_op:
+                    with self.box(label="logical.logicalop.sdg.lcu_corrected:$\\hat{S^\\dagger}_{L}$"):
+                        super().h(ancilla_op)
+                        super().sdg(ancilla_op)
+                        super().h(ancilla_op)
+                        super().compose(self.LogicalZCircuit.control(1), ancilla_op + self.logical_qregs[t][:], inplace=True)
+                        super().h(ancilla_op)
+                        super().append(Measure(), ancilla_op, [self.logical_op_meas_cregs[t][0]], copy=False)
 
-                    with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as _else:
-                        self.z(t)
-                    with _else:
-                        pass
+                        with super().if_test((ancilla_op, 1)) as _else:
+                            self.z(t)
+                        with _else:
+                            pass
 
-                    super().append(Reset(), [self.logical_op_qregs[t][0]], copy=False)
+                        super().append(Reset(), ancilla_op, copy=False)
         elif method == "Coherent_Feedback":
             for t in targets:
-                with self.box(label="logical.logicalop.sdg.coherent_feedback:$\\hat{S^\\dagger}_{L}$"):
-                    super().compose(self.LogicalSdgCircuit_CF, self.logical_qregs[t][:] + [self.logical_op_qregs[t][0]], inplace=True)
+                with self.reservoir.allocate(1) as ancilla_op:
+                    with self.box(label="logical.logicalop.sdg.coherent_feedback:$\\hat{S^\\dagger}_{L}$"):
+                        super().compose(self.LogicalSdgCircuit_CF, self.logical_qregs[t][:] + ancilla_op, inplace=True)
 
         elif method == "Transversal_Uniform":
             for t in targets:
@@ -1536,25 +1590,27 @@ class LogicalCircuit(QuantumCircuit):
 
         if method == "LCU_Corrected":
             for t in targets:
-                with self.box(label="logical.logicalop.t.lcu_corrected:$\\hat T_{L}$"):
-                    super().h(self.logical_op_qregs[t][0])
-                    super().t(self.logical_op_qregs[t][0])
-                    super().h(self.logical_op_qregs[t][0])
-                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
-                    super().h(self.logical_op_qregs[t][0])
+                with self.reservoir.allocate(1) as ancilla_op:
+                    with self.box(label="logical.logicalop.t.lcu_corrected:$\\hat T_{L}$"):
+                        super().h(ancilla_op)
+                        super().t(ancilla_op)
+                        super().h(ancilla_op)
+                        super().compose(self.LogicalZCircuit.control(1), ancilla_op + self.logical_qregs[t][:], inplace=True)
+                        super().h(ancilla_op)
 
-                    super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
-                    super().append(Reset(), [self.logical_op_qregs[t][0]], copy=False)
+                        super().append(Measure(), ancilla_op, [self.logical_op_meas_cregs[t][0]], copy=False)
+                        super().append(Reset(), ancilla_op, copy=False)
 
-                    with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as _else:
-                        self.s(t, method='LCU_corrected')
-                    with _else:
-                        pass
+                        with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as _else:
+                            self.s(t, method='LCU_corrected')
+                        with _else:
+                            pass
 
         elif method == "Coherent_Feedback":
             for t in targets:
-                with self.box(label="logical.logicalop.t.coherent_feedback:$\\hat T_{L}$"):
-                    super().compose(self.LogicalTCircuit_CF, self.logical_qregs[t][:] + self.logical_op_qregs[t][:], inplace=True)
+                with self.reservoir.allocate(2) as ancilla_ops:
+                    with self.box(label="logical.logicalop.t.coherent_feedback:$\\hat T_{L}$"):
+                        super().compose(self.LogicalTCircuit_CF, self.logical_qregs[t][:] + ancilla_ops, inplace=True)
 
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical T gate")
@@ -1572,24 +1628,26 @@ class LogicalCircuit(QuantumCircuit):
 
         if method == "LCU_Corrected":
             for t in targets:
-                with self.box(label="logical.logicalop.t.lcu_corrected:$\\hat{T^\\dagger}_{L}$"):
-                    super().h(self.logical_op_qregs[t][0])
-                    super().tdg(self.logical_op_qregs[t][0])
-                    super().h(self.logical_op_qregs[t][0])
-                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
-                    super().h(self.logical_op_qregs[t][0])
+                with self.reservoir.allocate(1) as ancilla_op:
+                    with self.box(label="logical.logicalop.t.lcu_corrected:$\\hat{T^\\dagger}_{L}$"):
+                        super().h(ancilla_op)
+                        super().tdg(ancilla_op)
+                        super().h(ancilla_op)
+                        super().compose(self.LogicalZCircuit.control(1), ancilla_op + self.logical_qregs[t][:], inplace=True)
+                        super().h(ancilla_op)
 
-                    super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
-                    super().append(Reset(), [self.logical_op_qregs[t][0]], copy=False)
+                        super().append(Measure(), ancilla_op, [self.logical_op_meas_cregs[t][0]], copy=False)
+                        super().append(Reset(), ancilla_op, copy=False)
 
-                    with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as _else:
-                        self.sdg(t, method='LCU_corrected')
-                    with _else:
-                        pass
+                        with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as _else:
+                            self.sdg(t, method='LCU_corrected')
+                        with _else:
+                            pass
         elif method == "Coherent_Feedback":
             for t in targets:
-                with self.box(label="logical.logicalop.t.coherent_feedback:$\\hat{T^\\dagger}_{L}$"):
-                    super().compose(self.LogicalTdgCircuit_CF, self.logical_qregs[t][:] + self.logical_op_qregs[t][:], inplace=True)
+                with self.reservoir.allocate(2) as ancilla_ops:
+                    with self.box(label="logical.logicalop.t.coherent_feedback:$\\hat{T^\\dagger}_{L}$"):
+                        super().compose(self.LogicalTdgCircuit_CF, self.logical_qregs[t][:] + ancilla_ops, inplace=True)
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical T^dagger gate")
 
@@ -1604,15 +1662,16 @@ class LogicalCircuit(QuantumCircuit):
 
         # @TODO - implement a better, more generalized CNOT gate
         if method == "Ancilla_Assisted":
-            for t in targets:
-                with self.box(label="logical.logicalop.cx.ancilla_assisted:$\\hat{CX}_{L}$"):
-                    super().h(self.logical_op_qregs[t][0])
-                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[control][:], inplace=True)
-                    super().h(self.logical_op_qregs[t][0])
-                    super().compose(self.LogicalXCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
-                    super().h(self.logical_op_qregs[t][0])
-                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[control][:], inplace=True)
-                    super().h(self.logical_op_qregs[t][0])
+            with self.reservoir.allocate(1) as ancilla_op:
+                for t in targets:
+                    with self.box(label="logical.logicalop.cx.ancilla_assisted:$\\hat{CX}_{L}$"):
+                        super().h(ancilla_op)
+                        super().compose(self.LogicalZCircuit.control(1), ancilla_op + self.logical_qregs[control][:], inplace=True)
+                        super().h(ancilla_op)
+                        super().compose(self.LogicalXCircuit.control(1), ancilla_op + self.logical_qregs[t][:], inplace=True)
+                        super().h(ancilla_op)
+                        super().compose(self.LogicalZCircuit.control(1), ancilla_op + self.logical_qregs[control][:], inplace=True)
+                        super().h(ancilla_op)
         elif method == "Transversal_Uniform":
             for t in targets:
                 with self.box(label="logical.logicalop.cx.transversal_uniform:$\\hat{CX}_{L}$"):
@@ -1632,14 +1691,15 @@ class LogicalCircuit(QuantumCircuit):
         # @TODO - implement a better, more generalized CZ gate
         if method == "Ancilla_Assisted":
             for t in targets:
-                with self.box(label="logical.logicalop.cx.ancilla_assisted:$\\hat{CZ}_{L}$"):
-                    super().h(self.logical_op_qregs[t][0])
-                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[control][:], inplace=True)
-                    super().h(self.logical_op_qregs[t][0])
-                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
-                    super().h(self.logical_op_qregs[t][0])
-                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[control][:], inplace=True)
-                    super().h(self.logical_op_qregs[t][0])
+                with self.reservoir.allocate(1) as ancilla_op:
+                    with self.box(label="logical.logicalop.cx.ancilla_assisted:$\\hat{CZ}_{L}$"):
+                        super().h(ancilla_op)
+                        super().compose(self.LogicalZCircuit.control(1), ancilla_op + self.logical_qregs[control][:], inplace=True)
+                        super().h(ancilla_op)
+                        super().compose(self.LogicalZCircuit.control(1), ancilla_op + self.logical_qregs[t][:], inplace=True)
+                        super().h(ancilla_op)
+                        super().compose(self.LogicalZCircuit.control(1), ancilla_op + self.logical_qregs[control][:], inplace=True)
+                        super().h(ancilla_op)
         elif method == "Transversal_Uniform":
             for t in targets:
                 with self.box(label="logical.logicalop.cx.transversal_uniform:$\\hat{CZ}_{L}$"):
@@ -1659,16 +1719,20 @@ class LogicalCircuit(QuantumCircuit):
         # @TODO - implement a better, more generalized CY gate
         if method == "Ancilla_Assisted":
             for t in targets:
-                with self.box(label="logical.logicalop.cx.ancilla_assisted:$\\hat{CY}_{L}$"):
-                    super().h(self.logical_op_qregs[t][0])
-                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[control][:], inplace=True)
-                    super().h(self.logical_op_qregs[t][0])
-                    super().s(self.logical_op_qregs[t][0])
-                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
-                    super().compose(self.LogicalXCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
-                    super().h(self.logical_op_qregs[t][0])
-                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[control][:], inplace=True)
-                    super().h(self.logical_op_qregs[t][0])
+                with self.reservoir.allocate(1) as ancilla_op:
+                    with self.box(label="logical.logicalop.cx.ancilla_assisted:$\\hat{CY}_{L}$"):
+                        super().h(ancilla_op)
+                        super().compose(self.LogicalZCircuit.control(1), ancilla_op + self.logical_qregs[control][:], inplace=True)
+                        super().h(ancilla_op)
+                        super().s(ancilla_op)
+                        super().compose(self.LogicalZCircuit.control(1), ancilla_op + self.logical_qregs[t][:], inplace=True)
+                        super().compose(self.LogicalXCircuit.control(1), ancilla_op + self.logical_qregs[t][:], inplace=True)
+                        super().h(ancilla_op)
+                        super().compose(self.LogicalZCircuit.control(1), ancilla_op + self.logical_qregs[control][:], inplace=True)
+                        super().h(ancilla_op)
+                        
+                        # BOOKMARK
+                        # @TODO determine what is the correct ancilla "cleanup" operation, if any
 
         elif method == "Transversal_Uniform":
             for t in targets:
