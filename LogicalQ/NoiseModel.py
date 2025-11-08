@@ -14,8 +14,6 @@ from .Library.HardwareModels import hardware_models_Quantinuum
 from typing import TYPE_CHECKING
 from typing import Iterable
 
-from .Utilities import Default
-
 # General function for constructing a Qiskit NoiseModel
 def construct_noise_model(
         basis_gates: list[str],

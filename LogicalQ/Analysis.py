@@ -84,7 +84,16 @@ def circuit_scaling_bar3d(data, title=None, save=False, filename=None, save_dir=
 
     return plt
 
-def noise_model_scaling_bar(all_data, scan_keys=None, separate_plots=False, save=False, filename=None, save_dir=None, show=False):
+def noise_scaling_scatter(all_data, scan_keys=None, separate_plots=False, save=False, filename=None, save_dir=None, show=False):
+    """Accepts the results of a noise_scaling_experiment and plots in bar graph / scatter plot format.
+
+    Args:
+        all_data: Output of a noise_scaling_experiment() run.
+
+    Returns:
+        plt
+    """
+    
     # @TODO - sanitize save inputs
 
     for c, circuit_sub_data in all_data.items():
@@ -153,7 +162,7 @@ def noise_model_scaling_bar(all_data, scan_keys=None, separate_plots=False, save
                 if show: plt.show()
 
         if not separate_plots:
-            ax.bar(xdata, ydata)
+            ax.scatter(xdata, ydata)
 
             title = getattr(qc, "name", f"Circuit {c}")
             ax.set_title(f"{title}: Fidelity vs. noise parameters")
@@ -163,6 +172,102 @@ def noise_model_scaling_bar(all_data, scan_keys=None, separate_plots=False, save
 
             if save: plt.savefig(f"{save_dir}{filename}", dpi=128)
             if show: plt.show()
+
+    return plt
+
+def noise_scaling_Bloch_sphere(all_data, plot_metric=None, save=False, filename=None, save_dir=None, show=False):
+    for c, circuit_sub_data in all_data.items():
+        qc = circuit_sub_data["circuit"]
+
+        if "density_matrix_exact" in circuit_sub_data and circuit_sub_data["density_matrix_exact"] is not None:
+            exact_state = circuit_sub_data["density_matrix_exact"]
+        elif "statevector_exact" in circuit_sub_data and circuit_sub_data["statevector_exact"] is not None:
+            exact_state = circuit_sub_data["statevector_exact"]
+        else:
+            raise ValueError("No ideal reference found in data, either 'density_matrix_exact' or 'statevector_exact' are necessary for this analysis function.")
+
+        circuit_results = circuit_sub_data["results"]
+
+        i = 0
+        fig, ax = plt.subplots()
+
+        thetas = []
+        phis = []
+        plot_data = []
+        for r, results in enumerate(circuit_results):
+            result = results["result"][0]
+            counts = result.get_counts()
+
+            # Compute desired metric
+            # @TODO - generalize to support multi-qubit data
+            # @TODO - use density matrices instead once LogicalDensityMatrix is fully implemented
+            if hasattr(result, "data"):
+                if isinstance(qc, LogicalCircuit):
+                    logical_counts = qc.get_logical_counts(result.get_counts())
+
+                    p0 = logical_counts.get("0", 0)/sum(list(logical_counts.values()))
+                    p1 = 1 - p0
+
+                    noisy_state = LogicalStatevector(np.sqrt([p0, p1]), n_logical_qubits=qc.n_logical_qubits, label=qc.label, stabilizer_tableau=qc.stabilizer_tableau)
+                elif isinstance(qc, QuantumCircuit):
+                    noisy_state = counts_to_statevector(counts)
+                else:
+                    raise TypeError(f"Invaild type for circuit at index {c}: {type(qc)}; must be an instance of QuantumCircuit or LogicalCircuit.")
+
+                theta = 2 * np.arccos(noisy_state[0])
+
+                # @TODO - compute phi if phase information is available
+                phi = 0.0
+
+                fidelity = state_fidelity(exact_state, noisy_state)
+                if plot_metric is None or plot_metric == "fidelity":
+                    metric = fidelity
+                elif plot_metric == "infidelity":
+                    metric = 1 - fidelity
+                else:
+                    raise ValueError(f"Invalid input for plot_metric: '{plot_metric}'; please choose from 'fidelity' and 'infidelity'.")
+
+                thetas.append(theta)
+                phis.append(phi)
+                plot_data.append(metric)
+            else:
+                raise TypeError(f"Invalid type for data result at index {r}: {type(result)}.")
+
+        fig = plt.figure(dpi=128)
+        ax = fig.add_subplot(projection="3d")
+        ax.set_aspect("equal")
+
+        # Plot underlying Bloch sphere
+        R = 1
+        u, v = np.mgrid[0:2*np.pi:30j, 0:np.pi:30j]
+        x = R*np.cos(v) * np.sin(u)
+        y = R*np.sin(v) * np.sin(u)
+        z = R*np.cos(u)
+        ax.plot_surface(x, y, z, cmap=plt.cm.bone)
+
+        # Plot data around the Bloch sphere
+        R *= 1.1
+        xs = R*np.cos(phis) * np.sin(thetas)
+        ys = R*np.sin(phis) * np.sin(thetas)
+        zs = R*np.cos(thetas)
+        scatter = ax.scatter(xs, ys, zs, c=plot_data, cmap=plt.cm.Oranges, s=30)
+
+        plt.title(f"Circuit {c}: {plot_metric} vs. noisy angle")
+
+        ax.set_xlabel("X")
+        ax.set_ylabel("Y")
+        ax.set_zlabel("Z")
+
+        plt.colorbar(scatter)
+
+        plt.show()
+
+        # @TODO - format filename with index i
+        filename_i = filename
+        if save:
+            plt.savefig(f"{save_dir}{filename_i}", dpi=128)
+            i += 1
+        if show: plt.show()
 
     return plt
 

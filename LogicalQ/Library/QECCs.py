@@ -7,6 +7,7 @@ phase_flip_code = {
         "IXX",
     ],
 }
+
 four_qubit_code = {
     "label": (4,2,2),
     "stabilizer_tableau": [
@@ -34,6 +35,16 @@ steane_code = {
       "ZZZZIII",
       "IZZIZZI",
       "IIZZIZZ",
+    ]
+}
+
+morphed_steane_code = {
+    "label": (5,1,2),
+    "stabilizer_tableau": [
+      "XIXXI",
+      "IXXIX",
+      "ZZZII",
+      "IIZZZ",
     ]
 }
 
