@@ -107,7 +107,7 @@ class LogicalReservoirCircuit(QuantumCircuit):
         # ...then adding the logical qubits
         self.add_logical_qubits(self.n_logical_qubits)
         
-        # BOOKMARK - add universal ancilla register
+        # Add ancilla reservoir and add as register
         self.reservoir = AncillaReservoir(self.n_ancilla_qubits, name=f"qanc_reservoir", algorithm="cyclic")
         super().add_register(self.reservoir._reservoir)
 
@@ -172,13 +172,6 @@ class LogicalReservoirCircuit(QuantumCircuit):
         for i in range(current_logical_qubit_count, current_logical_qubit_count + logical_qubit_count):
             # Physical qubits for logical qubit
             logical_qreg_i = QuantumRegister(self.n_physical_qubits, name=f"qlog{i}")
-            
-            # BOOKMARK - removing naive implementation of ancilla register
-            # Ancilla qubits needed for measurements
-            #ancilla_qreg_i = AncillaRegister(self.n_ancilla_qubits, name=f"qanc{i}")
-            # Ancilla qubits needed for logical operations
-            #logical_op_qreg_i = AncillaRegister(2, name=f"qlogical_op{i}")
-            
             # Classical bits needed for encoding verification
             enc_verif_creg_i = ClassicalRegister(1, name=f"cenc_verif{i}")
             # Classical bits needed for measurements
@@ -198,9 +191,6 @@ class LogicalReservoirCircuit(QuantumCircuit):
 
             # Add new registers to storage lists
             self.logical_qregs.append(logical_qreg_i)
-            # BOOKMARK
-            #self.ancilla_qregs.append(ancilla_qreg_i)
-            #self.logical_op_qregs.append(logical_op_qreg_i)
             self.enc_verif_cregs.append(enc_verif_creg_i)
             self.curr_syndrome_cregs.append(curr_syndrome_creg_i)
             self.prev_syndrome_cregs.append(prev_syndrome_creg_i)
@@ -212,9 +202,6 @@ class LogicalReservoirCircuit(QuantumCircuit):
 
             # Add new registers to quantum circuit
             super().add_register(logical_qreg_i)
-            # BOOKMARK
-            #super().add_register(ancilla_qreg_i)
-            #super().add_register(logical_op_qreg_i)
             super().add_register(enc_verif_creg_i)
             super().add_register(curr_syndrome_creg_i)
             super().add_register(prev_syndrome_creg_i)
@@ -539,7 +526,6 @@ class LogicalReservoirCircuit(QuantumCircuit):
 
                 with self.box(label="logical.qec.encoding_verification:$\\hat U_{enc,verif}$"):
                     # CNOT from physical qubits to ancilla(e)
-                    # BOOKMARK - refactor to use ancilla reservoir
                     with self.reservoir.allocate(1) as ancilla:
                         super().cx(self.logical_qregs[q][1], ancilla)
                         super().cx(self.logical_qregs[q][3], ancilla)
@@ -643,21 +629,13 @@ class LogicalReservoirCircuit(QuantumCircuit):
                 #super().append(Reset(), [self.logical_op_qregs[q][:]], copy=False)
 
     def reset_ancillas(
-        self,
-        logical_qubit_indices: Iterable[int] | None = None
+        self
     ):
-        """Reset all ancillas associated with specified logical qubits.
-
-        Args:
-            logical_qubit_indices: Indices of logical qubits to reset. If None, then reset all.
+        """Reset all ancillas in reservoir.
         """
-        if logical_qubit_indices is None or len(logical_qubit_indices) == 0:
-            logical_qubit_indices = list(range(self.n_logical_qubits))
 
-        for q in logical_qubit_indices:
-            with self.reservoir.allocate_all() as ancillas:
-                    super().append(Reset(), ancillas, copy=False)
-            #super().append(Reset(), [self.ancilla_qregs[q][:]], copy=False)
+        with self.reservoir.allocate_all() as ancillas:
+                super().append(Reset(), ancillas, copy=False)
 
     def steane_flagged_circuit1(
         self,
@@ -666,8 +644,7 @@ class LogicalReservoirCircuit(QuantumCircuit):
     ):
         """Measure first set of flagged syndromes for the Steane code.
         """
-        for q in logical_qubit_indices:
-            # BOOKMARK self.ancilla_qregs[q][i] -> ancillas[i] under scope of allocation              
+        for q in logical_qubit_indices:        
             super().barrier()
             super().h(ancillas[0])
             super().cx(ancillas[0],              self.logical_qregs[q][3])
@@ -721,15 +698,14 @@ class LogicalReservoirCircuit(QuantumCircuit):
 
     def measure_stabilizers(
         self,
-        ancillas,
+        ancillas, # @TODO Enforce better convention for indexing
         logical_qubit_indices: Iterable[int] | None = None,
         stabilizer_indices: Iterable[int] | None = None,
-        # BOOKMARK - refactored to accept list of ancillas, since indexing self.ancilla_qregs[q][s] is no longer around to standardize ancilla use
     ):
         """Measure specified stabilizers to the circuit as controlled Pauli operators.
 
         Args:
-            ancillas: Ancillas on which to measure stabilizers. Number of ancillas must be equal to product of len(logical_qubit_indices) and len(stabilizer_indices).
+            ancillas: Nested array indicating ancillas on which to measure stabilizers. Index of outer list should correspond to logical qubits, index of inner lists should correspond to stabilizer index. Necessarily, len(ancillas) must be equal to len(logical_qubit_indices) * len(stabilizer_indices).
             logical_qubit_indices: Indices of logical qubits for which to measure stabilizers.
             stabilizer_indices: Indices of stabilizers to measure.
         """
@@ -745,11 +721,6 @@ class LogicalReservoirCircuit(QuantumCircuit):
 
         for q in logical_qubit_indices:
             for s, stabilizer_index in enumerate(stabilizer_indices):
-
-                # BOOKMARK
-                # @TODO THIS IS VERY IMPORTANT
-                # code originally uses super().h(self.ancilla_qregs[q][s])
-                # This is later used to measure syndrome diffs. It is not under a singular scope.
 
                 stabilizer = self.stabilizer_tableau[stabilizer_index]
                 super().h(ancillas[q][s])
@@ -789,10 +760,7 @@ class LogicalReservoirCircuit(QuantumCircuit):
 
         for q in logical_qubit_indices:
             syndrome_diff_creg = self.flagged_syndrome_diff_cregs[q] if flagged else self.unflagged_syndrome_diff_cregs[q]
-
-            # BOOKMARK
-            #num_to_allocate = 3 if (steane_flag_1 or steane_flag_2) else len(stabilizer_indices)
-            #with self.reservoir.allocate(num_to_allocate) as ancillas:
+            
             # Apply and measure stabilizers for the desired syndrome
             if steane_flag_1:
                 self.steane_flagged_circuit1(ancillas, logical_qubit_indices)
@@ -810,8 +778,6 @@ class LogicalReservoirCircuit(QuantumCircuit):
                     self.set_cbit(syndrome_diff_creg[stabilizer_indices[n]], 1)
                 with _else:
                     self.set_cbit(syndrome_diff_creg[stabilizer_indices[n]], 0)
-
-        #self.reset_ancillas(logical_qubit_indices=logical_qubit_indices)
 
     def optimize_qec_cycle_indices(
         self,
@@ -1143,10 +1109,6 @@ class LogicalReservoirCircuit(QuantumCircuit):
             logical_qubit_indices = list(range(self.n_logical_qubits))
 
         for q in logical_qubit_indices:
-            # BOOKMARK - to clean up
-            #with self.reservoir.allocate(self.n_stabilizers) as ancillas:
-            #x_stab_ancillas = ancillas[:len(self.x_stabilizers)]
-            #z_stab_ancillas = ancillas[len(self.x_stabilizers):]
                 
             if len(self.data_without_qec) is None:
                 self.data_without_qec = copy.deepcopy(self.data)
@@ -1162,8 +1124,6 @@ class LogicalReservoirCircuit(QuantumCircuit):
             index_initial = len(self.data)
 
             with self.box(label="logical.qec.qec_cycle:$\\hat U_{QEC}$"):
-                # BOOKMARK - to clean up
-                #super().append(Reset(), ancillas, copy=False)
                 
                 if perform_flagged_syndrome_measurements:
                     # Perform first flagged syndrome measurements
