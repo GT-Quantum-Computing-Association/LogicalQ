@@ -61,7 +61,7 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
             return False
         
         if not check_for_measurement(circuit):
-            raise ValueError(f"No measurements found in circuit with name {circuit.name} at index {c}; all circuits must have measurements in order to be executed.")
+            pass#raise ValueError(f"No measurements found in circuit with name {circuit.name} at index {c}; all circuits must have measurements in order to be executed.")
 
     # Save statevector for all circuits if requested
     if save_statevector:

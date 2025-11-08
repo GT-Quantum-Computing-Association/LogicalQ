@@ -58,10 +58,6 @@ class LogicalReservoirCircuit(QuantumCircuit):
         self.n_ancilla_qubits = self.n_stabilizers//2
         self.n_measure_qubits = self.n_ancilla_qubits
         self.n_reservoir_qubits = self.n_logical_qubits * (2 + self.n_ancilla_qubits) if (num_ancillas == "default") else num_ancillas
-        
-        # BOOKMARK - add universal ancilla register
-        self.reservoir = AncillaReservoir(self.n_ancilla_qubits, name=f"qanc_reservoir", algorithm="cyclic")
-        super().add_register(self.reservoir)
 
         self.flagged_stabilizers_1 = []
         self.flagged_stabilizers_2 = []
@@ -110,6 +106,10 @@ class LogicalReservoirCircuit(QuantumCircuit):
         super().__init__(name=name)
         # ...then adding the logical qubits
         self.add_logical_qubits(self.n_logical_qubits)
+        
+        # BOOKMARK - add universal ancilla register
+        self.reservoir = AncillaReservoir(self.n_ancilla_qubits, name=f"qanc_reservoir", algorithm="cyclic")
+        super().add_register(self.reservoir._reservoir)
 
         # Also add a classical measurement output register at the end
         self.output_creg = ClassicalRegister(self.n_logical_qubits, name="coutput")
@@ -801,9 +801,8 @@ class LogicalReservoirCircuit(QuantumCircuit):
             else:
                 self.measure_stabilizers([ancillas], logical_qubit_indices=[q], stabilizer_indices=stabilizer_indices)
                 
-            for n in len(ancillas):
-                super().append(Measure(), [ancillas[n]], [self.curr_syndrome_cregs[q][n]], copy=False)
-                super().append(Reset(), [ancillas[n]], copy=False)
+            super().append(Measure(), ancillas, [self.curr_syndrome_cregs[q][:len(ancillas)]], copy=False)
+            super().append(Reset(), ancillas, copy=False)
 
             # Determine the syndrome difference
             for n in range(len(stabilizer_indices)):
@@ -1174,7 +1173,7 @@ class LogicalReservoirCircuit(QuantumCircuit):
                     # If no change in syndrome, perform second flagged syndrome measurement
                     with self.if_test(self.cbit_and(self.flagged_syndrome_diff_cregs[q], [0]*self.flagged_syndrome_diff_cregs[q].size)) as _else:
                         with self.reservoir.allocate(len(self.flagged_stabilizers_2)) as flag_ancillas:
-                            self.measure_syndrome_diff(logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_2, flagged=True, steane_flag_2=True)
+                            self.measure_syndrome_diff(flag_ancillas, logical_qubit_indices=[q], stabilizer_indices=self.flagged_stabilizers_2, flagged=True, steane_flag_2=True)
                     with _else:
                         pass
                     
