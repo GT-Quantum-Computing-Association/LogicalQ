@@ -14,7 +14,7 @@ class AncillaReservoir:
     def __init__(
         self,
         num_ancillas: int,
-        label: str = "reservoir_qreg",
+        name: str = "reservoir_qreg",
         algorithm: str = "cyclic",
         backend = None
     ):
@@ -32,7 +32,7 @@ class AncillaReservoir:
         # Saving kwargs from __init__
         self._num_ancillas = num_ancillas
         self._algorithm = algorithm
-        self._reservoir = AncillaRegister(self._num_ancillas, name=label)
+        self._reservoir = AncillaRegister(self._num_ancillas, name=name)
         self._coupling_map = None if (backend is None) else backend.configuration().coupling_map
         
         # Metadata
@@ -111,7 +111,7 @@ class AncillaReservoir:
             allocated_indices = [idx for idx, cost in costs[:num_qubits]]
             
         else:
-            raise NotImplementedError(f"Allocation algorithm '{algorithm}' is not implemented.")
+            raise NotImplementedError(f"Allocation algorithm '{self._algorithm}' is not implemented.")
         
         # Handle allocation
         try:
@@ -119,6 +119,15 @@ class AncillaReservoir:
             yield [self._reservoir[i] for i in allocated_indices]
         finally:
             self.status[allocated_indices] = "free"
+            
+    def allocate_all(self):
+        """
+        Shortcut to allocate all ancillas. Assumes use of "cyclic" algorithm.
+        """
+        if self._algorithm != "cyclic":
+            raise NotImplementedError("allocate_all() requires cyclic algorithm.")
+        
+        self.allocate(self._num_ancillas)
         
     def request(self, indices) -> List[AncillaQubit]:
         """
