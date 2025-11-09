@@ -4,6 +4,8 @@ import pickle
 import itertools
 from datetime import datetime
 
+from qbraid import QbraidProvider
+
 from .Logical import LogicalCircuit
 from .NoiseModel import construct_noise_model, construct_noise_model_from_hardware_model
 
