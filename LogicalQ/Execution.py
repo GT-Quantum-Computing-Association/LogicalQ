@@ -4,6 +4,8 @@ import pickle
 import itertools
 from datetime import datetime
 
+from qbraid import QbraidProvider
+
 from .Logical import LogicalCircuit
 from .NoiseModel import construct_noise_model, construct_noise_model_from_hardware_model
 
@@ -61,7 +63,7 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
             return False
         
         if not check_for_measurement(circuit):
-            pass#raise ValueError(f"No measurements found in circuit with name {circuit.name} at index {c}; all circuits must have measurements in order to be executed.")
+            raise ValueError(f"No measurements found in circuit with name {circuit.name} at index {c}; all circuits must have measurements in order to be executed.")
 
     # Save statevector for all circuits if requested
     if save_statevector:

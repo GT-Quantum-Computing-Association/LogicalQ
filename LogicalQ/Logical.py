@@ -10,38 +10,9 @@ from qiskit.circuit.classical import expr
 from qiskit.circuit.library import Initialize, RXGate, RYGate, RZGate, RXXGate, RYYGate, RZZGate
 from qiskit.quantum_info import Statevector, DensityMatrix, Pauli, partial_trace, state_fidelity
 from qiskit_addon_utils.slicing import slice_by_depth
-from qiskit.transpiler.passes import SolovayKitaev
-from qiskit.synthesis import generate_basic_approximations
-
 from qiskit.transpiler import PassManager
-
-from .Transpilation.ClearQEC import ClearQEC
-from .Transpilation.UnBox import UnBox
-
-from qiskit import _numpy_compat
-from qiskit.exceptions import QiskitError
-
-from typing import TYPE_CHECKING
-from typing import Iterable
-
-from __future__ import annotations
-
-import copy
-import numpy as np
-
-from qiskit import QuantumRegister, AncillaRegister, ClassicalRegister, QuantumCircuit
-from qiskit.circuit import Bit, Measure, Reset
-from qiskit.circuit.quantumcircuitdata import QuantumCircuitData
-from qiskit.circuit.classical import expr
-from qiskit.circuit.library import Initialize, RXGate, RYGate, RZGate, RXXGate, RYYGate, RZZGate
-from qiskit.quantum_info import Statevector, DensityMatrix, Pauli, partial_trace, state_fidelity
-from qiskit_addon_utils.slicing import slice_by_depth
 from qiskit.transpiler.passes import SolovayKitaev
-from qiskit.synthesis import generate_basic_approximations
 
-from qiskit.transpiler import PassManager
-
-from LogicalQ.Logical import LogicalStatevector
 from LogicalQ.Reservoir import AncillaReservoir
 
 from .Transpilation.ClearQEC import ClearQEC
@@ -63,8 +34,8 @@ class LogicalCircuit(QuantumCircuit):
         n_logical_qubits: int,
         label: Iterable[int],
         stabilizer_tableau: Iterable[str],
-        num_ancillas = "default",
         name: str = None,
+        num_ancillas = "default",
     ) -> None:
         # Quantum error correcting code preparation
         self.n_logical_qubits = n_logical_qubits
@@ -78,12 +49,9 @@ class LogicalCircuit(QuantumCircuit):
 
         if any([len(stabilizer) != self.n for stabilizer in self.stabilizer_tableau]):
             raise ValueError(f"Stabilizer lengths do not all equal the code label n ({self.n})")
-
-        # @TODO - Refactor to merge n_reservoir_qubits with n_ancilla_qubits, as they currently serve distinct purposes
-        # 2 for logicalops, self.n_stabilizers // 2 estimate for stabilizer measurements
-        self.n_ancilla_qubits = self.n_stabilizers//2
-        self.n_measure_qubits = self.n_ancilla_qubits
-        self.n_reservoir_qubits = self.n_logical_qubits * (2 + self.n_ancilla_qubits) if (num_ancillas == "default") else num_ancillas
+        
+        # By default, 2 for logical ops, + number of stabilizers // 2 for syndrome measurements
+        self.n_ancilla_qubits = self.n_logical_qubits * (2 + self.n_stabilizers // 2) if (num_ancillas == "default") else num_ancillas
 
         self.flagged_stabilizers_1 = []
         self.flagged_stabilizers_2 = []
@@ -134,7 +102,7 @@ class LogicalCircuit(QuantumCircuit):
         self.add_logical_qubits(self.n_logical_qubits)
         
         # Add ancilla reservoir and add as register
-        self.reservoir = AncillaReservoir(self.n_reservoir_qubits, name=f"qanc_reservoir", algorithm="cyclic")
+        self.reservoir = AncillaReservoir(self.n_ancilla_qubits, name=f"qanc_reservoir", algorithm="cyclic")
         super().add_register(self.reservoir._reservoir)
 
         # Also add a classical measurement output register at the end
@@ -201,7 +169,7 @@ class LogicalCircuit(QuantumCircuit):
             # Classical bits needed for encoding verification
             enc_verif_creg_i = ClassicalRegister(1, name=f"cenc_verif{i}")
             # Classical bits needed for measurements
-            curr_syndrome_creg_i = ClassicalRegister(self.n_measure_qubits, name=f"ccurr_syndrome{i}")
+            curr_syndrome_creg_i = ClassicalRegister(self.n_stabilizers, name=f"ccurr_syndrome{i}")
             # Classical bits needed for previous syndrome measurements
             prev_syndrome_creg_i = ClassicalRegister(self.n_stabilizers, name=f"cprev_syndrome{i}")
             # Classical bits needed for flagged syndrome difference measurements
@@ -1311,8 +1279,9 @@ class LogicalCircuit(QuantumCircuit):
                     pass
                 
                 if with_error_correction:
-                    # Final syndrome
-                    for n in range(self.n_ancilla_qubits):
+                    for n in range(len(self.z_stabilizers)):
+                        
+                        # Final syndrome
                         stabilizer = self.stabilizer_tableau[self.z_stabilizers[n]]
                         s_indices = []
                         for i in range(len(stabilizer)):
@@ -1324,8 +1293,7 @@ class LogicalCircuit(QuantumCircuit):
                         with _else:
                             pass
 
-                    # Final syndrome diff
-                    for n in range(self.n_ancilla_qubits):
+                        # Final syndrome diff
                         with super().if_test(self.cbit_xor([self.curr_syndrome_cregs[q][n], self.prev_syndrome_cregs[q][self.z_stabilizers[n]]])) as _else:
                             self.set_cbit(self.unflagged_syndrome_diff_cregs[q][self.z_stabilizers[n]], 1)
                         with _else:
@@ -1415,7 +1383,7 @@ class LogicalCircuit(QuantumCircuit):
     ######################################
 
     def h(self, *targets, method="Coherent_Feedback"):
-        """Logical single-qubit Hadamard (:math:`\hat H`) gate
+        r"""Logical single-qubit Hadamard (:math:`\hat H`) gate
         """
 
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
@@ -1434,25 +1402,27 @@ class LogicalCircuit(QuantumCircuit):
                     # super().append(Reset(), [self.logical_op_qregs[t][:]], copy=False)
         elif method == "LCU_Corrected": 
             for t in targets:
-                with self.box(label="logical.logicalop.h.lcu_corrected:$\\hat H_{L}$"):
-                    # Construct circuit for implementing a Hadamard gate through the use of an ancilla
-                    super().h(self.logical_op_qregs[t][0])
-                    super().compose(self.LogicalXCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
-                    super().compose(self.LogicalZCircuit.control(1), [self.logical_op_qregs[t][0]] + self.logical_qregs[t][:], inplace=True)
-                    super().h(self.logical_op_qregs[t][0])
-                    super().append(Measure(), [self.logical_op_qregs[t][0]], [self.logical_op_meas_cregs[t][0]], copy=False)
-                    super().append(Reset(), [self.logical_op_qregs[t][0]], copy=False)
+                with self.reservoir.allocate(1) as ancilla_op:
+                    with self.box(label="logical.logicalop.h.lcu_corrected:$\\hat H_{L}$"):
+                        # Construct circuit for implementing a Hadamard gate through the use of an ancilla
+                        super().h(ancilla_op)
+                        super().compose(self.LogicalXCircuit.control(1), ancilla_op + self.logical_qregs[t][:], inplace=True)
+                        super().compose(self.LogicalZCircuit.control(1), ancilla_op + self.logical_qregs[t][:], inplace=True)
+                        super().h(ancilla_op)
+                        super().append(Measure(), ancilla_op, [self.logical_op_meas_cregs[t][0]], copy=False)
+                        super().append(Reset(), ancilla_op, copy=False)
 
-                    # Corrections to apply based on ancilla measurement
-                    with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as else_:
-                        self.x(t)
-                    with else_:
-                        self.z(t)
+                        # Corrections to apply based on ancilla measurement
+                        with super().if_test((self.logical_op_meas_cregs[t][0], 1)) as else_:
+                            self.x(t)
+                        with else_:
+                            self.z(t)
 
         elif method == "Coherent_Feedback":
             for t in targets:
-                with self.box(label="logical.logicalop.h.coherent_feedback:$\\hat H_{L}$"):
-                    super().compose(self.LogicalHCircuit_CF, self.logical_qregs[t][:] + [self.logical_op_qregs[t][0]], inplace=True)
+                with self.reservoir.allocate(1) as ancilla_op:
+                    with self.box(label="logical.logicalop.h.coherent_feedback:$\\hat H_{L}$"):
+                        super().compose(self.LogicalHCircuit_CF, self.logical_qregs[t][:] + ancilla_op, inplace=True)
 
         elif method == "Transversal_Uniform":
             for t in targets:
@@ -1462,7 +1432,7 @@ class LogicalCircuit(QuantumCircuit):
             raise ValueError(f"'{method}' is not a valid method for the logical Hadamard gate")
 
     def x(self, *targets):
-        """Logical single-qubit Pauli-X (:math:`\hat X`) gate
+        r"""Logical single-qubit Pauli-X (:math:`\hat X`) gate
         """
 
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
@@ -1473,7 +1443,7 @@ class LogicalCircuit(QuantumCircuit):
                 super().compose(self.LogicalXCircuit, self.logical_qregs[t], inplace=True)
 
     def y(self, *targets):
-        """Logical single-qubit Pauli-Y (:math:`\hat Y`) gate
+        r"""Logical single-qubit Pauli-Y (:math:`\hat Y`) gate
         """
 
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
@@ -1484,7 +1454,7 @@ class LogicalCircuit(QuantumCircuit):
             self.x(targets)
 
     def z(self, *targets):
-        """Logical single-qubit Pauli-Z (:math:`\hat Z`) gate
+        r"""Logical single-qubit Pauli-Z (:math:`\hat Z`) gate
         """
 
         if len(targets) == 1 and hasattr(targets[0], "__iter__"):
@@ -1495,7 +1465,7 @@ class LogicalCircuit(QuantumCircuit):
                 super().compose(self.LogicalZCircuit, self.logical_qregs[t], inplace=True)
 
     def s(self, *targets, method="Coherent_Feedback"):
-        """Logical single-qubit S (:math:`\hat S`) gate
+        r"""Logical single-qubit S (:math:`\hat S`) gate
 
         Definition:
         [1   0]
@@ -2067,7 +2037,7 @@ class LogicalCircuit(QuantumCircuit):
             raise ValueError("{method} is not a valid method.")
     
     def sx(self, target, **kwargs):
-        """Logical single-qubit SQRT(X) (:math:`\sqrt{X}`) gate
+        r"""Logical single-qubit SQRT(X) (:math:`\sqrt{X}`) gate
         """
 
         self.r(
@@ -2078,7 +2048,7 @@ class LogicalCircuit(QuantumCircuit):
         )
 
     def sxdg(self, target, **kwargs):
-        """Logical single-qubit SQRT(X)-adjoint (:math:`\sqrt{X}^\dagger`) gate
+        r"""Logical single-qubit SQRT(X)-adjoint (:math:`\sqrt{X}^\dagger`) gate
         """
 
 
