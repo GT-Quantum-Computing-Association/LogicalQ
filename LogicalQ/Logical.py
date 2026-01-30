@@ -2671,7 +2671,7 @@ class LogicalCircuit(QuantumCircuit):
         self.LogicalSdgCircuit_CF.compose(self.PhysicalToLogicalCZCircuit, [self.LogicalSdgCircuit_CF.qubits[self.n]] + self.LogicalSdgCircuit_CF.qubits[:self.n], inplace=True)
         self.LogicalSdgCircuit_CF.s(self.n)
         self.LogicalSdgCircuit_CF.h(self.n)
-
+        
         # Creates Logical T circuit using coherent feedback
         self.LogicalTCircuit_CF = QuantumCircuit(self.n + 2)
         self.LogicalTCircuit_CF.h(self.n)
@@ -2689,7 +2689,7 @@ class LogicalCircuit(QuantumCircuit):
         self.LogicalTCircuit_CF.sdg(self.n + 1)
         self.LogicalTCircuit_CF.h(self.n)
         self.LogicalTCircuit_CF.h(self.n + 1)
-
+        
         # Creates Logical T^dagger circuit using coherent feedback
         self.LogicalTdgCircuit_CF = QuantumCircuit(self.n + 2)
         self.LogicalTdgCircuit_CF.h(self.n)
@@ -2707,7 +2707,7 @@ class LogicalCircuit(QuantumCircuit):
         self.LogicalTdgCircuit_CF.s(self.n + 1)
         self.LogicalTdgCircuit_CF.h(self.n)
         self.LogicalTdgCircuit_CF.h(self.n + 1)
-
+        
         # @TODO - Logical CX
 
         # Step 4: Apply the respective stabilizers
@@ -3646,7 +3646,7 @@ class LogicalCircuit(QuantumCircuit):
     ##### Logical quantum operations #####
     ######################################
 
-    def h(self, *targets, method="Coherent_Feedback"):
+    def h(self, *targets, method="Coherent_Feedback", reset_ancillas: bool = False):
         r"""Logical single-qubit Hadamard (:math:`\hat H`) gate
         """
 
@@ -3658,6 +3658,8 @@ class LogicalCircuit(QuantumCircuit):
                 with self.reservoir.allocate(1) as ancilla_op:
                     with self.box(label="logical.logicalop.h.lcu:$\\hat H_{L}$"):
                         super().compose(self.LogicalHCircuit_LCU, ancilla_op + self.logical_qregs[t][:], inplace=True)
+                        if reset_ancillas:
+                            super().append(Reset(), ancilla_op, copy=False)
 
             # @TODO - perform resets after main operation is complete to allow for faster(?) parallel operation
             # for t in targets:
@@ -3728,7 +3730,7 @@ class LogicalCircuit(QuantumCircuit):
             with self.box(label="logical.logicalop.z.gottesman:$\\hat Z_{L}$"):
                 super().compose(self.LogicalZCircuit, self.logical_qregs[t], inplace=True)
 
-    def s(self, *targets, method="Coherent_Feedback"):
+    def s(self, *targets, method="Coherent_Feedback", reset_ancillas: bool = False):
         r"""Logical single-qubit S (:math:`\hat S`) gate
 
         Definition:
@@ -3756,11 +3758,14 @@ class LogicalCircuit(QuantumCircuit):
                             pass
 
                         super().append(Reset(), ancilla_op, copy=False)
+                        
         elif method == "Coherent_Feedback":
             for t in targets:
                 with self.reservoir.allocate(1) as ancilla_op:
                     with self.box(label="logical.logicalop.s.coherent_feedback:$\\hat S_{L}$"):
                         super().compose(self.LogicalSCircuit_CF, self.logical_qregs[t][:] + ancilla_op, inplace=True)
+                        if reset_ancillas:
+                            super().append(Reset(), ancilla_op, copy=False)
         elif method == "Transversal_Uniform":
             for t in targets:
                 with self.box(label="logical.logicalop.s.transversal_uniform:$\\hat S_{L}$"):
@@ -3769,7 +3774,7 @@ class LogicalCircuit(QuantumCircuit):
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical S gate")
 
-    def sdg(self, *targets, method="Coherent_Feedback"):
+    def sdg(self, *targets, method="Coherent_Feedback", reset_ancillas: bool = False):
         """Logical S^dagger gate
 
         Definition:
@@ -3802,6 +3807,8 @@ class LogicalCircuit(QuantumCircuit):
                 with self.reservoir.allocate(1) as ancilla_op:
                     with self.box(label="logical.logicalop.sdg.coherent_feedback:$\\hat{S^\\dagger}_{L}$"):
                         super().compose(self.LogicalSdgCircuit_CF, self.logical_qregs[t][:] + ancilla_op, inplace=True)
+                        if reset_ancillas:
+                            super().append(Reset(), ancilla_op, copy=False)
 
         elif method == "Transversal_Uniform":
             for t in targets:
@@ -3811,7 +3818,7 @@ class LogicalCircuit(QuantumCircuit):
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical S^dagger gate")
 
-    def t(self, *targets, method="Coherent_Feedback"):
+    def t(self, *targets, method="Coherent_Feedback", reset_ancillas: bool = False):
         """Logical T gate
 
         Definition:
@@ -3845,11 +3852,13 @@ class LogicalCircuit(QuantumCircuit):
                 with self.reservoir.allocate(2) as ancilla_ops:
                     with self.box(label="logical.logicalop.t.coherent_feedback:$\\hat T_{L}$"):
                         super().compose(self.LogicalTCircuit_CF, self.logical_qregs[t][:] + ancilla_ops, inplace=True)
+                        if reset_ancillas:
+                            super().append(Reset(), ancilla_ops, copy=False)
 
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical T gate")
 
-    def tdg(self, *targets, method="Coherent_Feedback"):
+    def tdg(self, *targets, method="Coherent_Feedback", reset_ancillas: bool = False):
         """Logical T^dagger gate
 
         Definition:
@@ -3882,6 +3891,8 @@ class LogicalCircuit(QuantumCircuit):
                 with self.reservoir.allocate(2) as ancilla_ops:
                     with self.box(label="logical.logicalop.t.coherent_feedback:$\\hat{T^\\dagger}_{L}$"):
                         super().compose(self.LogicalTdgCircuit_CF, self.logical_qregs[t][:] + ancilla_ops, inplace=True)
+                        if reset_ancillas:
+                            super().append(Reset(), ancilla_ops, copy=False)
         else:
             raise ValueError(f"'{method}' is not a valid method for the logical T^dagger gate")
 
