@@ -453,10 +453,6 @@ class LogicalCircuitGeneral(QuantumCircuit):
 
     # Encodes logical qubits for a given number of iterations
     def encode(self, *qubits, max_iterations=1, initial_states=None):
-```
-
-    # Encodes logical qubits for a given number of iterations
-    def encode(self, *qubits, max_iterations=1, initial_states=None):
         """
         Prepare logical qubit(s) in the specified initial state
         """
