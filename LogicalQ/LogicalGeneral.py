@@ -365,7 +365,15 @@ class LogicalCircuitGeneral(QuantumCircuit):
         # @TODO - Logical CX
 
         # Step 4: Apply the respective stabilizers
-        self.encoding_circuit = QuantumCircuit(self.n)
+        # Check for CSS block structure (for codes like Shor [[9,1,3]])
+        blocks = self._detect_z_blocks()
+        
+        if blocks and len(blocks) > r:
+            # CSS code with block structure - use CSS-aware encoding
+            self.encoding_circuit = self._create_css_encoding_circuit(blocks)
+        else:
+            # Standard Gottesman encoding
+            self.encoding_circuit = QuantumCircuit(self.n)
         for i in range(self.k):
             for j in range(r, self.n-self.k):
                 if self.LogicalXVector[0, i, j]:
@@ -400,6 +408,52 @@ class LogicalCircuitGeneral(QuantumCircuit):
                 self.pauli_frame_z_syndromes.append(self.G_non_standard[0].T[i])
             if self.LogicalZVector[1][0][i] == 1:
                 self.pauli_frame_z_syndromes.append(self.G_non_standard[1].T[i])
+
+    def _detect_z_blocks(self):
+        """Detect qubit blocks from Z-only stabilizers."""
+        z_stabs = [s for s in self.stabilizer_tableau if all(p in ['I', 'Z'] for p in s)]
+        if not z_stabs:
+            return None
+        adj = {i: set() for i in range(self.n)}
+        for stab in z_stabs:
+            z_qubits = [i for i, p in enumerate(stab) if p == 'Z']
+            for q1 in z_qubits:
+                for q2 in z_qubits:
+                    if q1 != q2:
+                        adj[q1].add(q2)
+        visited, blocks = set(), []
+        for start in range(self.n):
+            if start in visited:
+                continue
+            block = set()
+            queue = [start]
+            while queue:
+                q = queue.pop(0)
+                if q in visited:
+                    continue
+                visited.add(q)
+                block.add(q)
+                queue.extend(x for x in adj[q] if x not in visited)
+            if block:
+                blocks.append(sorted(block))
+        return blocks
+
+    def _create_css_encoding_circuit(self, blocks):
+        """Create encoding circuit for CSS codes with block structure."""
+        qc = QuantumCircuit(self.n)
+        data = blocks[0][0]
+        for block in blocks[1:]:
+            qc.cx(data, block[0])
+        for block in blocks:
+            qc.h(block[0])
+        for block in blocks:
+            for follower in block[1:]:
+                qc.cx(block[0], follower)
+        return qc
+
+    # Encodes logical qubits for a given number of iterations
+    def encode(self, *qubits, max_iterations=1, initial_states=None):
+```
 
     # Encodes logical qubits for a given number of iterations
     def encode(self, *qubits, max_iterations=1, initial_states=None):
