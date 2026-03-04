@@ -12,6 +12,8 @@ from qiskit.transpiler import PassManager
 from .Transpilation.ClearQEC import ClearQEC
 from .Transpilation.UnBox import UnBox
 
+from typing import Iterable
+
 class LogicalCircuitGeneral(QuantumCircuit):
     """
     Core LogicalQ representation of a logical quantum circuit.
@@ -29,7 +31,7 @@ class LogicalCircuitGeneral(QuantumCircuit):
         # Quantum error correcting code preparation
         self.n_logical_qubits = n_logical_qubits
 
-        self.stabilizer_tableau = stabilizer_tableau
+        self.stabilizer_tableau = copy.deepcopy(stabilizer_tableau)
         self.n_stabilizers = len(self.stabilizer_tableau)
 
         self.label = label
@@ -186,6 +188,22 @@ class LogicalCircuitGeneral(QuantumCircuit):
             if row >= m:
                 break
 
+        # Since G is in RREF, a pivot row is also a pivot column, so find the pivot columns and move them forward
+        pivot_indices = []
+        for row in G[0]:
+            if 1 in row:
+                pivot_indices.append(int(np.where(row == 1)[0][0]))
+        
+        for diagonal_index, pivot_index in enumerate(pivot_indices):
+            if pivot_index > -1:
+                G[:, :, [diagonal_index, pivot_index]] = G[:, :, [pivot_index, diagonal_index]]
+                self.G_non_standard[:, :, [diagonal_index, pivot_index]] = self.G_non_standard[:, :, [pivot_index, diagonal_index]]
+                for s in range(m):
+                    pauli_list = list(self.stabilizer_tableau[s])
+                    pauli_list[diagonal_index], pauli_list[pivot_index] = pauli_list[pivot_index], pauli_list[diagonal_index]
+                    self.stabilizer_tableau[s] = ''.join(pauli_list)
+
+
         r = np.linalg.matrix_rank(G[0])
 
         E = np.copy(G[:, r:, r:])
@@ -214,7 +232,6 @@ class LogicalCircuitGeneral(QuantumCircuit):
             if row >= m:
                 break
 
-        # Since G is in RREF, a pivot row is also a pivot column, so find the pivot columns and move them forward
         pivot_indices = []
         for row in G[0]:
             if 1 in row:
@@ -223,6 +240,11 @@ class LogicalCircuitGeneral(QuantumCircuit):
         for diagonal_index, pivot_index in enumerate(pivot_indices):
             if pivot_index > -1:
                 G[:, :, [diagonal_index, pivot_index]] = G[:, :, [pivot_index, diagonal_index]]
+                self.G_non_standard[:, :, [diagonal_index, pivot_index]] = self.G_non_standard[:, :, [pivot_index, diagonal_index]]
+                for s in range(m):
+                    pauli_list = list(self.stabilizer_tableau[s])
+                    pauli_list[diagonal_index], pauli_list[pivot_index] = pauli_list[pivot_index], pauli_list[diagonal_index]
+                    self.stabilizer_tableau[s] = ''.join(pauli_list)
 
         self.G = G
 
@@ -647,22 +669,30 @@ class LogicalCircuitGeneral(QuantumCircuit):
 
         return lqc_no_meas
 
-    def get_logical_output_counts(self, outputs, logical_qubit_indices=None):
-        if logical_qubit_indices == None:
+    def get_logical_counts(
+            self,
+            physical_counts: Iterable[int],
+            logical_qubit_indices: Iterable[int] = None
+    ) -> dict[str, int]:
+        """Get logical counts from physical counts.
+
+        Args:
+            physical_counts: Physical counts to convert to logical counts.
+            logical_qubit_indices: Logical qubits to get counts for. If `None`, then get counts for all.
+
+        Returns:
+            Logical qubit counts.
+        """
+        if logical_qubit_indices is None:
             logical_qubit_indices = range(self.n_logical_qubits)
 
-        counts = {}
-        for n in range(len(outputs)):
-            output = ''
-            for l in logical_qubit_indices:
-                output += outputs[n][self.n_logical_qubits-1-l]
+        logical_counts = {}
+        for physical_outcome, physical_outcome_counts in physical_counts.items():
+            logical_outcome = "".join([physical_outcome[self.n_logical_qubits-1-l] for l in logical_qubit_indices])
 
-            if output not in counts:
-                counts[output] = 1
-            else:
-                counts[output] += 1
+            logical_counts[logical_outcome] = logical_counts.get(logical_outcome, 0) + physical_outcome_counts
 
-        return counts
+        return logical_counts
 
     ######################################
     ##### Logical quantum operations #####

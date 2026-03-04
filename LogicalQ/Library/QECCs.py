@@ -7,6 +7,7 @@ phase_flip_code = {
         "IXX",
     ],
 }
+
 four_qubit_code = {
     "label": (4,2,2),
     "stabilizer_tableau": [
@@ -37,6 +38,30 @@ steane_code = {
     ]
 }
 
+morphed_steane_code = {
+    "label": (5,1,2),
+    "stabilizer_tableau": [
+      "XIXXI",
+      "IXXIX",
+      "ZZZII",
+      "IIZZZ",
+    ]
+}
+
+shor_code = {
+    "label": (9,1,3),
+    "stabilizer_tableau": [
+      "XXXXXXIII",
+      "IIIXXXXXX",
+      "ZZIIIIIII",
+      "IZZIIIIII",
+      "IIIZZIIII",
+      "IIIIZZIII",
+      "IIIIIIZZI",
+      "IIIIIIIZZ",
+    ]
+}
+
 eight_qubit_code = {
     "label": (8,3,3),
     "stabilizer_tableau": [
@@ -53,6 +78,7 @@ stabilizer_codes = [
     four_qubit_code,
     five_qubit_code,
     steane_code,
+    shor_code,
     eight_qubit_code,
 ]
 
