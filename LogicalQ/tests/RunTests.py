@@ -3,7 +3,7 @@ import argparse
 from LogicalQ.tests.TestQEC import TestAllQEC
 from LogicalQ.tests.TestLogicalGates import TestAllGates
 
-from LogicalQ.Library.QECCs import implemented_codes
+from LogicalQ.Library.QECCs import implemented_codes, label_to_qecc
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
