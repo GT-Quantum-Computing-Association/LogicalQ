@@ -48,6 +48,20 @@ morphed_steane_code = {
     ]
 }
 
+shor_code = {
+    "label": (9,1,3),
+    "stabilizer_tableau": [
+      "XXXXXXIII",
+      "IIIXXXXXX",
+      "ZZIIIIIII",
+      "IZZIIIIII",
+      "IIIZZIIII",
+      "IIIIZZIII",
+      "IIIIIIZZI",
+      "IIIIIIIZZ",
+    ]
+}
+
 eight_qubit_code = {
     "label": (8,3,3),
     "stabilizer_tableau": [
@@ -64,6 +78,7 @@ stabilizer_codes = [
     four_qubit_code,
     five_qubit_code,
     steane_code,
+    shor_code,
     eight_qubit_code,
 ]
 
