@@ -1341,22 +1341,14 @@ class LogicalCircuit(QuantumCircuit):
                 for n in range(self.n_physical_qubits):
                     super().append(Measure(), [self.logical_qregs[q][n]], [self.final_measurement_cregs[q][n]], copy=False)
                     
-                # @TEST
                 zstabs_bin = [np.array([1 if p == "Z" else 0 for p in zstab]) for zstab in self.stabilizer_tableau[3:]]
-                # print(zstabs_bin)
 
                 logzvec0 = self.LogicalZVector[1].flatten()
-                # print(logzvec0)
 
-                logzvec = [0, 0, 0, 0, 1, 1, 1]
-                # logzvec = (logzvec0) % 2
-                # logzvec = (logzvec0 + zstabs_bin[0]) % 2
-                # logzvec = (logzvec0 + zstabs_bin[1]) % 2
-                # logzvec = (logzvec0 + zstabs_bin[2]) % 2
-                # print(logzvec)
+                # @TODO - check this generalization attempt
+                logzvec = (logzvec0) % 2
                 
                 logical_z_nonzero_indices = np.nonzero(logzvec)[0]
-                # print(logical_z_nonzero_indices)
 
                 with super().if_test(self.cbit_xor([self.final_measurement_cregs[q][i] for i in logical_z_nonzero_indices])) as _else:
                     self.set_cbit(self.output_creg[c], 1)
