@@ -97,9 +97,7 @@ In summary, many of the existing libraries are notable for their high-performanc
 
 `LogicalQ` was designed to accelerate the application of QEMDAC in quantum algorithm development, so its core design principle is maximizing user capability for implementing complex quantum circuits and using QEMDAC. The combination of generalized quantum error correction functionality, compatibility with libraries such as Qiskit, existence of numerous demo notebooks, and overall usability will increase accessibility to quantum error-corrected research and enable deeper study into the application of quantum error correction.
 
-Furthermore, QEMDAC techniques can make analysis of quantum computation results difficult because they utilize overhead resources which exponentially increase the size of experiment outputs. There is a need for tools which can parse QEMDAC results without requiring researchers to understand the often-complex mathematics of these techniques.
-
-Although many of the necessary tools are not particularly lengthy or convoluted in their implementation, `LogicalQ` provides a single toolkit which handles the complexities of the QEMDAC workflow to avoid user error when constructing circuit components or performing mathematical analyses.
+Furthermore, QEMDAC techniques can make analysis of quantum computation results difficult because they utilize overhead resources which exponentially increase the size of experiment outputs. There is a need for tools which can parse QEMDAC results without requiring researchers to understand the often-complex mathematics of these techniques. Although many of the necessary tools are not particularly lengthy or convoluted in their implementation, `LogicalQ` provides a single toolkit which handles the complexities of the QEMDAC workflow to avoid user error when constructing circuit components or performing mathematical analyses.
 
 # Functionality
 
@@ -113,19 +111,23 @@ The `Logical` module lies at the heart of the library with the `LogicalCircuit` 
 
 The `Logical` module also contains the `LogicalStatevector` and `LogicalDensityMatrix` classes, which inherit from the `Statevector` and `DensityMatrix` classes in `Qiskit` respectively and enable representation and analysis of quantum states at either the logical level or physical level. `Logical` also contains the `logical_state_fidelity` function which is designed to support mixed-type fidelity comparisons, such as the fidelity of a physical density matrix and a logical statevector.
 
-The `Benchmarks` module contains constructors for many of the most commonly-used benchmarking circuits in quantum computation, including randomized benchmarking and quantum volume. These functions expose parameters such as qubit counts, circuit lengths, and random selection seeds to the user so that they can be directly integrated into controlled tests and experiments.
+The `Benchmarks` module contains constructors for many of the most commonly-used benchmarking circuits in quantum computation, including randomized benchmarking and quantum volume. These functions expose parameters such as qubit counts, circuit lengths, and random selection seeds to the user so that they can be directly integrated into controlled tests and experiments. We also include common useful algorithms such as quantum teleportation in our set of benchmarks to encourage application-oriented performance testing, an important concept in the current stage of QEMDAC research.
 
-The `Experiments` module contains a variety of experiments which can be used to study QEMDAC techniques. Experiment data can be analyzed with functions from the `Analysis` module.
+The `Experiments` module contains a variety of experiments which can be used to study QEMDAC techniques. Experiment data can be analyzed with functions from the `Analysis` module. Experiments are designed in such a way that they can be composed in order to build more complex experiment workflows.
 
-The `Execution` module contains the `execute_circuits` function, which provides a single interface for both simulator and hardware backends with smart handling of complex aspects such as backend communication, hardware models, and transpilation.
+The `Execution` module contains the `execute_circuits` function, which provides a single interface for both simulator and hardware backends with smart handling of complex aspects such as backend communication, hardware models, and transpilation. This minimizes the amount of hardware optimization and compatibility users have to consider themselves when using the library.
 
-The `Estimators` module contains special experiments which are used in QED and QEC cycle scheduling. In particular, this includes effective threshold estimation and constraint model construction.
+The `Estimators` module contains special experiments which are used in QED and QEC cycle scheduling. In particular, this includes effective threshold estimation and constraint model construction. These are core aspects of our optimized QEMDAC protocol which were designed around multiple iterations of testing and benchmarking.
 
-The `Library` modules contain utilties such as quantum codes for QED and QEC, hardware models for modelling quantum devices, special gates for benchmarking, and dynamical decoupling sequences for QEM.
+The `Library` modules contain utilties such as quantum codes for QED and QEC, hardware models for modelling quantum devices, special gates for benchmarking, and dynamical decoupling sequences for QEM. Many of these are essential for any QEMDAC workflow, so users can easily access them within our library without having to rely on other sources which may have inconsistent standards.
 
-# Scholarly Work
+# Software Design
 
-`LogicalQ` development has largely been driven by an ongoing research project to optimize the scheduling of QEMDAC components in quantum circuits, with the motivation of performing fault-tolerant Hamiltonian simulations of lattice gauge theories and other physical models on quantum hardware. This involves code switching between QEC and QED codes depending on the error-criticality of a part of a circuit, made less complex by `LogicalQ`'s generalized framework for stabilizer codes. There is also ongoing work on genetic algorithm-based optimization of physical and logical dynamical decoupling sequences for these applications and others in science.
+LogicalQ is built in Python as it is a language of choice among researchers who require effective solutions for their work without compromising computational efficiency; to this end, we actively use tools such as parallel processing in our core code to maximize computational efficiency without requiring users to be familiar with the technical details of such tools. In order to ease the transition into using LogicalQ, it follows the same conventions of popular libraries such as Qiskit and pytket wherever possible. At the same time, we also maintain compatibility with the conventions used in the QEMDAC community, especially the mathematical and experimental conventions which researchers would desire when choosing a computational tool to complement their theoretical and experimental work. We have used our demo notebooks and test cases to better understand how our codebase would be used in different contexts, including both theoretical QEMDAC research and applied experimental studies, and this has allowed us to balance the needs of various use cases in each method a user can call. Because QEMDAC research ranges from pure theory to computation to experiment, `LogicalQ` accordingly accommodates each of these approaches to allow for more coherence in mixed-domain projects.
+
+# Research Impact
+
+`LogicalQ` development has largely been driven by an ongoing research project to optimize the scheduling of QEMDAC components in quantum circuits, with the motivation of performing fault-tolerant Hamiltonian simulations of lattice gauge theories and other physical models on quantum hardware. Specific examples include the Kogut-Susskind and Isotropic Heisenberg models. This work involves code switching between QEC and QED codes depending on the error-criticality of a part of a circuit, made less complex by `LogicalQ`'s generalized framework for stabilizer codes. There is also ongoing work on genetic algorithm-based optimization of physical and logical dynamical decoupling sequences for applications in modelling biological processes such as protein folding. This work is all open-source and can be viewed through the demo notebooks on GitHub which are used for experimentation. These demo notebooks, among the many others, demonstrate the quality of our codebase, including many benchmarking notebooks which compare our performance against other techniques. Moreover, the library has also been used outside our primary institution (Georgia Tech) by individuals for their own projects as it allows for a rapid theory-to-implementation workflow.
 
 # Acknowledgements
 
@@ -134,6 +136,10 @@ We acknowledge contributions from the Quantum Computing Association at Georgia T
 We would like to thank Jeff Young for serving as the advisor of the Quantum Computing Association at Georgia Tech and this project.
 
 This research was supported in part through research cyberinfrastructure resources and services provided by the Partnership for an Advanced Computing Environment (PACE) at the Georgia Institute of Technology, Atlanta, Georgia, USA [@PACE].
+
+# AI Usage Disclosure
+
+Generative AI was not used in any capacity in software creation, documentation, or paper authoring.
 
 # References
 
