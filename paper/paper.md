@@ -76,6 +76,8 @@ Quantum computing presents a new model for computation which may significantly a
 
 Many of the necessary components for QEMDAC have been formalized mathematically such that algorithms can be designed to construct these components for general classes of error control techniques [@Gottesman1997]. `LogicalQ`, like many existing QEMDAC libraries, uses such generalized constructions to meet any use case and application.
 
+# State of the field
+
 A comparison of existing libraries is made in Table 1. We choose to compare features which may be desirable to researchers in quantum algorithms. Note that we define external two-way interoperability to be with any external general-purpose quantum computing tool such as `QASM` or `Qiskit`, but not just another QEMDAC tool.
 
 |Feature|`LogicalQ`|`stim`|`mqt-qecc`|`PEC0S`|`stac`|`tqec`|
@@ -121,11 +123,11 @@ The `Estimators` module contains special experiments which are used in QED and Q
 
 The `Library` modules contain utilties such as quantum codes for QED and QEC, hardware models for modelling quantum devices, special gates for benchmarking, and dynamical decoupling sequences for QEM. Many of these are essential for any QEMDAC workflow, so users can easily access them within our library without having to rely on other sources which may have inconsistent standards.
 
-# Software Design
+# Software design
 
 LogicalQ is built in Python as it is a language of choice among researchers who require effective solutions for their work without compromising computational efficiency; to this end, we actively use tools such as parallel processing in our core code to maximize computational efficiency without requiring users to be familiar with the technical details of such tools. In order to ease the transition into using LogicalQ, it follows the same conventions of popular libraries such as Qiskit and pytket wherever possible. At the same time, we also maintain compatibility with the conventions used in the QEMDAC community, especially the mathematical and experimental conventions which researchers would desire when choosing a computational tool to complement their theoretical and experimental work. We have used our demo notebooks and test cases to better understand how our codebase would be used in different contexts, including both theoretical QEMDAC research and applied experimental studies, and this has allowed us to balance the needs of various use cases in each method a user can call. Because QEMDAC research ranges from pure theory to computation to experiment, `LogicalQ` accordingly accommodates each of these approaches to allow for more coherence in mixed-domain projects.
 
-# Research Impact
+# Research impact statement
 
 `LogicalQ` development has largely been driven by an ongoing research project to optimize the scheduling of QEMDAC components in quantum circuits, with the motivation of performing fault-tolerant Hamiltonian simulations of lattice gauge theories and other physical models on quantum hardware. Specific examples include the Kogut-Susskind and Isotropic Heisenberg models. This work involves code switching between QEC and QED codes depending on the error-criticality of a part of a circuit, made less complex by `LogicalQ`'s generalized framework for stabilizer codes. There is also ongoing work on genetic algorithm-based optimization of physical and logical dynamical decoupling sequences for applications in modelling biological processes such as protein folding. This work is all open-source and can be viewed through the demo notebooks on GitHub which are used for experimentation. These demo notebooks, among the many others, demonstrate the quality of our codebase, including many benchmarking notebooks which compare our performance against other techniques. Moreover, the library has also been used outside our primary institution (Georgia Tech) by individuals for their own projects as it allows for a rapid theory-to-implementation workflow.
 
@@ -137,7 +139,7 @@ We would like to thank Jeff Young for serving as the advisor of the Quantum Comp
 
 This research was supported in part through research cyberinfrastructure resources and services provided by the Partnership for an Advanced Computing Environment (PACE) at the Georgia Institute of Technology, Atlanta, Georgia, USA [@PACE].
 
-# AI Usage Disclosure
+# AI usage disclosure
 
 Generative AI was not used in any capacity in software creation, documentation, or paper authoring.
 
