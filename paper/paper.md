@@ -80,7 +80,7 @@ A comparison of existing libraries is made in Table 1. We choose to compare feat
 
 |Feature|`LogicalQ`|`stim`|`mqt-qecc`|`PEC0S`|`stac`|`tqec`|
 |------------------------------------|-------------|------------|------------|------------|------------|------------|
-|Stabilizercode QEC|$\checkmark$|$\checkmark$|$\checkmark$|$\checkmark$|$\checkmark$|$\checkmark$|
+|Stabilizer code QEC|$\checkmark$|$\checkmark$|$\checkmark$|$\checkmark$|$\checkmark$|$\checkmark$|
 |qLDPC-oriented QEC|$\checkmark$|$\times$|$\checkmark$|$\times$|$\times$|$\times$|
 |Arbitrary logical Clifford gates|$\checkmark$|$\times$|$\times$|$\checkmark$|$\checkmark$|$\times$|
 |Arbitrary logical non-Clifford gates|$\checkmark$|$\times$|$\times$|$\checkmark$|$\checkmark$|$\times$|

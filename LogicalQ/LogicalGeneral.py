@@ -31,7 +31,7 @@ class LogicalCircuitGeneral(QuantumCircuit):
         # Quantum error correcting code preparation
         self.n_logical_qubits = n_logical_qubits
 
-        self.stabilizer_tableau = stabilizer_tableau
+        self.stabilizer_tableau = copy.deepcopy(stabilizer_tableau)
         self.n_stabilizers = len(self.stabilizer_tableau)
 
         self.label = label
@@ -114,7 +114,7 @@ class LogicalCircuitGeneral(QuantumCircuit):
             # Classical bits needed to take measurements of logical operation qubits
             logical_op_meas_creg_i = ClassicalRegister(2, name=f"clogical_op_meas{i}")
             # Classical bits needed to take measurements of logical operation qubits
-            final_measurement_creg_i = ClassicalRegister(self.n_physical_qubits, name=f"cfinal_meas{i}")
+            final_measurement_creg_i = ClassicalRegister(self.n_physical_qubits, name=f"c{i}")
 
             # Add new registers to storage lists
             self.logical_qregs.append(logical_qreg_i)
@@ -188,6 +188,22 @@ class LogicalCircuitGeneral(QuantumCircuit):
             if row >= m:
                 break
 
+        # Since G is in RREF, a pivot row is also a pivot column, so find the pivot columns and move them forward
+        pivot_indices = []
+        for row in G[0]:
+            if 1 in row:
+                pivot_indices.append(int(np.where(row == 1)[0][0]))
+        
+        for diagonal_index, pivot_index in enumerate(pivot_indices):
+            if pivot_index > -1:
+                G[:, :, [diagonal_index, pivot_index]] = G[:, :, [pivot_index, diagonal_index]]
+                self.G_non_standard[:, :, [diagonal_index, pivot_index]] = self.G_non_standard[:, :, [pivot_index, diagonal_index]]
+                for s in range(m):
+                    pauli_list = list(self.stabilizer_tableau[s])
+                    pauli_list[diagonal_index], pauli_list[pivot_index] = pauli_list[pivot_index], pauli_list[diagonal_index]
+                    self.stabilizer_tableau[s] = ''.join(pauli_list)
+
+
         r = np.linalg.matrix_rank(G[0])
 
         E = np.copy(G[:, r:, r:])
@@ -216,7 +232,6 @@ class LogicalCircuitGeneral(QuantumCircuit):
             if row >= m:
                 break
 
-        # Since G is in RREF, a pivot row is also a pivot column, so find the pivot columns and move them forward
         pivot_indices = []
         for row in G[0]:
             if 1 in row:
@@ -225,6 +240,11 @@ class LogicalCircuitGeneral(QuantumCircuit):
         for diagonal_index, pivot_index in enumerate(pivot_indices):
             if pivot_index > -1:
                 G[:, :, [diagonal_index, pivot_index]] = G[:, :, [pivot_index, diagonal_index]]
+                self.G_non_standard[:, :, [diagonal_index, pivot_index]] = self.G_non_standard[:, :, [pivot_index, diagonal_index]]
+                for s in range(m):
+                    pauli_list = list(self.stabilizer_tableau[s])
+                    pauli_list[diagonal_index], pauli_list[pivot_index] = pauli_list[pivot_index], pauli_list[diagonal_index]
+                    self.stabilizer_tableau[s] = ''.join(pauli_list)
 
         self.G = G
 
@@ -479,49 +499,29 @@ class LogicalCircuitGeneral(QuantumCircuit):
             raise ValueError("Number of qubits should equal number of initial states if initial states are provided")
 
         for q, init_state in zip(qubits, initial_states):
-
-            # Preliminary physical qubit reset
             super().reset(self.logical_qregs[q])
 
             # Initial encoding
             super().compose(self.encoding_circuit, self.logical_qregs[q], inplace=True)
 
-            #Encoding verification
-
-            #Measure Z_L on ancilla
-            super().barrier()
-            super().h(self.ancilla_qregs[q][0])
-            # X part
-            for i, bit in enumerate(self.LogicalZVector[0][0]):
-                if bit == 1:
-                    super().cx(self.ancilla_qregs[q][0], self.logical_qregs[q][i])
-            # Z part
-            for i, bit in enumerate(self.LogicalZVector[1][0]):
-                if bit == 1:
-                    super().cz(self.ancilla_qregs[q][0], self.logical_qregs[q][i])
-            super().h(self.ancilla_qregs[q][0])
             super().barrier()
 
-            super().append(Measure(), [self.ancilla_qregs[q][0]], [self.enc_verif_cregs[q][0]], copy=False)
-
-            for _ in range(max_iterations - 1):
+            for _ in range(max_iterations):
                 # If the ancilla stores a 1, reset the entire logical qubit and redo
                 with super().if_test((self.enc_verif_cregs[q][0], 1)):
-                    super().reset(self.logical_qregs[q])
-
-                    # Initial encoding
-                    super().compose(self.encoding_circuit, self.logical_qregs[q], inplace=True)
-
-                    #Measure Z_L on ancilla
+                    # Measure Z_L on ancilla
                     super().h(self.ancilla_qregs[q][0])
+
                     # X part
                     for i, bit in enumerate(self.LogicalZVector[0][0]):
                         if bit == 1:
                             super().cx(self.ancilla_qregs[q][0], self.logical_qregs[q][i])
+
                     # Z part
                     for i, bit in enumerate(self.LogicalZVector[1][0]):
                         if bit == 1:
                             super().cz(self.ancilla_qregs[q][0], self.logical_qregs[q][i])
+
                     super().h(self.ancilla_qregs[q][0])
 
                     # Measure ancilla
@@ -663,6 +663,7 @@ class LogicalCircuitGeneral(QuantumCircuit):
                     elif int(self.LogicalXVector[1][0][i]) ^ int(self.LogicalZVector[1][0][i]):
                         meas_inds.append(i)
 
+            print(meas_inds)
 
             # Measurement of state
             for n in range(self.n_physical_qubits):
