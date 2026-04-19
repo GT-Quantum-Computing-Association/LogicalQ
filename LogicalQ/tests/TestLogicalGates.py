@@ -1,194 +1,274 @@
-# from LogicalQ.Logical import LogicalCircuit
 import numpy as np
-from LogicalQ.Execution import execute_circuits
-from LogicalQ.Logical import LogicalStatevector, logical_state_fidelity
-from LogicalQ.LogicalGeneral import LogicalCircuitGeneral as LogicalCircuit
-from LogicalQ.Library.QECCs import implemented_codes
 
-from qiskit.quantum_info import partial_trace, DensityMatrix
+from LogicalQ.Logical import LogicalCircuit
+from LogicalQ.Logical import LogicalStatevector
+
 from qiskit.quantum_info import Statevector
-from qiskit import QuantumCircuit, transpile
+from qiskit.circuit.library import (
+    XGate, YGate, ZGate, HGate, SGate, SdgGate, TGate, TdgGate,
+    RXGate, RYGate, RZGate, RXXGate, RYYGate, RZZGate, CXGate,
+)
+from qiskit import transpile
 from qiskit.transpiler import PassManager
-from LogicalQ.Transpilation.ClearQEC import ClearQEC
-from LogicalQ.Transpilation.UnBox import UnBox
-from LogicalQ.Library.HardwareModels import hardware_models_Quantinuum
 
 from qiskit_aer import AerSimulator
 
+from LogicalQ.Transpilation.ClearQEC import ClearQEC
+from LogicalQ.Transpilation.UnBox import UnBox
+
+from LogicalQ.Library.QECCs import implemented_codes
+
 # @TODO - find expected results in the form of statevectors, density matrices, etc.
 
-def TestX(qeccs=None):
-    # @TODO Test if this works. (I don't know where it came from)
-    
+# Tolerance for non-rotation gate fidelity comparisons
+GATE_FIDELITY_ATOL = 1E-6
+
+# Tolerance for rotation gate fidelity comparisons (uses Solovay-Kitaev approximation)
+ROTATION_FIDELITY_TOL = 0.99
+
+# Default rotation angles to test
+DEFAULT_THETAS = list(np.linspace(0, 2*np.pi, 5, endpoint=False))
+
+def _logical_fidelity(actual_decomposition, expected_amplitudes):
+    n = len(expected_amplitudes)
+    return float(np.abs(np.vdot(expected_amplitudes, actual_decomposition[:n]))**2)
+
+def _build_input_state(lqc, init_state):
+    lqc.encode([0], max_iterations=0, initial_states=[init_state])
+
+def TestSingleQubitGate(gate_name, lqc_method, reference_gate, qeccs=None, init_states=None, **gate_kwargs):
     if qeccs is None:
         qeccs = implemented_codes
 
+    if init_states is None:
+        init_states = [0, 1]
+
+    all_successful = True
     for qecc in qeccs:
-        n, k, d = qecc["label"]
+        # @TODO - LogicalStatevector doesn't recognize LogicalCircuitGeneral, so we can't do other codes for this test
+        if qecc["label"] != (7,1,3):
+            print(f"WARNING - Test{gate_name} does not fully work for non-Steane codes, skipping")
+            continue
 
-        lqc_x = LogicalCircuit(k, **qecc)
+        for init_state in init_states:
+            n, k, d = qecc["label"]
 
-        targets = list(range(k))
-        lqc_x.x(targets)
+            lqc = LogicalCircuit(k, **qecc)
+            _build_input_state(lqc, init_state)
+            lqc_method(lqc, list(range(k)), **gate_kwargs)
 
-        simulator = AerSimulator()
-        lqc_x_transpiled = transpile(lqc_x_transpiled, simulator)
-        result = simulator.run(lqc_x_transpiled).result()
-        final_dm = result.data(0)["density_matrix"]
+            try:
+                lsv = LogicalStatevector(lqc)
+            except Exception as e:
+                print(f"Test{gate_name} failed for {qecc['label']} and initial state |{init_state}>: LogicalStatevector construction error: {e}")
+                all_successful = False
+                continue
 
-        rho = DensityMatrix(final_dm)
-        reduced = partial_trace(rho, list(range(k, n)))
+            sv_expected = Statevector.from_int(init_state, dims=2**k).evolve(reference_gate)
+            fidelity = _logical_fidelity(lsv.logical_decomposition, sv_expected.data)
 
-    print(f"WARNING - TestX has not been fully implemented, returning True")
-    return True
+            if np.isclose(fidelity, 1.0, atol=GATE_FIDELITY_ATOL):
+                print(f"Test{gate_name} succeeded for {qecc['label']} and initial state |{init_state}> with fidelity {fidelity}")
+            else:
+                print(f"Test{gate_name} failed for {qecc['label']} and initial state |{init_state}> with fidelity {fidelity}")
+                all_successful = False
 
-def TestY(qeccs=None):
+    return all_successful
+
+def TestSingleQubitRotationGate(gate_name, lqc_method, reference_gate_factory, qeccs=None, thetas=None):
     if qeccs is None:
         qeccs = implemented_codes
 
+    if thetas is None:
+        thetas = DEFAULT_THETAS
+
+    all_successful = True
     for qecc in qeccs:
-        n, k, d = qecc["label"]
+        # @TODO - LogicalStatevector doesn't recognize LogicalCircuitGeneral, so we can't do other codes for this test
+        if qecc["label"] != (7,1,3):
+            print(f"WARNING - Test{gate_name} does not fully work for non-Steane codes, skipping")
+            continue
 
-        lqc_y = LogicalCircuit(k, **qecc)
+        for theta in thetas:
+            n, k, d = qecc["label"]
 
-        targets = list(range(k))
-        lqc_y.y(targets)
+            lqc = LogicalCircuit(k, **qecc)
+            _build_input_state(lqc, 0)
+            lqc_method(lqc, theta, list(range(k)))
 
-        lqc_y.measure_all()
+            try:
+                lsv = LogicalStatevector(lqc)
+            except Exception as e:
+                print(f"Test{gate_name} failed for {qecc['label']} and theta={theta:.4f}: LogicalStatevector construction error: {e}")
+                all_successful = False
+                continue
 
-    print(f"WARNING - TestY has not been fully implemented, returning True")
-    return True
+            sv_expected = Statevector.from_int(0, dims=2**k).evolve(reference_gate_factory(theta))
+            fidelity = _logical_fidelity(lsv.logical_decomposition, sv_expected.data)
 
-def TestZ(qeccs=None):
+            if fidelity >= ROTATION_FIDELITY_TOL:
+                print(f"Test{gate_name} succeeded for {qecc['label']} and theta={theta:.4f} with fidelity {fidelity}")
+            else:
+                print(f"Test{gate_name} failed for {qecc['label']} and theta={theta:.4f} with fidelity {fidelity}")
+                all_successful = False
+
+    return all_successful
+
+def TestMultiQubitGateConstruction(gate_name, lqc_method, n_logical_qubits, qeccs=None, **gate_kwargs):
     if qeccs is None:
         qeccs = implemented_codes
 
+    all_successful = True
     for qecc in qeccs:
         n, k, d = qecc["label"]
 
-        lqc_z = LogicalCircuit(k, **qecc)
+        try:
+            lqc = LogicalCircuit(n_logical_qubits, **qecc)
+            lqc.encode(list(range(n_logical_qubits)), max_iterations=0)
 
-        targets = list(range(k))
-        lqc_z.z(targets)
+            lqc_method(lqc)
 
-        lqc_z.measure_all()
-
-    print(f"WARNING - TestZ has not been fully implemented, returning True")
-    return True
-
-def TestH(qeccs=None):
-    if qeccs is None:
-        qeccs = implemented_codes
-
-    for qecc in qeccs:
-        n, k, d = qecc["label"]
-
-        lqc_h = LogicalCircuit(k, **qecc)
-
-        targets = list(range(k))
-        lqc_h.h(targets)
-
-        lqc_h.measure_all()
-
-    print(f"WARNING - TestH has not been fully implemented, returning True")
-    return True
-
-def TestS(qeccs=None):
-    if qeccs is None:
-        qeccs = implemented_codes
-
-    for qecc in qeccs:
-        n, k, d = qecc["label"]
-
-        lqc_s = LogicalCircuit(k, **qecc)
-
-        targets = list(range(k))
-        lqc_s.s(targets)
-
-        lqc_s.measure_all()
-
-    print(f"WARNING - TestS has not been fully implemented, returning True")
-    return True
-
-def TestT(qeccs=None):
-    if qeccs is None:
-        qeccs = implemented_codes
-
-    for qecc in qeccs:
-        n, k, d = qecc["label"]
-
-        lqc_t = LogicalCircuit(k, **qecc)
-
-        targets = list(range(k))
-        lqc_t.t(targets)
-
-        lqc_t.measure_all()
-
-    print(f"WARNING - TestT has not been fully implemented, returning True")
-    return True
-
-def TestCX(qeccs=None):
-    if qeccs is None:
-        qeccs = implemented_codes
-
-    for qecc in qeccs:
-        n, k, d = qecc["label"]
-
-        lqc_cx = LogicalCircuit(k, **qecc)
-
-        control = 0
-        targets = list(range(1, k))
-        lqc_cx.cx(control, *targets)
-
-        lqc_cx.measure_all()
-
-    print(f"WARNING - TestCX has not been fully implemented, returning True")
-    return True
-
-def TestRX(qeccs=None):
-    if qeccs is None:
-        qeccs = implemented_codes
-
-    for qecc in qeccs:
-        n, k, d = qecc["label"]
-
-        for theta in np.linspace(0, 2*np.pi, 1024):
-            lqc_rx = LogicalCircuit(k, **qecc)
-
-            targets = list(range(k))
-
-            lqc_rx.rx(theta, 0)
+            # Strip QEC and box ops so the circuit can be transpiled to a regular backend basis
+            pm_unbox = PassManager([ClearQEC(), UnBox()])
+            while "box" in lqc.count_ops():
+                lqc = pm_unbox.run(lqc)
 
             simulator = AerSimulator()
-            lqc_rx_transpiled = transpile(lqc_rx, simulator)
-            result = simulator.run(lqc_rx_transpiled).result()
-            final_dm = result.data(0)["density_matrix"]
+            lqc_transpiled = transpile(lqc, simulator)
 
-            rho = DensityMatrix(final_dm)
-            reduced = partial_trace(rho, list(range(k, n)))
+            if lqc_transpiled.num_qubits <= 0 or len(lqc_transpiled.data) == 0:
+                raise RuntimeError("transpiled circuit is empty")
+        except Exception as e:
+            print(f"Test{gate_name} failed for {qecc['label']}: {e}")
+            all_successful = False
+            continue
 
-    print(f"WARNING - TestX has not been fully implemented, returning True")
-    return True
+        print(f"Test{gate_name} succeeded for {qecc['label']} (construction-only sanity check)")
 
-def TestRY(qeccs=None):
-    print(f"WARNING - TestRY has not been fully implemented, returning True")
-    return True
+    return all_successful
 
-def TestRZ(qeccs=None):
-    print(f"WARNING - TestRZ has not been fully implemented, returning True")
-    return True
+def TestX(qeccs=None):
+    return TestSingleQubitGate(
+        "X",
+        lambda lqc, targets: lqc.x(targets),
+        XGate(),
+        qeccs=qeccs,
+    )
+
+def TestY(qeccs=None):
+    return TestSingleQubitGate(
+        "Y",
+        lambda lqc, targets: lqc.y(targets),
+        YGate(),
+        qeccs=qeccs,
+    )
+
+def TestZ(qeccs=None):
+    return TestSingleQubitGate(
+        "Z",
+        lambda lqc, targets: lqc.z(targets),
+        ZGate(),
+        qeccs=qeccs,
+    )
+
+def TestH(qeccs=None):
+    return TestSingleQubitGate(
+        "H",
+        lambda lqc, targets: lqc.h(targets),
+        HGate(),
+        qeccs=qeccs,
+    )
+
+def TestS(qeccs=None):
+    return TestSingleQubitGate(
+        "S",
+        lambda lqc, targets: lqc.s(targets),
+        SGate(),
+        qeccs=qeccs,
+    )
+
+def TestSdg(qeccs=None):
+    return TestSingleQubitGate(
+        "Sdg",
+        lambda lqc, targets: lqc.sdg(targets),
+        SdgGate(),
+        qeccs=qeccs,
+    )
+
+def TestT(qeccs=None):
+    return TestSingleQubitGate(
+        "T",
+        lambda lqc, targets: lqc.t(targets),
+        TGate(),
+        qeccs=qeccs,
+    )
+
+def TestTdg(qeccs=None):
+    return TestSingleQubitGate(
+        "Tdg",
+        lambda lqc, targets: lqc.tdg(targets),
+        TdgGate(),
+        qeccs=qeccs,
+    )
+
+def TestCX(qeccs=None):
+    return TestMultiQubitGateConstruction(
+        "CX",
+        lambda lqc: lqc.cx(0, 1),
+        n_logical_qubits=2,
+        qeccs=qeccs,
+    )
+
+def TestRX(qeccs=None, thetas=None):
+    return TestSingleQubitRotationGate(
+        "RX",
+        lambda lqc, theta, targets: lqc.rx(theta, targets),
+        lambda theta: RXGate(theta),
+        qeccs=qeccs,
+        thetas=thetas,
+    )
+
+def TestRY(qeccs=None, thetas=None):
+    return TestSingleQubitRotationGate(
+        "RY",
+        lambda lqc, theta, targets: lqc.ry(theta, targets),
+        lambda theta: RYGate(theta),
+        qeccs=qeccs,
+        thetas=thetas,
+    )
+
+def TestRZ(qeccs=None, thetas=None):
+    return TestSingleQubitRotationGate(
+        "RZ",
+        lambda lqc, theta, targets: lqc.rz(theta, targets),
+        lambda theta: RZGate(theta),
+        qeccs=qeccs,
+        thetas=thetas,
+    )
 
 def TestRXX(qeccs=None):
-    print(f"WARNING - TestRXX has not been fully implemented, returning True")
-    return True
+    return TestMultiQubitGateConstruction(
+        "RXX",
+        lambda lqc: lqc.rxx(np.pi/4, [0, 1]),
+        n_logical_qubits=2,
+        qeccs=qeccs,
+    )
 
 def TestRYY(qeccs=None):
-    print(f"WARNING - TestRYY has not been fully implemented, returning True")
-    return True
+    return TestMultiQubitGateConstruction(
+        "RYY",
+        lambda lqc: lqc.ryy(np.pi/4, [0, 1]),
+        n_logical_qubits=2,
+        qeccs=qeccs,
+    )
 
 def TestRZZ(qeccs=None):
-    print(f"WARNING - TestRZZ has not been fully implemented, returning True")
-    return True
+    return TestMultiQubitGateConstruction(
+        "RZZ",
+        lambda lqc: lqc.rzz(np.pi/4, [0, 1]),
+        n_logical_qubits=2,
+        qeccs=qeccs,
+    )
 
 def TestRotationGates(qeccs=None):
     if all([
@@ -222,6 +302,7 @@ def TestCliffordGates(qeccs=None):
         TestPauliGates(qeccs),
         TestH(qeccs),
         TestS(qeccs),
+        TestSdg(qeccs),
         TestCX(qeccs),
     ]):
         print(f"TestCliffordGates succeeded")
@@ -233,6 +314,7 @@ def TestCliffordGates(qeccs=None):
 def TestNonCliffordGates(qeccs=None):
     if all([
         TestT(qeccs),
+        TestTdg(qeccs),
     ]):
         print(f"TestNonCliffordGates succeeded")
         return True
@@ -241,12 +323,10 @@ def TestNonCliffordGates(qeccs=None):
         return False
 
 def TestAllGates(qeccs=None):
-    print(f"WARNING - TestAllGates has not been fully implemented, returning True")
-    return True
-
     if all([
         TestCliffordGates(qeccs),
         TestNonCliffordGates(qeccs),
+        TestRotationGates(qeccs),
     ]):
         print(f"TestAllGates succeeded")
         return True
