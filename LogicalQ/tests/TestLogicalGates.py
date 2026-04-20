@@ -1,7 +1,7 @@
 import numpy as np
 
 from LogicalQ.Logical import LogicalCircuit
-from LogicalQ.Logical import LogicalStatevector
+from LogicalQ.Logical import LogicalStatevector, logical_state_fidelity
 
 from qiskit.quantum_info import Statevector
 from qiskit.circuit.library import (
@@ -18,23 +18,9 @@ from LogicalQ.Transpilation.UnBox import UnBox
 
 from LogicalQ.Library.QECCs import implemented_codes
 
+from LogicalQ.tests import FIDELITY_ATOL, sk_rotation_atol
+
 # @TODO - find expected results in the form of statevectors, density matrices, etc.
-
-# Tolerance for non-rotation gate fidelity comparisons
-GATE_FIDELITY_ATOL = 1E-6
-
-# Tolerance for rotation gate fidelity comparisons (uses Solovay-Kitaev approximation)
-ROTATION_FIDELITY_TOL = 0.99
-
-# Default rotation angles to test
-DEFAULT_THETAS = list(np.linspace(0, 2*np.pi, 5, endpoint=False))
-
-def _logical_fidelity(actual_decomposition, expected_amplitudes):
-    n = len(expected_amplitudes)
-    return float(np.abs(np.vdot(expected_amplitudes, actual_decomposition[:n]))**2)
-
-def _build_input_state(lqc, init_state):
-    lqc.encode([0], max_iterations=0, initial_states=[init_state])
 
 def TestSingleQubitGate(gate_name, lqc_method, reference_gate, qeccs=None, init_states=None, **gate_kwargs):
     if qeccs is None:
@@ -54,7 +40,7 @@ def TestSingleQubitGate(gate_name, lqc_method, reference_gate, qeccs=None, init_
             n, k, d = qecc["label"]
 
             lqc = LogicalCircuit(k, **qecc)
-            _build_input_state(lqc, init_state)
+            lqc.encode(list(range(k)), max_iterations=0, initial_states=[init_state]*k)
             lqc_method(lqc, list(range(k)), **gate_kwargs)
 
             try:
@@ -65,9 +51,9 @@ def TestSingleQubitGate(gate_name, lqc_method, reference_gate, qeccs=None, init_
                 continue
 
             sv_expected = Statevector.from_int(init_state, dims=2**k).evolve(reference_gate)
-            fidelity = _logical_fidelity(lsv.logical_decomposition, sv_expected.data)
+            fidelity = logical_state_fidelity(lsv, sv_expected)
 
-            if np.isclose(fidelity, 1.0, atol=GATE_FIDELITY_ATOL):
+            if np.isclose(fidelity, 1.0, atol=FIDELITY_ATOL):
                 print(f"Test{gate_name} succeeded for {qecc['label']} and initial state |{init_state}> with fidelity {fidelity}")
             else:
                 print(f"Test{gate_name} failed for {qecc['label']} and initial state |{init_state}> with fidelity {fidelity}")
@@ -75,12 +61,15 @@ def TestSingleQubitGate(gate_name, lqc_method, reference_gate, qeccs=None, init_
 
     return all_successful
 
-def TestSingleQubitRotationGate(gate_name, lqc_method, reference_gate_factory, qeccs=None, thetas=None):
+def TestSingleQubitRotationGate(gate_name, lqc_method, reference_gate_factory, qeccs=None, thetas=None, recursion_degree=1, depth=10, atol=None):
     if qeccs is None:
         qeccs = implemented_codes
 
     if thetas is None:
-        thetas = DEFAULT_THETAS
+        thetas = list(np.linspace(0, 2*np.pi, 5, endpoint=False))
+
+    if atol is None:
+        atol = sk_rotation_atol(recursion_degree=recursion_degree, depth=depth, thetas=thetas)
 
     all_successful = True
     for qecc in qeccs:
@@ -93,7 +82,7 @@ def TestSingleQubitRotationGate(gate_name, lqc_method, reference_gate_factory, q
             n, k, d = qecc["label"]
 
             lqc = LogicalCircuit(k, **qecc)
-            _build_input_state(lqc, 0)
+            lqc.encode(list(range(k)), max_iterations=0, initial_states=[0]*k)
             lqc_method(lqc, theta, list(range(k)))
 
             try:
@@ -104,9 +93,9 @@ def TestSingleQubitRotationGate(gate_name, lqc_method, reference_gate_factory, q
                 continue
 
             sv_expected = Statevector.from_int(0, dims=2**k).evolve(reference_gate_factory(theta))
-            fidelity = _logical_fidelity(lsv.logical_decomposition, sv_expected.data)
+            fidelity = logical_state_fidelity(lsv, sv_expected)
 
-            if fidelity >= ROTATION_FIDELITY_TOL:
+            if np.isclose(fidelity, 1.0, atol=atol):
                 print(f"Test{gate_name} succeeded for {qecc['label']} and theta={theta:.4f} with fidelity {fidelity}")
             else:
                 print(f"Test{gate_name} failed for {qecc['label']} and theta={theta:.4f} with fidelity {fidelity}")
@@ -128,7 +117,6 @@ def TestMultiQubitGateConstruction(gate_name, lqc_method, n_logical_qubits, qecc
 
             lqc_method(lqc)
 
-            # Strip QEC and box ops so the circuit can be transpiled to a regular backend basis
             pm_unbox = PassManager([ClearQEC(), UnBox()])
             while "box" in lqc.count_ops():
                 lqc = pm_unbox.run(lqc)
@@ -143,7 +131,7 @@ def TestMultiQubitGateConstruction(gate_name, lqc_method, n_logical_qubits, qecc
             all_successful = False
             continue
 
-        print(f"Test{gate_name} succeeded for {qecc['label']} (construction-only sanity check)")
+        print(f"Test{gate_name} succeeded for {qecc['label']}")
 
     return all_successful
 
