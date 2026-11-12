@@ -888,8 +888,18 @@ class LogicalCircuit(QuantumCircuit):
         for d, slice in enumerate(slices):
             depths.extend([d]*len(slice.data))
 
+        # Gadget costs are keyed by the names of their components joined by "-", e.g. "cost_h-x" for a
+        # gadget composed of an H gate followed by an X gate; single-component keys never contain a "-"
+        gadget_costs = {}
+        for constraint_key, constraint_value in constraint_model.items():
+            if constraint_key.startswith("cost_") and "-" in constraint_key:
+                gadget_names = tuple(constraint_key[len("cost_"):].split("-"))
+                gadget_costs[gadget_names] = constraint_value
+
+        max_gadget_length = max([len(gadget_names) for gadget_names in gadget_costs.keys()], default=0)
+
         new_qec_cycle_indices_initial = {}
-        def compute_instruction_contributions(q, i, depth, instruction, counters, running_cost):
+        def compute_instruction_contributions(q, i, depth, instruction, counters, running_cost, recent_names):
             # Ignore certain "trivial" operations
             if instruction.name in ["barrier"]:
                 return False
@@ -905,17 +915,28 @@ class LogicalCircuit(QuantumCircuit):
                 for param in instruction.params:
                     if isinstance(param, QuantumCircuit):
                         for sub_instruction in param:
-                            met = met or compute_instruction_contributions(q, i, depth, sub_instruction, counters, running_cost)
+                            # Call before the disjunction so that every sub-instruction contributes its
+                            # costs, even once a constraint has already been met
+                            met = compute_instruction_contributions(q, i, depth, sub_instruction, counters, running_cost, recent_names) or met
 
-                            # Stop here for this instruction - we currently don't have special costs for ControlFlowOps in this function
-                            return met
+                # Stop here for this instruction - we currently don't have special costs for ControlFlowOps in this function
+                return met
 
-            # @TODO - handle controlled gates
+            # @TODO - cost the control component of the gate, not just the base gate
             if instruction.is_controlled_gate():
                 if not instruction.is_standard_gate():
-                    if instruction.name.startswith("clogical.logicalop"):
-                        base_gate = instruction.base_gate
-                        met = met or compute_instruction_contributions(q, i, depth, base_gate, counters, running_cost)
+                    # Controlled logical operations are named by prefixing one "c" per control, e.g. a
+                    # doubly-controlled logical Z is named "cclogical.logicalop.z...", so match on substring
+                    if "logical.logicalop" in instruction.name:
+                        # base_gate is an attribute of the operation rather than of the CircuitInstruction,
+                        # and it is a Gate rather than a CircuitInstruction, so descend into its definition
+                        base_gate = instruction.operation.base_gate
+                        if base_gate.definition is not None:
+                            for sub_instruction in base_gate.definition.data:
+                                met = compute_instruction_contributions(q, i, depth, sub_instruction, counters, running_cost, recent_names) or met
+
+                        # Stop here for this instruction - the base gate contributions cover it
+                        return met
                     else:
                         print(f"WARNING - Unrecognized controlled gate with name '{instruction.name}' and label '{instruction.label}' identified, costs may not be accurate")
 
@@ -939,6 +960,17 @@ class LogicalCircuit(QuantumCircuit):
                 met = met or counters[f"num_{instruction.name}"] >= constraint_model[f"num_{instruction.name}"]
             if f"cost_{instruction.name}" in constraint_model.keys():
                 running_cost[-1] += constraint_model[f"cost_{instruction.name}"]
+
+            # Track the trailing sequence of component names so that multi-component gadget costs, which
+            # capture nonlinearities that single-component costs cannot, are applied as gadgets complete
+            if max_gadget_length > 0:
+                recent_names.append(instruction.name)
+                del recent_names[:-max_gadget_length]
+
+                for gadget_length in range(2, len(recent_names)+1):
+                    gadget_names = tuple(recent_names[-gadget_length:])
+                    if gadget_names in gadget_costs.keys():
+                        running_cost[-1] += gadget_costs[gadget_names]
 
             if f"num_ops_{len(instruction.qubits)}q" in constraint_model.keys():
                 counters[f"num_ops_{len(instruction.qubits)}q"] = counters.get(f"num_ops_{len(instruction.qubits)}q", 0) + 1
@@ -979,6 +1011,8 @@ class LogicalCircuit(QuantumCircuit):
             counters = {}
             # Running costs tracks collective constraints which sum over contributions from many sources, which must remain below the effective threshold
             running_cost = [0.0]
+            # Recent names tracks the trailing component names used to identify completed gadgets
+            recent_names = []
 
             for i, (depth, instruction) in enumerate(zip(depths, self.data)):
                 # Check whether instruction involves logical qubit
@@ -994,7 +1028,7 @@ class LogicalCircuit(QuantumCircuit):
                 if not instruction_involves_logical_qubit:
                     continue
 
-                met = compute_instruction_contributions(q, i, depth, instruction, counters, running_cost)
+                met = compute_instruction_contributions(q, i, depth, instruction, counters, running_cost, recent_names)
 
                 # print(counters, running_cost[-1], constraint_model["effective_threshold"])
 
@@ -1003,9 +1037,10 @@ class LogicalCircuit(QuantumCircuit):
                     # print(f"Inserting QEC cycle on qubit {q} at index {i}, depth {depth}")
                     new_qec_cycle_indices_initial[q] = new_qec_cycle_indices_initial.get(q, []) + [i]
 
-                    # Reset counters and running cost
+                    # Reset counters, running cost, and gadget tracking
                     counters = {}
                     running_cost[-1] = 0.0
+                    recent_names.clear()
 
         return new_qec_cycle_indices_initial
 
@@ -2392,6 +2427,60 @@ class LogicalRegister(list):
         self.cregs = cregs
         raise NotImplementedError("LogicalRegister is not yet fully implemented")    
 
+def reduce_statevector(statevector, traced_qubits, method="statevector", atol=1E-8):
+    """Reduce a state vector onto the qubits which are not traced out.
+
+    Args:
+        statevector: The full-system :class:`~qiskit.quantum_info.Statevector`.
+        traced_qubits: Indices of the qubits to remove.
+        method: "statevector" factors the retained qubits out of the amplitudes directly, which requires no
+            object larger than the input; "density_matrix" partial traces onto a density matrix and converts
+            back, which allocates a matrix of dimension `2^n_retained` squared.
+        atol: Tolerance within which the retained qubits must be unentangled from the traced qubits.
+
+    Returns:
+        :py:type:`np.ndarray`: Amplitudes of the retained qubits, up to a global phase.
+
+    Raises:
+        :class:`ValueError`: if the retained qubits are entangled with the traced qubits, in which case they
+            are in a mixed state and cannot be represented by a state vector.
+    """
+
+    if method == "density_matrix":
+        return partial_trace(statevector, traced_qubits).to_statevector().data
+    elif method != "statevector":
+        raise ValueError(f"'{method}' is not a valid reduction method, please choose from 'statevector' or 'density_matrix'")
+
+    n_qubits = int(np.log2(len(statevector.data)))
+    retained_qubits = [q for q in range(n_qubits) if q not in set(traced_qubits)]
+
+    # Reshape the amplitudes into one axis per qubit and move the retained qubit axes to the front; Qiskit
+    # orders amplitudes with qubit 0 as the least significant bit, so qubit q corresponds to axis n-1-q, and
+    # the retained axes must be moved in descending qubit order for qubit 0 to stay least significant
+    tensor = np.reshape(np.asarray(statevector.data), (2,)*n_qubits)
+    tensor = np.moveaxis(tensor, [n_qubits-1-q for q in sorted(retained_qubits, reverse=True)], range(len(retained_qubits)))
+
+    # As a matrix over (retained, traced), a state which is unentangled across the cut has rank one, so the
+    # retained factor is proportional to any column of non-zero norm
+    matrix = np.reshape(tensor, (2**len(retained_qubits), -1))
+
+    column_norms = np.linalg.norm(matrix, axis=0)
+    retained_data = matrix[:, int(np.argmax(column_norms))]
+
+    retained_norm = np.linalg.norm(retained_data)
+    if np.isclose(retained_norm, 0.0):
+        raise ValueError("Unable to reduce state vector because every amplitude is zero")
+
+    retained_data = retained_data/retained_norm
+
+    # Verify the rank-one assumption rather than assuming it, since a state which is entangled across the cut
+    # would otherwise be silently truncated to whichever column happened to be largest
+    traced_data = np.conjugate(retained_data) @ matrix
+    if not np.allclose(matrix, np.outer(retained_data, traced_data), atol=atol):
+        raise ValueError("Unable to construct a state vector because the retained qubits are entangled with the traced qubits and are therefore in a mixed state; a density matrix may be the best alternative")
+
+    return retained_data
+
 class LogicalStatevector(Statevector):
     """A LogicalStatevector
     """
@@ -2404,6 +2493,7 @@ class LogicalStatevector(Statevector):
         stabilizer_tableau: Iterable[str] | None = None,
         logical_circuit: LogicalCircuit | None = None,
         basis: str | None = None,
+        method: str = "statevector",
         dims: int | None = None
     ):
         """Initialize a LogicalStatevector object.
@@ -2417,6 +2507,10 @@ class LogicalStatevector(Statevector):
                 d the distance.
             stabilizer_tableau: The set of stabilizers for the QECC.
             logical_circuit: A LogicalQ `LogicalCircuit` object used in some cases.
+            method: How to reduce the full state onto the data qubits. "statevector" (default) factors the
+                data qubits out of the full state vector directly; "density_matrix" partial traces onto a
+                density matrix and then converts back, which is equivalent for the pure, unentangled states
+                a LogicalStatevector can represent but requires a matrix of dimension `2^n_data` squared.
             dims: The subsystem dimension of the state.
         
         Raises:
@@ -2455,14 +2549,14 @@ class LogicalStatevector(Statevector):
             # First, construct a Statevector object for the full system
             sv_full = Statevector(data=self.logical_circuit, dims=dims)
 
-            # Then, partial trace over the non-data qubits to obtain a DensityMatrix
-            dm_partial = partial_trace(sv_full, non_data_qubits)
-
+            # Then, reduce onto the data qubits
             try:
-                sv_partial = dm_partial.to_statevector()
-                super().__init__(data=sv_partial.data, dims=dims)
+                sv_partial_data = reduce_statevector(sv_full, non_data_qubits, method=method)
+                super().__init__(data=sv_partial_data, dims=dims)
             except QiskitError as e:
                 raise ValueError("Unable to construct LogicalStatevector from LogicalCircuit because data qubits are in a mixed state; a LogicalDensityMatrix may be the best alternative") from e
+            except ValueError:
+                raise
             except Exception as e:
                 raise ValueError("Unable to construct LogicalStatevector from LogicalCircuit") from e
         elif isinstance(data, QuantumCircuit):

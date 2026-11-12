@@ -13,7 +13,7 @@ from qiskit_aer import AerSimulator
 from qiskit_aer.noise import NoiseModel
 
 from qiskit import transpile
-from qiskit.transpiler import PassManager
+from qiskit.transpiler import CouplingMap, PassManager
 from qiskit.transpiler.passes import Decompose
 from .Transpilation.UnBox import UnBoxTask
 from .Transpilation.DecomposeIfElseOps import DecomposeIfElseOpsTask
@@ -86,6 +86,11 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
         if hardware_model is not None and "noise_params" in hardware_model:
             # If noise_params are provided but not a noise_model or backend, then construct noise model based on the provided parameters
             noise_model = construct_noise_model_from_hardware_model(hardware_model)
+
+            # A hardware model describes a device to be simulated, so default to the simulator backend when
+            # no other backend or target has been requested
+            if backend is None and target is None:
+                backend = "aer_simulator"
         elif isinstance(noise_params, dict):
             # If noise_params are provided but not a noise_model or backend, then construct noise model based on the provided parameters
             noise_model = construct_noise_model(basis_gates=basis_gates, n_qubits=max_num_qubits, **noise_params)
@@ -109,7 +114,9 @@ def execute_circuits(circuit_input, target=None, backend=None, hardware_model=No
 
     if coupling_map == "fully_coupled":
         # Create a fully-coupled map
-        coupling_map = [list(pair) for pair in itertools.product(range(max_num_qubits), range(max_num_qubits))]
+        # coupling_map = [list(pair) for pair in itertools.product(range(max_num_qubits), range(max_num_qubits))] # doesn't work
+        # coupling_map = [(i,j) for j in range(max_num_qubits) for i in range(max_num_qubits) if i != j] # works
+        coupling_map = CouplingMap.from_full(max_num_qubits) # works
 
     # Resolve basis_gates
     if basis_gates is DEFAULT:

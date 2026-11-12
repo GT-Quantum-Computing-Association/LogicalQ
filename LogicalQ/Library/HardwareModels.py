@@ -2,6 +2,41 @@ import numpy as np
 
 from .Gates import RGate, RZGate, RZZGate, ZZGate
 
+# Simple hardware models
+
+hardware_model_depolarizing = {
+    "device_info": {
+        "n_qubits": 20,
+        "coupling_map": "fully_coupled",
+        # "basis_gates": dict(zip(["u", "rz", "rzz", "zz"], [UGate, RZGate, RZZGate, ZZGate])),
+        "basis_gates": dict(zip(["r", "rz", "rzz"], [RGate, RZGate, RZZGate])), # @TODO - TEMPORARY WORKAROUND
+    },
+    "noise_params": {
+        "all_qubit": {
+            "t1": 60,
+            "t2": 4,
+            "gate_time": {
+                1: {
+                    "all": 10E-6,
+                },
+                2: {
+                    "all": 100E-6,
+                },
+            },
+            "depolarizing_error": {
+                1: {
+                    "all": (1-0.747) * 1.80E-5,
+                },
+                2: {
+                    "all": (1-0.421) * 9.73E-4,
+                },
+            },
+        },
+    },
+}
+
+# Real hardware models
+
 # @TODO - construct pre-made noise models for specific hardware
 #       - wishlist:
 #           - Harvard/MIT/QuEra neutral atom collaboration (e.g. papers by Vuletic, Lukin, Bluvstein, Evered, Levine, Kalinowski, Li)

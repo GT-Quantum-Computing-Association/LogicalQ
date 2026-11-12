@@ -30,9 +30,9 @@ def compute_constraint_model(
         constraint_model = {}
 
     if effective_threshold is None:
-        if "effective_threshold" in constraint_model:
-            effective_threshold = constraint_model["effective_threshold"]
-        constraint_model["effective_threshold"] = effective_threshold
+        effective_threshold = constraint_model.get("effective_threshold", None)
+
+    constraint_model["effective_threshold"] = effective_threshold
 
     # Step 1: Add single-component gadget costs
     # @TODO - assumes errors are all-qubit errors, needs to be able to handle qubit-specific errors
@@ -169,13 +169,24 @@ def compute_effective_threshold(
             fidelities[initial_state][(theta,phi)] = (fidelity_noqec, fidelity_qec)
 
     # @TODO - make this support scans with multiple initial_states based on threshold_conditions
-    # @TODO - verify that this computation makes sense
+    # The effective threshold is the largest accumulated infidelity at which QEC still improves the result,
+    # i.e., how much error may accumulate before a QEC cycle stops paying for itself. It is expressed as an
+    # infidelity rather than as a rotation angle so that it is directly comparable with the running cost
+    # accumulated by optimize_qec_cycle_indices, which sums infidelity-valued gadget and gate costs.
     if interior_points:
-        angles_list = interior_points[initial_states[0]]
-        thetas = np.array([angles[0] for angles in angles_list])
-        effective_threshold_theta = np.max(thetas)
+        infidelities_noqec = []
+        for initial_state, angles_list in interior_points.items():
+            for angles in angles_list:
+                fidelity_noqec, _ = fidelities[initial_state][angles]
+                if fidelity_noqec is not None:
+                    infidelities_noqec.append(1.0-fidelity_noqec)
 
-        effective_threshold = effective_threshold_theta/np.pi
+        if len(infidelities_noqec) > 0:
+            effective_threshold = float(np.max(infidelities_noqec))
+        else:
+            print("WARNING - No fidelities recorded at interior points!")
+
+            effective_threshold = 0.0
     else:
         print("WARNING - No interior points found!")
 
@@ -209,15 +220,17 @@ def compute_gadget_costs(
 
             for g, gadget in enumerate(n_qubits_gadgets):
                 # Construct a quantum circuit with all parts of the gadget
+                # NOTE - each component specifies a tuple of target qubits, which is passed directly as the
+                #        qargs so that components acting on more than one qubit are handled correctly
                 qc_full = QuantumCircuit(n_qubits)
-                for (gate, qubit) in gadget:
-                    qc_full.append(gate(), [qubit])
+                for (gate, qubits) in gadget:
+                    qc_full.append(gate(), qubits)
 
                 # Construct single-component quantum circuits
                 qc_component_list = []
-                for (gate, qubit) in gadget:
+                for (gate, qubits) in gadget:
                     qc_component = QuantumCircuit(n_qubits)
-                    qc_component.append(gate(), [qubit])
+                    qc_component.append(gate(), qubits)
                     qc_component_list.append(qc_component)
 
                 # Construct list of all quantum circuits for ease of use
@@ -252,9 +265,20 @@ def compute_gadget_costs(
                 # The punchline - compute the total infidelity of each component circuit
                 infidelity_full_reconstructed = float(np.sum(infidelities_component))
 
+                # The cost differential is the relative error of the additive model, i.e., the amount by
+                # which the gadget infidelity exceeds the sum of its component infidelities, normalized by
+                # that sum; a positive cost is super-additive (compounding) and a negative cost is
+                # sub-additive (cancellation)
+                # @NOTE - normalizing by the additive prediction rather than by the gadget infidelity keeps
+                #         the differential well-conditioned as gadgets approach unit fidelity
+                if np.isclose(infidelity_full_reconstructed, 0.0):
+                    gadget_cost = 0.0
+                else:
+                    gadget_cost = (infidelity_full - infidelity_full_reconstructed)/infidelity_full_reconstructed
+
                 # Store data
                 gadget_infidelities[depth][n_qubits][gadget] = (infidelity_full, infidelity_full_reconstructed)
-                gadget_costs[depth][n_qubits][gadget] = infidelity_full - infidelity_full_reconstructed
+                gadget_costs[depth][n_qubits][gadget] = gadget_cost
 
     return gadgets_library, gadget_infidelities, gadget_costs
 

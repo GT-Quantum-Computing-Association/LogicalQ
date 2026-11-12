@@ -3,7 +3,7 @@ from typing import Literal, get_args
 
 from qiskit.converters import circuit_to_dag, dag_to_circuit
 from qiskit.dagcircuit import DAGCircuit
-from qiskit_aer.library.save_instructions import SaveStatevector
+from qiskit_aer.library.save_instructions import SaveStatevector, SaveDensityMatrix
 
 _TYPES = Literal["statevector", "density_matrix", "both"]
 
@@ -49,7 +49,7 @@ def insert_before_measurement(logical_circuit, _type: _TYPES = "statevector"):
                 new_dag.apply_operation_back(save_inst, qubits)
 
             if _type == "density_matrix" or _type == "both":
-                save_inst = SaveStatevector(len(qubits), "density_matrix")
+                save_inst = SaveDensityMatrix(len(qubits), "density_matrix")
                 new_dag.apply_operation_back(save_inst, qubits)
 
             insertion_complete = True

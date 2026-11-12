@@ -4,6 +4,7 @@ import copy
 import atexit
 import pickle
 import itertools
+import numpy as np
 from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor as Pool
 
@@ -11,7 +12,12 @@ from .Logical import LogicalCircuit, LogicalStatevector, LogicalDensityMatrix
 from .Execution import execute_circuits
 
 from qiskit import QuantumCircuit
-from qiskit.quantum_info import Statevector, DensityMatrix
+from qiskit.quantum_info import Statevector, DensityMatrix, partial_trace
+from qiskit_aer.noise import NoiseModel
+from qiskit_addon_utils.slicing import slice_by_depth
+
+from typing import TYPE_CHECKING
+from typing import Iterable
 
 def _basic_experiment_core(task_id, circuit, noise_model, kwargs):
     """
@@ -678,3 +684,427 @@ def qec_cycle_noise_scaling_experiment(circuit_input, noise_model_input, qecc, c
 
     return all_data
 
+
+##############################################
+##### QEC cycle scheduling comparisons #####
+##############################################
+
+# Scheduling methods which are compared against the optimized schedule; "weinstein" and "abu_nada" are
+# fixed-rate policies due to Weinstein (2013, 2014, 2015) and Abu-Nada et al. (2017) respectively, both of
+# which perform error correction at a constant interval and differ only in how that interval is chosen
+comparison_schedule_types = [
+    "no_qec",
+    "optimized",
+    "random",
+    "fixed",
+    "weinstein",
+    "abu_nada",
+]
+
+def create_qec_schedules(circuit, schedule_type="optimized", n_qec_cycles=None, interval=None, constraint_model=None, rng=None) -> dict:
+    """Construct QEC cycle indices for a circuit according to the specified scheduling method.
+
+    Args:
+        circuit: The circuit for which to construct a schedule; indices refer to positions in its data.
+        schedule_type: The scheduling method to use, from `comparison_schedule_types`.
+        n_qec_cycles: The number of QEC cycles the schedule should contain. When specified, every method emits exactly this many cycles so that cycle count is not a confounding variable in comparisons.
+        interval: The interval at which to insert cycles, used only when `n_qec_cycles` is not specified.
+        constraint_model: Constraint model, required only by the optimized method.
+        rng: Random generator used by the random method, so that comparisons are reproducible.
+
+    Returns:
+        Dictionary mapping logical qubit index to a list of QEC cycle indices.
+
+    Raises:
+        :class:`ValueError`: if `schedule_type` is not a recognized scheduling method.
+    """
+
+    if rng is None:
+        rng = np.random.default_rng()
+
+    # Count non-trivial operations, which are the positions at which a cycle may be inserted
+    non_trivial_ops = [inst for inst in circuit.data if inst.operation.name not in ["barrier", "measure"]]
+    circuit_length = len(non_trivial_ops)
+
+    if schedule_type == "no_qec":
+        # Explicit baseline - the empty schedule, against which every other method must be compared in order
+        # to establish whether the optimum is interior
+        return {0: []}
+    elif schedule_type == "optimized":
+        # Handled by the caller via optimize_qec_cycle_indices, which needs the LogicalCircuit itself
+        return {}
+    elif schedule_type == "random":
+        if n_qec_cycles is None:
+            n_qec_cycles = max(1, circuit_length//4)
+
+        n_qec_cycles = min(n_qec_cycles, max(0, circuit_length-1))
+        if n_qec_cycles <= 0:
+            return {0: []}
+
+        indices = sorted([int(i) for i in rng.choice(range(1, circuit_length), size=n_qec_cycles, replace=False)])
+
+        return {0: indices}
+    elif schedule_type in ["fixed", "weinstein", "abu_nada"]:
+        # All three are fixed-rate policies; when a cycle count is specified, the interval is chosen so that
+        # exactly that many cycles are emitted, which is what makes the comparison count-matched
+        # @NOTE - at a matched cycle count these three policies coincide, because what distinguishes them is
+        #         how each chooses its rate; run with interval instead to compare the policies themselves
+        if n_qec_cycles is not None and n_qec_cycles <= 0:
+            # A matched count of zero, e.g. when the optimized schedule inserts no cycles, is the empty schedule
+            return {0: []}
+        elif n_qec_cycles is not None:
+            indices = [int(np.round((j+1) * circuit_length/(n_qec_cycles+1))) for j in range(n_qec_cycles)]
+            indices = sorted(set([min(max(index, 1), max(circuit_length-1, 1)) for index in indices]))
+
+            return {0: indices}
+
+        if interval is None:
+            raise ValueError(f"Scheduling method '{schedule_type}' requires either n_qec_cycles or interval to be specified")
+
+        return {0: [int(i) for i in range(interval, circuit_length, interval)]}
+    else:
+        raise ValueError(f"Unknown schedule_type: {schedule_type}")
+
+def compute_circuit_duration(circuit, hardware_model=None) -> float:
+    """Estimate the total duration of a circuit from the gate times of a hardware model.
+
+    Duration is the axis along which schedules with equal cycle counts are compared, because two schedules may place the same number of cycles at very different points and thus accumulate different idle time.
+
+    Args:
+        circuit: The circuit whose duration to estimate.
+        hardware_model: Hardware model providing gate times, keyed by gate arity and gate name.
+
+    Returns:
+        The estimated duration in the time units used by the hardware model, or 0.0 if no gate times exist.
+    """
+
+    if hardware_model is None:
+        return 0.0
+
+    # Collect gate times, which are specified per qubit specifier, then per gate arity, then per gate name
+    gate_times = {}
+    for qubit_noise_params in hardware_model.get("noise_params", {}).values():
+        for param_n_qubits, n_qubit_data in qubit_noise_params.get("gate_time", {}).items():
+            for gate, gate_time in n_qubit_data.items():
+                gate_times[(param_n_qubits, gate)] = gate_time
+
+    if len(gate_times) == 0:
+        return 0.0
+
+    def instruction_duration(instruction):
+        # Recurse through boxes and control flow so that the contents of logical gates and QEC cycles count
+        if instruction.operation.name == "barrier":
+            return 0.0
+
+        if instruction.is_control_flow():
+            duration = 0.0
+            for param in instruction.operation.params:
+                if isinstance(param, QuantumCircuit):
+                    for sub_instruction in param.data:
+                        duration += instruction_duration(sub_instruction)
+
+            return duration
+
+        n_qubits = len(instruction.qubits)
+        if (n_qubits, instruction.operation.name) in gate_times:
+            return gate_times[(n_qubits, instruction.operation.name)]
+        elif (n_qubits, "all") in gate_times:
+            return gate_times[(n_qubits, "all")]
+
+        return 0.0
+
+    return float(sum([instruction_duration(instruction) for instruction in circuit.data]))
+
+def _non_data_qubits(logical_circuit) -> list:
+    """Return the indices of every qubit in a LogicalCircuit which is not a data qubit."""
+
+    non_data_qubits = []
+    count = 0
+    for qreg in logical_circuit.qregs:
+        if qreg in logical_circuit.logical_qregs:
+            count += qreg.size
+        else:
+            non_data_qubits.extend(list(range(count, count+qreg.size)))
+            count += qreg.size
+
+    return non_data_qubits
+
+def _exact_logical_state(logical_circuit):
+    """Compute the exact state of the data qubits of a noiseless logical circuit.
+
+    The reference is the noiseless output of the logical circuit rather than of the physical circuit, so that algorithmic error is not counted as noise.
+    """
+
+    from qiskit.transpiler import PassManager
+    from .Transpilation.ClearQEC import ClearQEC
+    from .Transpilation.UnBox import UnBox
+
+    circuit = copy.deepcopy(logical_circuit)
+
+    pm_unbox = PassManager([ClearQEC(), UnBox()])
+    while "box" in circuit.count_ops():
+        circuit = pm_unbox.run(circuit)
+
+    return partial_trace(Statevector(circuit), _non_data_qubits(logical_circuit))
+
+def qec_cycle_schedule_comparison_experiment(circuit_input, qecc, constraint_model, schedule_types=None, n_random_repeats=8, n_repeats=1, fidelity_method="logical_counts", hardware_model=None, seed=None, save_dir=None, save_filename=None, **kwargs) -> dict:
+    """Compare QEC cycle scheduling methods at a matched cycle count.
+
+    Every method is given the same number of QEC cycles as the optimized schedule produces, so that any difference in fidelity is attributable to where the cycles are placed rather than to how many there are. The no-QEC baseline is the one exception, since it exists precisely to establish whether performing any error correction at all is beneficial in the operating regime.
+
+    Args:
+        circuit_input: Physical circuits to schedule, given as a dictionary keyed by circuit name.
+        qecc: The QECC dictionary, splatted into LogicalCircuit construction.
+        constraint_model: Constraint model used by the optimized scheduling method.
+        schedule_types: Scheduling methods to compare; defaults to `comparison_schedule_types`.
+        n_random_repeats: Number of draws over which the random method is averaged.
+        n_repeats: Number of repeats for every method, used to estimate run-to-run variation.
+        fidelity_method: Passed through to `compute_schedule_fidelity`.
+        hardware_model: Hardware model used both for execution and for estimating circuit durations.
+        seed: Seed for the random scheduling method, so that comparisons are reproducible.
+
+    Returns:
+        Dictionary of per-circuit results, each containing one record per scheduling method.
+    """
+
+    from .Analysis import compute_schedule_fidelity
+
+    if schedule_types is None:
+        schedule_types = comparison_schedule_types
+
+    if isinstance(circuit_input, QuantumCircuit):
+        circuit_input = {circuit_input.name: circuit_input}
+
+    rng = np.random.default_rng(seed)
+
+    all_data = {"circuits": {}, "summary": {}}
+
+    # Prepare to save progress in the event of program termination
+    if save_dir is None:
+        save_dir = "./data/"
+    if save_filename is None:
+        date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        save_filename = f"qec_cycle_schedule_comparison_{date_str}.pkl"
+    save_file = open(save_dir + save_filename, "wb")
+    def save_progress():
+        pickle.dump(all_data, save_file, protocol=5)
+        save_file.close()
+    atexit.register(save_progress)
+
+    start = time.perf_counter()
+
+    for circuit_name, circuit in circuit_input.items():
+        print(f"\nProcessing {circuit_name}...")
+
+        # Remove measurements so that the circuit can be scheduled and an exact reference computed
+        circuit_no_meas = circuit.remove_final_measurements(inplace=False)
+
+        circuit_depth = len(slice_by_depth(circuit_no_meas, 1))
+        print(f"  Circuit depth: {circuit_depth}")
+
+        # Determine the matched cycle count from the optimized schedule, which is the count every other
+        # method is held to
+        lqc_reference = LogicalCircuit.from_physical_circuit(circuit_no_meas, **qecc)
+        qec_cycle_indices_optimized = lqc_reference.optimize_qec_cycle_indices(constraint_model=constraint_model)
+        n_qec_cycles = len(qec_cycle_indices_optimized.get(0, []))
+        print(f"  Matched QEC cycle count (from optimized schedule): {n_qec_cycles}")
+
+        circuit_results = {
+            "circuit_depth": circuit_depth,
+            "n_qec_cycles_matched": n_qec_cycles,
+            "methods": {},
+        }
+
+        exact_state = None
+        if fidelity_method == "density_matrix":
+            exact_state = _exact_logical_state(LogicalCircuit.from_physical_circuit(circuit_no_meas, **qecc))
+        circuit_results["exact_state"] = exact_state
+
+        for schedule_type in schedule_types:
+            print(f"  Running {schedule_type} scheduling...")
+
+            # The random method is averaged over several draws, since a single draw is not a control
+            n_draws = n_random_repeats if schedule_type == "random" else n_repeats
+
+            fidelities = []
+            durations = []
+            n_qec_cycles_actual = []
+            for _ in range(n_draws):
+                lqc = LogicalCircuit.from_physical_circuit(circuit_no_meas, **qecc)
+
+                if schedule_type == "optimized":
+                    qec_cycle_indices = copy.deepcopy(qec_cycle_indices_optimized)
+                else:
+                    qec_cycle_indices = create_qec_schedules(circuit_no_meas, schedule_type, n_qec_cycles=n_qec_cycles, constraint_model=constraint_model, rng=rng)
+
+                lqc.insert_qec_cycles(qec_cycle_indices=qec_cycle_indices)
+                lqc.measure_all()
+
+                durations.append(compute_circuit_duration(lqc, hardware_model=hardware_model))
+                n_qec_cycles_actual.append(len(qec_cycle_indices.get(0, [])))
+
+                result = execute_circuits(lqc, hardware_model=hardware_model, save_density_matrix=(fidelity_method == "density_matrix"), **kwargs)[0]
+
+                fidelities.append(compute_schedule_fidelity(result, lqc, exact_state=exact_state, fidelity_method=fidelity_method))
+
+            circuit_results["methods"][schedule_type] = {
+                "fidelity": float(np.mean(fidelities)),
+                "fidelity_std": float(np.std(fidelities)),
+                "fidelities": fidelities,
+                "n_repeats": n_draws,
+                "num_qec": int(np.mean(n_qec_cycles_actual)),
+                "duration": float(np.mean(durations)),
+            }
+
+        # Report every method against the no-QEC baseline, which establishes whether the optimum is interior
+        if "no_qec" in circuit_results["methods"]:
+            fidelity_no_qec = circuit_results["methods"]["no_qec"]["fidelity"]
+            if fidelity_no_qec and fidelity_no_qec > 0:
+                for method_results in circuit_results["methods"].values():
+                    method_results["vs_no_qec"] = method_results["fidelity"]/fidelity_no_qec
+
+        all_data["circuits"][circuit_name] = circuit_results
+
+    stop = time.perf_counter()
+
+    print(f"Completed experiment in {stop-start} seconds")
+
+    save_progress()
+    atexit.unregister(save_progress)
+
+    return all_data
+
+def qec_cycle_schedule_noise_scaling_experiment(circuit_input, qecc, constraint_model, hardware_model, noise_scan_key, noise_scan_values, schedule_types=None, save_dir=None, save_filename=None, **kwargs) -> dict:
+    """Compare scheduling methods as a function of a noise parameter.
+
+    The constraint model and the schedule are held fixed at the values obtained for the unperturbed hardware model while the noise parameter is scanned, so that the result measures whether a schedule fitted at one operating point continues to perform away from it.
+
+    Args:
+        circuit_input: Physical circuits to schedule, given as a dictionary keyed by circuit name.
+        qecc: The QECC dictionary, splatted into LogicalCircuit construction.
+        constraint_model: Constraint model used by the optimized scheduling method.
+        hardware_model: Base hardware model, perturbed at each point of the scan.
+        noise_scan_key: Path of keys into the hardware model identifying the parameter to scan.
+        noise_scan_values: Values which the scanned parameter takes.
+        schedule_types: Scheduling methods to compare; defaults to `comparison_schedule_types`.
+
+    Returns:
+        Dictionary mapping each scanned value to the comparison results at that value.
+    """
+
+    if schedule_types is None:
+        schedule_types = comparison_schedule_types
+
+    all_data = {}
+
+    if save_dir is None:
+        save_dir = "./data/"
+    if save_filename is None:
+        date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        save_filename = f"qec_cycle_schedule_noise_scaling_{date_str}.pkl"
+    save_file = open(save_dir + save_filename, "wb")
+    def save_progress():
+        pickle.dump(all_data, save_file, protocol=5)
+        save_file.close()
+    atexit.register(save_progress)
+
+    for noise_scan_value in noise_scan_values:
+        print(f"\n=== {'/'.join([str(key) for key in noise_scan_key])} = {noise_scan_value} ===")
+
+        # Perturb a copy of the hardware model, leaving the constraint model and schedule untouched
+        hardware_model_scan = copy.deepcopy(hardware_model)
+        scan_target = hardware_model_scan
+        for key in list(noise_scan_key)[:-1]:
+            scan_target = scan_target[key]
+        scan_target[list(noise_scan_key)[-1]] = noise_scan_value
+
+        all_data[noise_scan_value] = qec_cycle_schedule_comparison_experiment(circuit_input, qecc, constraint_model, schedule_types=schedule_types, hardware_model=hardware_model_scan, save_dir=save_dir, **kwargs)
+
+    save_progress()
+    atexit.unregister(save_progress)
+
+    return all_data
+
+def noise_parameter_comparison_experiment(circuit_input, qecc, constraint_model, hardware_model, noise_parameter_groups, with_qec=True, fidelity_method="logical_counts", save_dir=None, save_filename=None, **kwargs) -> dict:
+    """Compare circuit performance across isolated noise channels, with and without QEC.
+
+    Each group applies a single noise channel in isolation so that the contribution of each physical error source can be attributed, rather than only the aggregate effect of the full hardware model.
+
+    Args:
+        circuit_input: Physical circuits to evaluate, given as a dictionary keyed by circuit name.
+        qecc: The QECC dictionary, splatted into LogicalCircuit construction.
+        constraint_model: Constraint model used to schedule QEC cycles when `with_qec` is True.
+        hardware_model: Base hardware model whose device_info is reused by every group.
+        noise_parameter_groups: Dictionary mapping group name to the noise_params dictionary for that group.
+        with_qec: Whether to additionally evaluate a logical circuit with optimized QEC scheduling.
+        fidelity_method: Passed through to `compute_schedule_fidelity`.
+
+    Returns:
+        Dictionary of per-circuit results, each containing one record per noise parameter group.
+    """
+
+    from .Analysis import compute_schedule_fidelity, calculate_state_probability
+
+    if isinstance(circuit_input, QuantumCircuit):
+        circuit_input = {circuit_input.name: circuit_input}
+
+    all_data = {"circuits": {}}
+
+    if save_dir is None:
+        save_dir = "./data/"
+    if save_filename is None:
+        date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        save_filename = f"noise_parameter_comparison_{date_str}.pkl"
+    save_file = open(save_dir + save_filename, "wb")
+    def save_progress():
+        pickle.dump(all_data, save_file, protocol=5)
+        save_file.close()
+    atexit.register(save_progress)
+
+    for circuit_name, circuit in circuit_input.items():
+        print(f"\nProcessing {circuit_name}...")
+
+        circuit_no_meas = circuit.remove_final_measurements(inplace=False)
+
+        circuit_results = {"groups": {}}
+
+        for group_name, noise_params in noise_parameter_groups.items():
+            print(f"  Running noise group '{group_name}'...")
+
+            hardware_model_group = {
+                "device_info": copy.deepcopy(hardware_model["device_info"]),
+                "noise_params": copy.deepcopy(noise_params),
+            }
+
+            group_results = {}
+
+            # Physical circuit, i.e., without any error correction
+            circuit_physical = copy.deepcopy(circuit)
+            if "measure" not in circuit_physical.count_ops():
+                circuit_physical.measure_all()
+
+            result_physical = execute_circuits(circuit_physical, hardware_model=hardware_model_group, **kwargs)[0]
+            group_results["fidelity_physical"] = calculate_state_probability("0"*circuit_physical.num_qubits, result_physical.get_counts())
+
+            # Logical circuit with optimized QEC scheduling
+            if with_qec:
+                lqc = LogicalCircuit.from_physical_circuit(circuit_no_meas, **qecc)
+                qec_cycle_indices = lqc.optimize_qec_cycle_indices(constraint_model=constraint_model)
+                lqc.insert_qec_cycles(qec_cycle_indices=qec_cycle_indices)
+                lqc.measure_all()
+
+                exact_state = _exact_logical_state(lqc) if fidelity_method == "density_matrix" else None
+
+                result_logical = execute_circuits(lqc, hardware_model=hardware_model_group, save_density_matrix=(fidelity_method == "density_matrix"), **kwargs)[0]
+
+                group_results["fidelity_logical"] = compute_schedule_fidelity(result_logical, lqc, exact_state=exact_state, fidelity_method=fidelity_method)
+                group_results["num_qec"] = len(qec_cycle_indices.get(0, []))
+
+            circuit_results["groups"][group_name] = group_results
+
+        all_data["circuits"][circuit_name] = circuit_results
+
+    save_progress()
+    atexit.unregister(save_progress)
+
+    return all_data
