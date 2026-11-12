@@ -96,7 +96,9 @@ def construct_noise_model(
 
     # Amplituded damping error: Simulates error due to energy dissipation (e.g. spontaneous emission, thermal equilibrium)
     if "amplitude_damping_error_1q" in noise_params:
-        amplitude_damping_error_1q = amplitude_damping_error(noise_params["amplitude_damping_error_1q"], 1)
+        # The second positional parameter of amplitude_damping_error is the excited state population, not a
+        # qubit count, so it is left at its default of 0 (damping towards |0>)
+        amplitude_damping_error_1q = amplitude_damping_error(noise_params["amplitude_damping_error_1q"])
         for q in used_qubits:
             noise_model.add_quantum_error(amplitude_damping_error_1q, ["x", "y", "z", "h", "s", "t", "rx", "ry", "rz"], [q], warnings=False)
 
@@ -197,7 +199,15 @@ def construct_noise_model_from_hardware_model(hardware_model, ignore_qubits=None
                         elif isinstance(gates, str):
                             gates = [gates]
 
-                        error_object = error_method(gate_error_value, param_n_qubits)
+                        if error_method is depolarizing_error:
+                            error_object = depolarizing_error(gate_error_value, param_n_qubits)
+                        else:
+                            # Amplitude and phase damping are single-qubit channels whose second positional
+                            # parameter is not a qubit count (for amplitude damping it is the excited state
+                            # population), so build the single-qubit channel and apply it to each qubit
+                            error_object = error_method(gate_error_value)
+                            for _ in range(param_n_qubits-1):
+                                error_object = error_object.tensor(error_method(gate_error_value))
                         add_error(error_object, gates, param_n_qubits)
             elif noise_param_key == "readout_error":
                 for param_n_qubits, n_qubit_error_data in noise_param_data.items():
